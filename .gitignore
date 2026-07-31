@@ -37,3 +37,4 @@ venv/
 *.tmp
 *.temp
 ~$*.pptx
+.lifeos/
