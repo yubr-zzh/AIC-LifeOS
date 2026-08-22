@@ -1,0 +1,276 @@
+/* LifeOS Agent Console — design tokens & global styles.
+   Dark industrial agent-console aesthetic: graphite + ink, mono accents,
+   status-color tokens, no decorative gradients. */
+
+:root {
+  /* Surfaces */
+  --bg-0: #0b0d11;        /* page */
+  --bg-1: #11141a;        /* panel */
+  --bg-2: #161a22;        /* raised */
+  --bg-3: #1d2230;        /* hover */
+  --bg-grid: rgba(255, 255, 255, 0.025);
+
+  /* Borders / separators */
+  --bd-1: #232936;
+  --bd-2: #2c3445;
+  --bd-3: #3a455c;
+
+  /* Text */
+  --fg-1: #e6ecf3;
+  --fg-2: #aab3c3;
+  --fg-3: #6f7a8c;
+  --fg-4: #4a5366;
+
+  /* Accents */
+  --accent: #5fd2ff;       /* cyan */
+  --accent-dim: #2f7e9c;
+  --violet: #b985ff;       /* requires_confirmation */
+  --magenta: #ff6bcb;
+
+  /* Status palette */
+  --st-pending: #f5b14b;       /* amber */
+  --st-pending-bg: #2a2010;
+  --st-processing: #5fa8ff;    /* blue */
+  --st-processing-bg: #102236;
+  --st-done: #4ec98a;          /* green */
+  --st-done-bg: #102a1d;
+  --st-failed: #ff6e6e;        /* red */
+  --st-failed-bg: #2c1414;
+  --st-confirm: #b985ff;       /* violet */
+  --st-confirm-bg: #251933;
+  --st-idle: #6f7a8c;
+  --st-idle-bg: #1a1f29;
+
+  /* Typography */
+  --font-ui: "Inter", "SF Pro Text", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Mono", "Consolas",
+    "Menlo", monospace;
+
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 8px;
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+
+  font-family: var(--font-ui);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--fg-1);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  /* Subtle grid texture instead of decorative blobs. */
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button {
+  font-family: inherit;
+  font-size: 12px;
+  background: var(--bg-2);
+  color: var(--fg-1);
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-1);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+button:hover { background: var(--bg-3); border-color: var(--bd-3); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary {
+  background: var(--accent);
+  color: #05161e;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button.primary:hover { background: #7fdcff; border-color: #7fdcff; }
+button.ghost {
+  background: transparent;
+  border-color: var(--bd-1);
+  color: var(--fg-2);
+}
+button.ghost:hover { color: var(--fg-1); border-color: var(--bd-3); }
+button.danger { color: var(--st-failed); border-color: var(--st-failed); }
+button.success { color: var(--st-done); border-color: var(--st-done); }
+button.violet { color: var(--violet); border-color: var(--violet); }
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--bg-1);
+  color: var(--fg-1);
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-1);
+  padding: 6px 10px;
+  outline: none;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+textarea { resize: vertical; }
+
+::selection { background: rgba(95, 210, 255, 0.3); color: var(--fg-1); }
+
+/* Scrollbars: dark, thin, operational */
+* { scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--bd-3); border-radius: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Reusable utility classes */
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.muted { color: var(--fg-3); }
+.dim { color: var(--fg-4); }
+.row { display: flex; align-items: center; gap: 8px; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.between { justify-content: space-between; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.nowrap { white-space: nowrap; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scroll { overflow: auto; }
+
+/* Status pills */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--bd-2);
+  background: var(--bg-2);
+  color: var(--fg-2);
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+.pill.pending { color: var(--st-pending); background: var(--st-pending-bg); border-color: rgba(245, 177, 75, 0.35); }
+.pill.processing { color: var(--st-processing); background: var(--st-processing-bg); border-color: rgba(95, 168, 255, 0.35); }
+.pill.done { color: var(--st-done); background: var(--st-done-bg); border-color: rgba(78, 201, 138, 0.35); }
+.pill.failed { color: var(--st-failed); background: var(--st-failed-bg); border-color: rgba(255, 110, 110, 0.35); }
+.pill.confirm { color: var(--st-confirm); background: var(--st-confirm-bg); border-color: rgba(185, 133, 255, 0.35); }
+.pill.idle { color: var(--st-idle); background: var(--st-idle-bg); border-color: var(--bd-2); }
+.pill.risk-low { color: var(--st-done); border-color: rgba(78, 201, 138, 0.35); }
+.pill.risk-medium { color: var(--st-pending); border-color: rgba(245, 177, 75, 0.35); }
+.pill.risk-high { color: var(--st-failed); border-color: rgba(255, 110, 110, 0.35); }
+
+/* Panel chrome */
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bd-1);
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+}
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+.panel-subtitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-3);
+}
+.panel-body {
+  padding: 10px 12px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.panel-body.dense { padding: 6px 0; }
+
+/* Empty / loading / error states */
+.state-empty {
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 20px 8px;
+}
+.state-error {
+  color: var(--st-failed);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 110, 110, 0.4);
+  background: var(--st-failed-bg);
+  border-radius: var(--r-1);
+}
+
+/* Subtle pulse for active state */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.pulse { animation: pulse 1.4s ease-in-out infinite; }
+
+@keyframes arrival {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.arrival { animation: arrival 220ms ease-out; }
+
+@keyframes stageGlow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 12px rgba(95, 210, 255, 0.25); }
+  50% { box-shadow: 0 0 0 1px var(--accent), 0 0 22px rgba(95, 210, 255, 0.5); }
+}
+.stage-active {
+  border-color: var(--accent) !important;
+  animation: stageGlow 1.8s ease-in-out infinite;
+}
+
+/* Source badge (real backend vs local preview) */
+.source-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--bd-2);
+  color: var(--fg-3);
+  background: var(--bg-2);
+}
+.source-badge.backend { color: var(--st-done); border-color: rgba(78, 201, 138, 0.4); }
+.source-badge.preview { color: var(--st-pending); border-color: rgba(245, 177, 75, 0.4); }

@@ -1,0 +1,183 @@
+import React, { useEffect, useRef, useState } from "react";
+import type { ChatMessage, Store } from "../state/store";
+import { IconSend, IconCopy } from "../components/Icons";
+import { CopyId } from "../components/CopyId";
+
+interface Props {
+  store: Store;
+}
+
+export function ChatPanel({ store }: Props) {
+  const { state, sendMessage } = store;
+  const [text, setText] = useState("");
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scroller.current) {
+      scroller.current.scrollTop = scroller.current.scrollHeight;
+    }
+  }, [state.messages.length]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t || state.loading.chat) return;
+    setText("");
+    void sendMessage(t);
+  };
+
+  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <div ref={scroller} className="scroll" style={{ flex: 1, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {state.messages.map((m) => (
+          <Bubble key={m.id} msg={m} />
+        ))}
+      </div>
+      <Composer
+        value={text}
+        onChange={setText}
+        onSubmit={submit}
+        onKey={onKey}
+        disabled={state.loading.chat}
+      />
+    </div>
+  );
+}
+
+function Bubble({ msg }: { msg: ChatMessage }) {
+  if (msg.role === "user") {
+    return (
+      <div className="arrival" style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ maxWidth: "78%" }}>
+          <div
+            style={{
+              background: "var(--bg-2)",
+              border: "1px solid var(--bd-2)",
+              borderRadius: "var(--r-2)",
+              padding: "9px 12px",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {msg.content}
+          </div>
+          <div className="row mono" style={{ justifyContent: "flex-end", marginTop: 4, color: "var(--fg-3)", fontSize: 11 }}>
+            user · {new Date(msg.created_at).toLocaleTimeString()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const pending = msg.execution === "pending";
+  const errored = msg.execution === "error";
+  return (
+    <div className="arrival">
+      <div style={{ maxWidth: "82%" }}>
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <span className="mono" style={{ color: "var(--accent)", fontSize: 11 }}>
+            assistant
+          </span>
+          <span className="mono dim" style={{ fontSize: 11 }}>
+            {new Date(msg.created_at).toLocaleTimeString()}
+          </span>
+          {pending ? <span className="pill processing"><span className="dot" />thinking</span> : null}
+          {errored ? <span className="pill failed"><span className="dot" />error</span> : null}
+        </div>
+        <div
+          style={{
+            background: "var(--bg-1)",
+            border: "1px solid var(--bd-1)",
+            borderLeft: "2px solid var(--accent)",
+            borderRadius: "var(--r-2)",
+            padding: "10px 12px",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            color: errored ? "var(--st-failed)" : "var(--fg-1)",
+          }}
+        >
+          {pending ? <span className="muted">awaiting /chat…</span> : msg.content || <span className="muted">(empty response)</span>}
+        </div>
+        {msg.tool_calls && msg.tool_calls.length > 0 ? (
+          <div className="col" style={{ marginTop: 6, gap: 6 }}>
+            {msg.tool_calls.map((tc, i) => (
+              <div
+                key={i}
+                style={{
+                  border: "1px solid var(--bd-2)",
+                  background: "var(--bg-2)",
+                  borderRadius: "var(--r-1)",
+                  padding: "6px 10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <div className="row between">
+                  <span className="mono" style={{ color: "var(--accent)" }}>
+                    tool_call · {tc.name ?? tc.action ?? "(unnamed)"}
+                  </span>
+                  <span className="pill idle"><span className="dot" />pending exec</span>
+                </div>
+                {tc.arguments ? (
+                  <pre className="mono" style={{ margin: 0, color: "var(--fg-2)", fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {JSON.stringify(tc.arguments, null, 2)}
+                  </pre>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {msg.trace_id ? (
+          <div className="row" style={{ marginTop: 4, color: "var(--fg-3)" }}>
+            <span className="mono" style={{ fontSize: 11 }}>trace</span>
+            <CopyId value={msg.trace_id} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+interface ComposerProps {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  onKey: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  disabled?: boolean;
+}
+
+function Composer({ value, onChange, onSubmit, onKey, disabled }: ComposerProps) {
+  return (
+    <div
+      style={{
+        borderTop: "1px solid var(--bd-1)",
+        padding: "10px 12px",
+        background: "var(--bg-1)",
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-end",
+      }}
+    >
+      <textarea
+        rows={2}
+        placeholder="Send a message to the Chat Agent (Shift+Enter for newline)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKey}
+        disabled={disabled}
+        style={{ flex: 1, minHeight: 38 }}
+      />
+      <button className="primary" onClick={onSubmit} disabled={disabled || !value.trim()} title="Send">
+        <span className="row" style={{ gap: 6 }}>
+          <IconSend size={13} /> Send
+        </span>
+      </button>
+    </div>
+  );
+}
