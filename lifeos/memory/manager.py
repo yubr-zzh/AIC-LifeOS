@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from lifeos.memory.export import parse_markdown, render_markdown
 from lifeos.memory.lifecycle import MemoryLifecycle
 from lifeos.memory.retriever import MemoryRetriever
 from lifeos.memory.updater import MemoryUpdater
@@ -17,6 +18,7 @@ class MemoryManager:
                     "user": [],
                     "project": [],
                     "feedback": [],
+                    "reference": [],
                     "candidates": [],
                     "backups": [],
                     "vector_index": {},
@@ -44,6 +46,7 @@ class MemoryManager:
         await lifecycle.vector_upsert(entry)
         await lifecycle.cache_invalidate()
         self._write(store)
+        self._sync_markdown(store)
         return entry
 
     async def update(self, memory):
@@ -53,6 +56,31 @@ class MemoryManager:
             trace_id=memory.get("trace_id") if isinstance(memory, dict) else None,
         )
         return await self.commit_candidate(candidate["id"])
+
+    def export_markdown(self, path=None) -> str:
+        """Render the store to Markdown. When ``path`` is given, also
+        write the file there (used for the memory.md mirror)."""
+        store = self._read()
+        md = render_markdown(store)
+        if path:
+            Path(path).write_text(md, encoding="utf-8")
+        return md
+
+    def import_markdown(self, text: str) -> dict:
+        """Replace the store with an edited Markdown document."""
+        store = parse_markdown(text)
+        self._write(store)
+        self._sync_markdown(store)
+        return store
+
+    def _sync_markdown(self, store=None):
+        """Keep the .lifeos/memory.md mirror in sync. Best-effort:
+        a mirror failure must never break the main memory path."""
+        try:
+            md = render_markdown(store if store is not None else self._read())
+            (self.storage_dir / "memory.md").write_text(md, encoding="utf-8")
+        except Exception:
+            pass
 
     def _find_candidate(self, store, candidate_id):
         for candidate in store.get("candidates", []):

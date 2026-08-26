@@ -1,3 +1,9 @@
+
+# Minimum similarity for the executor to treat an approved skill as
+# applicable to the current user input.
+SKILL_INVOKE_THRESHOLD = 0.15
+
+
 class Executor:
     def __init__(self, llm, skill_registry=None, permission_manager=None, trace=None):
         self.llm = llm
@@ -5,11 +11,39 @@ class Executor:
         self.permission_manager = permission_manager
         self.trace = trace
 
+    async def _match_skill(self, user_input):
+        """Find the best approved skill for this input, if any."""
+        if self.skill_registry is None:
+            return None
+        similar = await self.skill_registry.find_similar(
+            user_input, threshold=SKILL_INVOKE_THRESHOLD
+        )
+        if not similar:
+            return None
+        return similar[0]
+
     async def execute_chat_turn(self, user_input, memory, trace_id=None):
+        skill = await self._match_skill(user_input)
+        if skill and self.trace and trace_id:
+            self.trace.event(
+                trace_id,
+                "skill.invoked",
+                {"skill": skill.get("name"), "description": skill.get("description")},
+            )
+        if skill and self.skill_registry is not None:
+            await self.skill_registry.record_usage(skill["name"], success=True)
+
+        system_prompt = "You are the foreground LifeOS Chat Agent."
+        if skill:
+            system_prompt += (
+                "\nThe user has an approved skill for this kind of task: "
+                f"'{skill.get('name')}' - {skill.get('description')}. "
+                "Follow it to keep results consistent."
+            )
         messages = [
             {
                 "role": "system",
-                "content": "You are the foreground LifeOS Chat Agent.",
+                "content": system_prompt,
             },
             {
                 "role": "user",

@@ -38,7 +38,11 @@ class LifeOSAgent:
             event_bus=self.event_bus,
             memory=self.memory,
             reflection=ReflectionEngine(llm),
-            skill_detector=SkillDetector(llm),
+            skill_detector=SkillDetector(
+                llm,
+                event_bus=self.event_bus,
+                memory=self.memory,
+            ),
             skill_registry=self.skills,
             permission=self.permission,
             trace=self.trace,
@@ -49,6 +53,26 @@ class LifeOSAgent:
 
     async def run_background_once(self, limit=10):
         return await self.global_agent.process_once(limit=limit)
+
+    async def submit_feedback(self, rating, trace_id=None, note=""):
+        """Record a user rating for an assistant response.
+
+        Writes the feedback into the durable event bus (so the Global
+        Agent can reflect on it) and straight into the feedback memory
+        category (so it is immediately visible in the Memory panel).
+        """
+        payload = {
+            "rating": rating,
+            "note": note,
+            "trace_id": trace_id,
+        }
+        await self.event_bus.publish("feedback.submitted", payload, trace_id=trace_id)
+        await self.memory.propose_update(
+            source="user_feedback",
+            content=payload,
+            trace_id=trace_id,
+        )
+        return {"ok": True, "rating": rating, "trace_id": trace_id}
 
 
 class GlobalAgentRuntime:
@@ -75,6 +99,7 @@ class GlobalAgentRuntime:
             "conversation.completed": self._handle_conversation_completed,
             "memory.write.requested": self._handle_memory_write_requested,
             "skill.candidate.created": self._handle_skill_candidate_created,
+            "feedback.submitted": self._handle_feedback_submitted,
         }
 
     async def process_once(self, limit=10):
@@ -112,7 +137,37 @@ class GlobalAgentRuntime:
 
     async def _handle_skill_candidate_created(self, event):
         candidate = event.payload["candidate"]
+        # Skip if the same skill is already pending or approved.
+        existing = await self.skill_registry.find_any(candidate.get("name"))
+        if existing is not None:
+            return
         review = await self.permission.review_skill_installation(candidate)
         if review["decision"] == "allow":
             await self.skill_registry.add_pending(candidate, review=review)
+
+    async def _handle_feedback_submitted(self, event):
+        """Run feedback analysis over recent feedback memory entries.
+
+        Combines committed feedback entries with uncommitted
+        user_feedback candidates so the analysis reflects the latest
+        ratings even before the user approves the memory candidates.
+        """
+        store = self.memory._read()
+        feedback_entries = list(store.get("feedback", []))
+        for candidate in store.get("candidates", []):
+            if candidate.get("source") == "user_feedback":
+                feedback_entries.append(
+                    {
+                        "content": candidate.get("content", {}),
+                        "created_at": candidate.get("created_at"),
+                    }
+                )
+        analysis = await self.reflection.analyze_feedback(feedback_entries)
+        # Persist the aggregated analysis as a memory candidate so it is
+        # auditable in the Memory panel and can be committed by the user.
+        await self.memory.propose_update(
+            source="feedback_analysis",
+            content=analysis,
+            trace_id=event.trace_id,
+        )
 

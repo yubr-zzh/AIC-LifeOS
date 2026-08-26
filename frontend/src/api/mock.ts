@@ -125,6 +125,19 @@ export function mockMemory(): MemoryStore {
         created_at: iso(-60 * 24),
       },
     ],
+    reference: [
+      {
+        id: rid("mem"),
+        source: "external",
+        content: {
+          title: "TencentDB-Agent-Memory",
+          url: "https://github.com/TencentDB/Agent-Memory",
+          note: "markdown file-based memory architecture reference",
+        },
+        trace_id: null,
+        created_at: iso(-60 * 24 * 30),
+      },
+    ],
     candidates: [
       {
         id: rid("cnd"),

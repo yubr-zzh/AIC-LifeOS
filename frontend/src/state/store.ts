@@ -35,7 +35,9 @@ import {
   getTrace,
   runBackgroundOnce,
   sendChat,
+  submitFeedback,
 } from "../api/client";
+import type { FeedbackRating } from "../api/types";
 
 export interface ChatMessage {
   id: string;
@@ -47,6 +49,10 @@ export interface ChatMessage {
   // execution status: pending until /chat returns, then succeeded/blocked.
   execution?: "pending" | "succeeded" | "blocked" | "error";
   error?: string;
+  // user rating for this response, set after submitRating().
+  feedback?: FeedbackRating | null;
+  // true while a rating submission is in flight.
+  feedbackSending?: boolean;
 }
 
 export interface PipelineState {
@@ -106,6 +112,12 @@ type Action =
   | { type: "PATCH_PENDING"; id: string; status: "approved" | "rejected" }
   | { type: "SET_PERMISSIONS"; permissions: PermissionRequest[]; source: "backend" | "preview" }
   | { type: "RESOLVE_PERMISSION"; id: string; decision: "allow" | "deny" }
+  | {
+      type: "SET_FEEDBACK";
+      messageId: string;
+      rating: FeedbackRating | null;
+      sending?: boolean;
+    }
   | { type: "SELECT_TRACE"; id: string | null }
   | { type: "SELECT_PERMISSION"; id: string | null }
   | { type: "SET_ERROR"; error: string | null }
@@ -135,6 +147,7 @@ const initialState: AppState = {
     user: [],
     project: [],
     feedback: [],
+    reference: [],
     candidates: [],
     backups: [],
     vector_index: {},
@@ -259,6 +272,19 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         permissions: state.permissions.filter((p) => p.id !== action.id),
+      };
+    case "SET_FEEDBACK":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.messageId
+            ? {
+                ...m,
+                feedback: action.rating,
+                feedbackSending: action.sending ?? m.feedbackSending,
+              }
+            : m,
+        ),
       };
     case "SELECT_TRACE":
       return { ...state, ui: { ...state.ui, selectedTraceId: action.id } };
@@ -574,6 +600,32 @@ export function useStore() {
     refreshAll,
   ]);
 
+  const submitRating = useCallback(
+    async (messageId: string, rating: FeedbackRating) => {
+      const msg = stateRef.current.messages.find((m) => m.id === messageId);
+      if (!msg || msg.role !== "assistant") return;
+      if (msg.feedback === rating) {
+        // Clicking the same rating again clears it.
+        dispatch({ type: "SET_FEEDBACK", messageId, rating: null });
+        return;
+      }
+      dispatch({ type: "SET_FEEDBACK", messageId, rating, sending: true });
+      try {
+        await submitFeedback({
+          rating,
+          trace_id: msg.trace_id ?? null,
+          note: "",
+        });
+        dispatch({ type: "SET_FEEDBACK", messageId, rating });
+      } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        setError(`feedback failed: ${m}`);
+        dispatch({ type: "SET_FEEDBACK", messageId, rating: null });
+      }
+    },
+    [setError],
+  );
+
   const approveCandidate = useCallback(
     (id: string) => {
       dispatch({
@@ -649,6 +701,7 @@ export function useStore() {
     refreshAll,
     sendMessage,
     runBackground,
+    submitRating,
     approveCandidate,
     rejectCandidate,
     approveSkill,

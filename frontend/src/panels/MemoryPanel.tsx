@@ -1,18 +1,28 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { LifecycleStage, MemoryCandidate, MemoryEntry } from "../api/types";
 import { LIFECYCLE_STAGES } from "../api/types";
 import type { Store } from "../state/store";
+import { getMemoryMarkdown, importMemoryMarkdown } from "../api/client";
 import { Panel } from "../components/Panel";
 import { IconApprove, IconReject } from "../components/Icons";
 
-type Tab = "user" | "project" | "feedback" | "candidates" | "backups";
+type Tab =
+  | "user"
+  | "project"
+  | "feedback"
+  | "reference"
+  | "candidates"
+  | "backups"
+  | "markdown";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "user", label: "User" },
   { id: "project", label: "Project" },
   { id: "feedback", label: "Feedback" },
+  { id: "reference", label: "Reference" },
   { id: "candidates", label: "Candidates" },
   { id: "backups", label: "Backups" },
+  { id: "markdown", label: "Markdown" },
 ];
 
 interface Props {
@@ -27,7 +37,7 @@ export function MemoryPanel({ store }: Props) {
   return (
     <Panel
       title="Memory"
-      subtitle="lifecycle · user / project / feedback / candidates / backups"
+      subtitle="lifecycle · user / project / feedback / reference / candidates · markdown editable"
       source={state.ui.dataMode}
       dense
     >
@@ -55,6 +65,8 @@ export function MemoryPanel({ store }: Props) {
       {tab === "user" ? <EntryList entries={mem.user} empty="no user memory yet" /> : null}
       {tab === "project" ? <EntryList entries={mem.project} empty="no project memory yet" /> : null}
       {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" /> : null}
+      {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" /> : null}
+      {tab === "markdown" ? <MarkdownTab /> : null}
       {tab === "candidates" ? (
         <CandidateList candidates={mem.candidates} store={store} />
       ) : null}
@@ -77,6 +89,58 @@ export function MemoryPanel({ store }: Props) {
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+function MarkdownTab() {
+  const [md, setMd] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(() => {
+    setStatus("loading");
+    getMemoryMarkdown()
+      .then((r) => {
+        setMd(r.markdown);
+        setStatus("idle");
+      })
+      .catch((e) => {
+        setStatus("error");
+        setMessage(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
+  useEffect(load, [load]);
+
+  const save = () => {
+    importMemoryMarkdown(md)
+      .then((r) => {
+        setMessage(`imported — user:${r.categories.user} project:${r.categories.project} feedback:${r.categories.feedback} reference:${r.categories.reference}`);
+      })
+      .catch((e) => {
+        setMessage(`import failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  };
+
+  return (
+    <div className="col" style={{ padding: "4px 6px", gap: 6 }}>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <button onClick={load} disabled={status === "loading"}>Refresh</button>
+        <button className="ghost" onClick={save}>Import edited markdown</button>
+        {message ? <span className="mono muted" style={{ fontSize: 10 }}>{message}</span> : null}
+      </div>
+      <textarea
+        className="mono"
+        value={md}
+        onChange={(e) => setMd(e.target.value)}
+        placeholder={status === "error" ? `failed to load: ${message}` : "loading markdown…"}
+        spellCheck={false}
+        style={{ width: "100%", minHeight: 220, fontSize: 11, lineHeight: 1.5, resize: "vertical" }}
+      />
+      <div className="mono muted" style={{ fontSize: 10 }}>
+        memory.md mirror — edit and import to write back to memory.json (readable / editable / auditable)
+      </div>
+    </div>
   );
 }
 

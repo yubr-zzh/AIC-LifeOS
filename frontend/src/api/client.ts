@@ -1,11 +1,15 @@
 import type {
   ChatResponse,
   EventRecord,
+  FeedbackPayload,
+  MemoryMarkdownResponse,
   MemoryStore,
   PermissionRequest,
   RunOnceResponse,
   SkillRegistryState,
   TraceRecord,
+  StructuredEntry,
+  StructuredEntryKind,
 } from "./types";
 import {
   mockEvents,
@@ -90,6 +94,20 @@ export async function sendChat(
   };
 }
 
+export async function submitFeedback(
+  feedback: FeedbackPayload,
+  opts?: ApiOptions,
+): Promise<{ ok: boolean }> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/feedback`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(feedback),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { ok: boolean };
+}
+
 export async function runBackgroundOnce(
   opts?: ApiOptions,
 ): Promise<RunOnceResponse> {
@@ -146,6 +164,29 @@ export async function getMemory(opts?: ApiOptions): Promise<SourceTag<MemoryStor
   return safeGet<MemoryStore>("/memory", mockMemory, opts);
 }
 
+export async function getMemoryMarkdown(
+  opts?: ApiOptions,
+): Promise<MemoryMarkdownResponse> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/markdown`, { method: "GET" });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as MemoryMarkdownResponse;
+}
+
+export async function importMemoryMarkdown(
+  markdown: string,
+  opts?: ApiOptions,
+): Promise<{ ok: boolean; categories: Record<string, number> }> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/markdown`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ markdown }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { ok: boolean; categories: Record<string, number> };
+}
+
 export async function getSkills(
   opts?: ApiOptions,
 ): Promise<SourceTag<SkillRegistryState>> {
@@ -170,4 +211,40 @@ export async function getPermissions(
     () => ({ requests: mockPermissions() }),
     opts,
   ).then(({ data, source }) => ({ data: data.requests, source }));
+}
+
+export async function listEntries(
+  kind: StructuredEntryKind,
+  opts?: ApiOptions,
+): Promise<StructuredEntry[]> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/entries?kind=${encodeURIComponent(kind)}`, { method: "GET" });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { entries: StructuredEntry[] };
+  return Array.isArray(data.entries) ? data.entries : [];
+}
+
+export async function saveEntry(
+  entry: {
+    id?: string;
+    kind: StructuredEntryKind;
+    entry_date?: string;
+    title?: string;
+    content?: string;
+    mood?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  opts?: ApiOptions,
+): Promise<StructuredEntry> {
+  const base = getBase(opts);
+  const method = entry.id ? "PUT" : "POST";
+  const path = entry.id ? `/entries/${encodeURIComponent(entry.id)}` : "/entries";
+  const res = await f(opts)(`${base}${path}`, {
+    method,
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { entry: StructuredEntry };
+  return data.entry;
 }

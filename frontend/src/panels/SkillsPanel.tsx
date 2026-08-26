@@ -49,6 +49,8 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
 }
 
 function SkillCard({ skill }: { skill: SkillCandidate }) {
+  const u = skill.usage;
+  const rate = u && u.uses > 0 ? Math.round((u.successes / u.uses) * 100) : null;
   return (
     <div className="card-flat">
       <div className="row between">
@@ -58,6 +60,14 @@ function SkillCard({ skill }: { skill: SkillCandidate }) {
         <StatusPill kind={`risk-${skill.risk}` as "risk-low" | "risk-medium" | "risk-high"} label={`risk: ${skill.risk}`} />
       </div>
       <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>{skill.description}</p>
+      {u ? (
+        <div className="row" style={{ marginTop: 6, gap: 8, flexWrap: "wrap" }}>
+          <span className="mono muted" style={{ fontSize: 10 }}>uses: {u.uses}</span>
+          <span className="mono muted" style={{ fontSize: 10 }}>success: {u.successes}</span>
+          <span className="mono muted" style={{ fontSize: 10 }}>failures: {u.failures}</span>
+          {rate !== null ? <span className="mono" style={{ fontSize: 10, color: "var(--accent)" }}>{rate}% ok</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -87,6 +97,15 @@ function PendingCard({ skill, store }: { skill: SkillCandidate; store: Store }) 
         <span className={`pill ${pill}`}><span className="dot" />{decision.replace(/_/g, " ")}</span>
         {skill.review?.reason ? <span className="mono muted" style={{ fontSize: 10 }}>{skill.review.reason}</span> : null}
       </div>
+      {skill.metrics ? (
+        <div className="row" style={{ marginTop: 6, gap: 6, flexWrap: "wrap" }}>
+          <span className="mono muted" style={{ fontSize: 10 }}>freq: {skill.metrics.frequency}</span>
+          <span className="mono muted" style={{ fontSize: 10 }}>sim: {skill.metrics.similarity}</span>
+          <span className="mono muted" style={{ fontSize: 10 }}>cplx: {skill.metrics.complexity}</span>
+          <span className="mono muted" style={{ fontSize: 10 }}>succ: {skill.metrics.success_rate}</span>
+          <span className="mono" style={{ fontSize: 10, color: "var(--accent)" }}>score: {skill.metrics.score}</span>
+        </div>
+      ) : null}
       <div className="row" style={{ marginTop: 8, gap: 6 }}>
         <button onClick={() => store.approveSkill(skill.id)}>
           <span className="row" style={{ gap: 6 }}>

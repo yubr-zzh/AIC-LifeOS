@@ -28,6 +28,36 @@ export interface ChatResponse {
   tool_calls: ToolCall[];
 }
 
+/**
+ * User rating for a single assistant response.
+ *
+ * Mirrors the backend vocabulary in lifeos/reflection/engine.py
+ * (RATING_WEIGHTS) so the frontend labels and the backend analysis
+ * stay in sync.
+ */
+export type FeedbackRating =
+  | "plan_too_heavy" // 计划太重
+  | "just_right" // 刚刚好
+  | "helpful" // 很有帮助
+  | "not_helpful"; // 没帮上忙
+
+export const FEEDBACK_RATINGS: {
+  value: FeedbackRating;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "plan_too_heavy", label: "计划太重", hint: "任务太多 / 安排过密" },
+  { value: "just_right", label: "刚刚好", hint: "节奏合适" },
+  { value: "helpful", label: "很有帮助", hint: "直接解决了问题" },
+  { value: "not_helpful", label: "没帮上忙", hint: "没有解决我的问题" },
+];
+
+export interface FeedbackPayload {
+  rating: FeedbackRating;
+  trace_id?: string | null;
+  note?: string;
+}
+
 export interface MemoryEntry {
   id: string;
   source: string;
@@ -58,10 +88,16 @@ export interface MemoryStore {
   user: MemoryEntry[];
   project: MemoryEntry[];
   feedback: MemoryEntry[];
+  reference: MemoryEntry[];
   candidates: MemoryCandidate[];
   backups: MemoryBackup[];
   vector_index: Record<string, unknown>;
   cache: Record<string, unknown>;
+}
+
+export interface MemoryMarkdownResponse {
+  markdown: string;
+  source?: "backend";
 }
 
 export type RiskLevel = "low" | "medium" | "high";
@@ -72,14 +108,32 @@ export interface PermissionReview {
   reason: string;
 }
 
+export interface SkillMetrics {
+  frequency: number;
+  similarity: number;
+  complexity: number;
+  success_rate: number;
+  score: number;
+}
+
+export interface SkillUsage {
+  uses: number;
+  successes: number;
+  failures: number;
+  last_used_at?: string | null;
+}
+
 export interface SkillCandidate {
   id: string;
   name: string;
   description: string;
+  keywords?: string[];
   risk: RiskLevel;
   source: string;
   status?: SkillCandidateStatus;
   review?: PermissionReview;
+  metrics?: SkillMetrics;
+  usage?: SkillUsage;
   created_at?: string;
 }
 
@@ -117,6 +171,27 @@ export interface PermissionRequest {
 
 export interface RunOnceResponse {
   processed: string[];
+}
+
+export type StructuredEntryKind =
+  | "daily_plan"
+  | "daily_review"
+  | "phase_plan"
+  | "phase_review"
+  | "diary"
+  | "insight"
+  | "feedback";
+
+export interface StructuredEntry {
+  id: string;
+  kind: StructuredEntryKind;
+  entry_date: string;
+  title: string;
+  content: string;
+  mood?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
 export type LifecycleStage =

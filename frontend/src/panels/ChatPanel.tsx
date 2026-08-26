@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Store } from "../state/store";
+import { FEEDBACK_RATINGS } from "../api/types";
+import type { FeedbackRating } from "../api/types";
 import { IconSend, IconCopy } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
 
@@ -36,7 +38,7 @@ export function ChatPanel({ store }: Props) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div ref={scroller} className="scroll" style={{ flex: 1, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
         {state.messages.map((m) => (
-          <Bubble key={m.id} msg={m} />
+          <Bubble key={m.id} msg={m} store={store} />
         ))}
       </div>
       <Composer
@@ -50,7 +52,7 @@ export function ChatPanel({ store }: Props) {
   );
 }
 
-function Bubble({ msg }: { msg: ChatMessage }) {
+function Bubble({ msg, store }: { msg: ChatMessage; store: Store }) {
   if (msg.role === "user") {
     return (
       <div className="arrival" style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -130,7 +132,46 @@ function Bubble({ msg }: { msg: ChatMessage }) {
             <CopyId value={msg.trace_id} />
           </div>
         ) : null}
+        <FeedbackRow msg={msg} store={store} />
       </div>
+    </div>
+  );
+}
+
+function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
+  const { submitRating } = store;
+  const sending = msg.feedbackSending;
+  return (
+    <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <span className="mono dim" style={{ fontSize: 10, marginRight: 2 }}>
+        feedback
+      </span>
+      {FEEDBACK_RATINGS.map((r) => {
+        const active = msg.feedback === r.value;
+        return (
+          <button
+            key={r.value}
+            onClick={() => void submitRating(msg.id, r.value)}
+            disabled={sending || msg.execution === "pending"}
+            title={r.hint}
+            className={active ? "primary" : "ghost"}
+            style={{
+              borderRadius: "var(--r-pill)",
+              padding: "2px 10px",
+              fontSize: 11,
+              opacity: sending ? 0.5 : 1,
+            }}
+          >
+            {active ? "✓ " : ""}
+            {r.label}
+          </button>
+        );
+      })}
+      {msg.feedback ? (
+        <span className="mono dim" style={{ fontSize: 10 }}>
+          rated
+        </span>
+      ) : null}
     </div>
   );
 }
