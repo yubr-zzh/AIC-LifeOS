@@ -572,6 +572,8 @@ textarea { resize: vertical; }
   background: #f3f8f2;
   color: #183522;
 }
+.skip-link { position: fixed; left: 14px; top: 10px; z-index: 100; padding: 9px 12px; border-radius: 6px; background: var(--fg-1); color: var(--bg-1); transform: translateY(-180%); transition: transform var(--t-med); }
+.skip-link:focus { transform: translateY(0); color: var(--bg-1); }
 .side-nav {
   width: 248px;
   flex: 0 0 248px;
@@ -589,7 +591,7 @@ textarea { resize: vertical; }
 .main-nav { flex: 1; }
 .nav-group { margin-bottom: 25px; }
 .nav-group-title { padding: 0 13px 9px; color: #88a18b; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.nav-item { width: 100%; display: flex; align-items: center; gap: 11px; padding: 10px 12px; margin: 2px 0; border: 0; border-radius: 10px; color: #5b7561; background: transparent; text-align: left; font-size: 13px; font-weight: 500; transition: all .18s ease; }
+.nav-item { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 10px 12px; margin: 2px 0; border: 0; border-radius: 10px; color: #5b7561; background: transparent; text-align: left; font-size: 13px; font-weight: 500; transition: all .18s ease; }
 .nav-item:hover { color: #285c38; background: rgba(255,255,255,.55); transform: translateX(2px); }
 .nav-item.active { color: #215b33; background: #f9fcf7; box-shadow: 0 3px 10px rgba(50, 111, 63, .08); font-weight: 700; }
 .nav-icon { width: 20px; display: inline-flex; align-items: center; justify-content: center; color: #78a27e; line-height: 1; text-align: center; }
@@ -693,7 +695,32 @@ textarea { resize: vertical; }
 .feedback-tags button.selected, .diary-mood button.selected { border-color: #8ebd91; background: #e1f1df; color: #397647; box-shadow: 0 0 0 3px rgba(104, 164, 108, .1); }
 .feedback-history { min-height: 270px; }
 .feedback-note > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #e5f3e4; color: #68a172; }
-.theme-night { background: #1e2b22; color: #e8f1e7; }
+.theme-night {
+  --bg-0: #111a14;
+  --bg-1: #18251b;
+  --bg-2: #213326;
+  --bg-3: #2a4030;
+  --bg-4: #345139;
+  --bg-grid: rgba(172, 214, 177, 0.055);
+  --bd-1: #2d4632;
+  --bd-2: #3b5a40;
+  --bd-3: #527658;
+  --bd-4: #6e9b73;
+  --fg-1: #e5f1e5;
+  --fg-2: #b2c8b2;
+  --fg-3: #8da78f;
+  --fg-4: #627b67;
+  --accent: #82c58c;
+  --accent-dim: #6eaa76;
+  --accent-soft: rgba(130, 197, 140, 0.18);
+  --st-pending-soft: rgba(245, 177, 75, 0.16);
+  --st-processing-soft: rgba(95, 168, 255, 0.16);
+  --st-done-soft: rgba(78, 201, 138, 0.16);
+  --st-failed-soft: rgba(255, 110, 110, 0.16);
+  --st-confirm-soft: rgba(185, 133, 255, 0.16);
+  --st-idle-bg: #243428;
+  background: var(--bg-0); color: var(--fg-1);
+}
 .theme-night .side-nav { background: #17251b; border-color: #2d4632; }
 .theme-night .content-shell, .theme-night .workspace-header { background: #1e2b22; border-color: #2d4632; }
 .theme-night .workspace-header { background: rgba(30,43,34,.94); }
@@ -701,6 +728,15 @@ textarea { resize: vertical; }
 .theme-night .page-intro h1, .theme-night .content-card h2, .theme-night .feedback-main h2 { color: #dceedd; }
 .theme-night .nav-item.active { background: #253d2b; color: #d6ebd5; }
 .theme-night .page-intro p, .theme-night .content-card p, .theme-night .breadcrumb, .theme-night .sync-label { color: #9ab29a; }
+.theme-night input, .theme-night textarea, .theme-night select,
+.theme-night .big-editor, .theme-night .feedback-editor,
+.theme-night .diary-mood button, .theme-night .feedback-tags button,
+.theme-night .header-icon-button { background: var(--bg-1); color: var(--fg-1); border-color: var(--bd-2); }
+.theme-night .panel-header { background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%); }
+.theme-night .state-empty { background: rgba(24, 37, 27, 0.72); }
+.theme-night .admin-banner p, .theme-night .admin-badge, .theme-night .diary-history span,
+.theme-night .diary-history strong, .theme-night .insight-count { color: var(--fg-3); }
+.theme-night .admin-flow > .panel, .theme-night .admin-grid > .panel { background: var(--bg-1); }
 .rhythm-card { min-height: 230px; }
 .rhythm-card .pulse-copy { max-width: 380px; margin: 24px 0 25px; }
 .week-dots { display: flex; gap: 9px; margin: 20px 0 18px; }

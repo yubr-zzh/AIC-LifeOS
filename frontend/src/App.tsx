@@ -92,6 +92,7 @@ export default function App() {
 
   return (
     <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="side-nav">
         <div className="brand-block">
           <div className="brand-mark"><IconBolt size={17} /></div>
@@ -146,7 +147,7 @@ export default function App() {
           ) : null}
         </header>
 
-        <main className="workspace-main">
+        <main id="main-content" className="workspace-main">
           <div className="page-intro">
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
