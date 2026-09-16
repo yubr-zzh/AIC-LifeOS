@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from lifeos.storage.atomic import write_json
+
 
 def _now() -> str:
     return datetime.utcnow().isoformat()
@@ -31,6 +33,17 @@ class ReliableEventBus:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.storage_path.exists():
             self._write_events([])
+        else:
+            events = self._read_events()
+            interrupted = False
+            for event in events:
+                if event.get("status") == "processing":
+                    event["status"] = "failed"
+                    event["error"] = "interrupted during processing; retryable"
+                    event["updated_at"] = _now()
+                    interrupted = True
+            if interrupted:
+                self._write_events(events)
 
     async def publish(
         self,
@@ -69,10 +82,7 @@ class ReliableEventBus:
         return json.loads(self.storage_path.read_text(encoding="utf-8"))
 
     def _write_events(self, events: list[Dict[str, Any]]) -> None:
-        self.storage_path.write_text(
-            json.dumps(events, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_json(self.storage_path, events)
 
     def _update_event(
         self,
@@ -92,4 +102,3 @@ class ReliableEventBus:
                 self._write_events(events)
                 return
         raise KeyError(f"event not found: {event_id}")
-

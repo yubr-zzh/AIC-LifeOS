@@ -136,6 +136,15 @@ Response:
 
 See `docs/api-contract.md` for the full frontend/backend alignment document.
 
+Inspection endpoints now available: `GET /events`, `GET /memory`, `GET /skills`,
+`GET /traces/{trace_id}`, and `GET /permissions` (currently an empty request list).
+Memory candidates can be committed or rejected with
+`POST /memory/candidates/{id}/commit` and `/reject`; pending skills can be
+approved or rejected with `POST /skills/pending/{id}/approve` and `/reject`.
+These actions persist to the backend. Tool execution and permission confirmation
+remain mock or review-only paths.
+`POST /chat` includes `tool_results` so blocked tool calls are visible to the UI.
+
 ## Frontend Direction
 
 The intended UI is an agent console or workbench, not a marketing page. The main screen should be a Chat Workspace with operational panels for runtime state, event queue, memory lifecycle, skill candidates, permissions, and trace details.
@@ -148,6 +157,7 @@ Basic syntax check:
 
 ```bash
 python -m compileall lifeos
+python -m unittest discover -s tests -v
 ```
 
 ## Runtime State

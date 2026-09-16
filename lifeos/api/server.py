@@ -18,6 +18,25 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/events":
+            self._send_json({"events": [vars(event) for event in self.agent.event_bus.all_events()]})
+            return
+        if parsed.path == "/memory":
+            self._send_json(self.agent.memory._read())
+            return
+        if parsed.path == "/skills":
+            self._send_json(self.agent.skills._read())
+            return
+        if parsed.path == "/permissions":
+            self._send_json({"requests": []})
+            return
+        if parsed.path.startswith("/traces/"):
+            trace = self.agent.trace.get(unquote(parsed.path.rsplit("/", 1)[-1]))
+            if trace is None:
+                self.send_error(404, "trace not found")
+            else:
+                self._send_json({"trace_id": unquote(parsed.path.rsplit("/", 1)[-1]), **trace})
+            return
         if parsed.path == "/entries":
             self._handle_list_entries(parse_qs(parsed.query))
             return
@@ -30,6 +49,14 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         self.send_error(404, "not found")
 
     def do_POST(self):
+        parsed = urlparse(self.path)
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["memory", "candidates"] and parts[3] in {"commit", "reject"}:
+            self._handle_memory_candidate(unquote(parts[2]), parts[3])
+            return
+        if len(parts) == 4 and parts[:2] == ["skills", "pending"] and parts[3] in {"approve", "reject"}:
+            self._handle_skill_candidate(unquote(parts[2]), parts[3])
+            return
         if self.path == "/chat":
             self._handle_chat()
             return
@@ -125,13 +152,42 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                 status=400,
             )
             return
-        store = self.agent.memory.import_markdown(text)
+        try:
+            store = self.agent.memory.import_markdown(text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
         counts = {
             key: len(value)
             for key, value in store.items()
             if isinstance(value, list)
         }
         self._send_json({"ok": True, "categories": counts})
+
+    def _handle_memory_candidate(self, candidate_id, action):
+        try:
+            if action == "commit":
+                item = asyncio.run(self.agent.memory.commit_candidate(candidate_id))
+            else:
+                item = asyncio.run(self.agent.memory.reject_candidate(candidate_id))
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except ValueError as exc:
+            self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
+            return
+        self._send_json({"status": "committed" if action == "commit" else "rejected", "item": item})
+
+    def _handle_skill_candidate(self, skill_id, action):
+        try:
+            if action == "approve":
+                item = asyncio.run(self.agent.skills.approve_by_id(skill_id))
+            else:
+                item = asyncio.run(self.agent.skills.reject_by_id(skill_id))
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        self._send_json({"status": "approved" if action == "approve" else "rejected", "skill": item})
 
     def _read_json(self):
         length = int(self.headers.get("content-length", "0"))

@@ -30,9 +30,6 @@ class Executor:
                 "skill.invoked",
                 {"skill": skill.get("name"), "description": skill.get("description")},
             )
-        if skill and self.skill_registry is not None:
-            await self.skill_registry.record_usage(skill["name"], success=True)
-
         system_prompt = "You are the foreground LifeOS Chat Agent."
         if skill:
             system_prompt += (
@@ -51,7 +48,12 @@ class Executor:
                 "memory": memory,
             },
         ]
-        completion = await self.llm.complete(messages)
+        try:
+            completion = await self.llm.complete(messages)
+        except Exception:
+            if skill and self.skill_registry is not None:
+                await self.skill_registry.record_usage(skill["name"], success=False)
+            raise
         tool_calls = completion.get("tool_calls", [])
         tool_results = []
 
@@ -69,6 +71,11 @@ class Executor:
             tool_results.append(await self._execute_tool_call(tool_call))
 
         response = completion.get("content") or self._fallback_response(user_input)
+        if skill and self.skill_registry is not None:
+            succeeded = bool(completion.get("content")) and all(
+                result.get("status") == "executed" for result in tool_results
+            )
+            await self.skill_registry.record_usage(skill["name"], success=succeeded)
         if self.trace and trace_id:
             self.trace.event(
                 trace_id,
@@ -102,4 +109,3 @@ class Executor:
 
     def _fallback_response(self, user_input):
         return f"Received: {user_input}"
-

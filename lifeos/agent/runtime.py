@@ -66,11 +66,12 @@ class LifeOSAgent:
             "note": note,
             "trace_id": trace_id,
         }
-        await self.event_bus.publish("feedback.submitted", payload, trace_id=trace_id)
+        event = await self.event_bus.publish("feedback.submitted", payload, trace_id=trace_id)
         await self.memory.propose_update(
             source="user_feedback",
             content=payload,
             trace_id=trace_id,
+            source_event_id=event.id,
         )
         return {"ok": True, "rating": rating, "trace_id": trace_id}
 
@@ -123,12 +124,20 @@ class GlobalAgentRuntime:
             source="reflection",
             content=reflection,
             trace_id=event.trace_id,
+            source_event_id=event.id,
         )
         candidates = await self.skill_detector.detect(event.payload)
         for candidate in candidates:
+            if any(
+                existing.type == "skill.candidate.created"
+                and existing.payload.get("source_event_id") == event.id
+                and existing.payload.get("candidate", {}).get("name") == candidate.get("name")
+                for existing in self.event_bus.all_events()
+            ):
+                continue
             await self.event_bus.publish(
                 "skill.candidate.created",
-                {"candidate": candidate},
+                {"candidate": candidate, "source_event_id": event.id},
                 trace_id=event.trace_id,
             )
 
@@ -142,7 +151,7 @@ class GlobalAgentRuntime:
         if existing is not None:
             return
         review = await self.permission.review_skill_installation(candidate)
-        if review["decision"] == "allow":
+        if review["decision"] != "deny":
             await self.skill_registry.add_pending(candidate, review=review)
 
     async def _handle_feedback_submitted(self, event):
@@ -152,10 +161,16 @@ class GlobalAgentRuntime:
         user_feedback candidates so the analysis reflects the latest
         ratings even before the user approves the memory candidates.
         """
+        await self.memory.propose_update(
+            source="user_feedback",
+            content=event.payload,
+            trace_id=event.trace_id,
+            source_event_id=event.id,
+        )
         store = self.memory._read()
         feedback_entries = list(store.get("feedback", []))
         for candidate in store.get("candidates", []):
-            if candidate.get("source") == "user_feedback":
+            if candidate.get("source") == "user_feedback" and candidate.get("status") == "candidate":
                 feedback_entries.append(
                     {
                         "content": candidate.get("content", {}),
@@ -169,5 +184,5 @@ class GlobalAgentRuntime:
             source="feedback_analysis",
             content=analysis,
             trace_id=event.trace_id,
+            source_event_id=event.id,
         )
-

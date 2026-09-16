@@ -115,7 +115,9 @@ function Bubble({ msg, store }: { msg: ChatMessage; store: Store }) {
                   <span className="mono" style={{ color: "var(--accent)" }}>
                     tool_call · {tc.name ?? tc.action ?? "(unnamed)"}
                   </span>
-                  <span className="pill idle sm"><span className="dot" />pending exec</span>
+                  <span className={`pill sm ${msg.tool_results?.[i]?.status === "blocked" ? "failed" : msg.tool_results?.[i]?.status === "executed" ? "done" : "idle"}`}>
+                    <span className="dot" />{msg.tool_results?.[i]?.status ?? "requested"}
+                  </span>
                 </div>
                 {tc.arguments ? (
                   <pre className="mono" style={{ margin: 0, color: "var(--fg-2)", fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
@@ -132,7 +134,7 @@ function Bubble({ msg, store }: { msg: ChatMessage; store: Store }) {
             <CopyId value={msg.trace_id} />
           </div>
         ) : null}
-        <FeedbackRow msg={msg} store={store} />
+        {msg.trace_id && msg.execution === "succeeded" ? <FeedbackRow msg={msg} store={store} /> : null}
       </div>
     </div>
   );

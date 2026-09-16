@@ -34,5 +34,5 @@ class ChatRuntime:
             "trace_id": trace_id,
             "response": result["response"],
             "tool_calls": result.get("tool_calls", []),
+            "tool_results": result.get("tool_results", []),
         }
-

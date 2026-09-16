@@ -43,7 +43,8 @@ Response body:
 {
   "trace_id": "6f2af4b1-2c45-4f98-a43f-1b1b3a0f79f2",
   "response": "LifeOS mock response: hello lifeos",
-  "tool_calls": []
+  "tool_calls": [],
+  "tool_results": []
 }
 ```
 
@@ -54,6 +55,7 @@ Fields:
 | `trace_id` | string | ID for tracing this chat turn. |
 | `response` | string | Assistant response text. |
 | `tool_calls` | array | Tool calls requested by the LLM. Currently usually empty in mock mode. |
+| `tool_results` | array | Execution or blocked status for each requested tool call. |
 
 Side effect:
 
@@ -238,9 +240,10 @@ There are two permission categories:
 - Tool execution confirmation: confirms whether a high-risk existing tool/skill can run this time.
 - Skill installation confirmation: confirms whether a new detected skill can be persisted into pending/registry.
 
-## Recommended Next API Endpoints
+## Additional Implemented Endpoints
 
-These are not implemented yet, but the frontend should be designed around them.
+The frontend reads these endpoints directly. Mock fallback is used only when an
+endpoint is unavailable.
 
 ### GET /events
 
@@ -274,19 +277,15 @@ Response:
 
 ### POST /memory/candidates/{candidate_id}/commit
 
-Requests Global Agent to commit a memory candidate.
-
-Recommended behavior:
-
-- Publish `memory.write.requested`.
-- Return the event ID.
+Commits a memory candidate synchronously through the validation, backup,
+apply, index, and cache lifecycle. Repeated commits return the same entry.
 
 Response:
 
 ```json
 {
-  "event_id": "uuid",
-  "status": "pending"
+  "status": "committed",
+  "item": {}
 }
 ```
 
@@ -311,8 +310,8 @@ Response:
 
 ```json
 {
-  "skill_id": "uuid",
-  "status": "approved"
+  "status": "approved",
+  "skill": {}
 }
 ```
 
@@ -324,11 +323,21 @@ Response:
 
 ```json
 {
+  "trace_id": "uuid",
   "input": "hello lifeos",
   "created": "2026-07-31T00:00:00",
   "events": []
 }
 ```
+
+### Additional actions
+
+- `POST /memory/candidates/{candidate_id}/reject` marks a pending candidate rejected.
+- `POST /skills/pending/{skill_id}/reject` removes a pending skill.
+- `GET /permissions` currently returns `{ "requests": [] }` because persisted
+  permission requests and execution resumption are not implemented.
+
+## Planned Endpoint
 
 ### POST /permissions/{request_id}/confirm
 
@@ -379,10 +388,9 @@ Recommended status codes:
 
 ## Frontend Integration Notes
 
-- Treat missing inspection endpoints as expected during early development.
-- Build an API client with mock fallback for events, memory, skills, and trace detail.
+- Use the implemented inspection endpoints for live state; retain mock fallback
+  only for an unavailable backend.
 - Do not block chat rendering on Global Agent processing.
 - Use `trace_id` as the join key across chat messages, events, memory candidates, and trace details.
 - Render permission confirmations as separate UI objects from skill candidates.
 - Clearly distinguish current backend data from local preview/mock data.
-

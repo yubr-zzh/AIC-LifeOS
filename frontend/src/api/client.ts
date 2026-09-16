@@ -91,6 +91,7 @@ export async function sendChat(
     trace_id: data.trace_id,
     response: data.response,
     tool_calls: Array.isArray(data.tool_calls) ? data.tool_calls : [],
+    tool_results: Array.isArray(data.tool_results) ? data.tool_results : [],
   };
 }
 
@@ -185,6 +186,32 @@ export async function importMemoryMarkdown(
   });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { ok: boolean; categories: Record<string, number> };
+}
+
+async function postAction<T>(path: string, opts?: ApiOptions): Promise<T> {
+  const res = await f(opts)(`${getBase(opts)}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: "{}",
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as T;
+}
+
+export function commitMemoryCandidate(id: string, opts?: ApiOptions) {
+  return postAction<{ status: "committed" }>(`/memory/candidates/${encodeURIComponent(id)}/commit`, opts);
+}
+
+export function rejectMemoryCandidate(id: string, opts?: ApiOptions) {
+  return postAction<{ status: "rejected" }>(`/memory/candidates/${encodeURIComponent(id)}/reject`, opts);
+}
+
+export function approvePendingSkill(id: string, opts?: ApiOptions) {
+  return postAction<{ status: "approved" }>(`/skills/pending/${encodeURIComponent(id)}/approve`, opts);
+}
+
+export function rejectPendingSkill(id: string, opts?: ApiOptions) {
+  return postAction<{ status: "rejected" }>(`/skills/pending/${encodeURIComponent(id)}/reject`, opts);
 }
 
 export async function getSkills(

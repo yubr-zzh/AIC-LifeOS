@@ -22,10 +22,18 @@ export interface ToolCall {
   arguments?: Record<string, unknown>;
 }
 
+export interface ToolResult {
+  tool_call: ToolCall;
+  status: "executed" | "blocked";
+  output?: string;
+  review?: PermissionReview;
+}
+
 export interface ChatResponse {
   trace_id: string;
   response: string;
   tool_calls: ToolCall[];
+  tool_results?: ToolResult[];
 }
 
 /**

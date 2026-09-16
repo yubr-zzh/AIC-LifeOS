@@ -52,12 +52,12 @@ function PermCard({ perm, store }: { perm: PermissionRequest; store: Store }) {
       <p style={{ margin: "6px 0 0", fontSize: 12 }}>subject: <span className="mono">{perm.subject}</span></p>
       <p className="muted" style={{ margin: "2px 0 0", fontSize: 12 }}>{perm.reason}</p>
       <div className="row" style={{ marginTop: 8, gap: 6 }}>
-        <button className="violet" onClick={() => store.resolvePermission(perm.id, "allow")}>
+        <button className="violet" disabled title="Permission confirmation is not connected to the backend yet">
           <span className="row" style={{ gap: 6 }}>
             <IconApprove size={11} /> Allow
           </span>
         </button>
-        <button className="ghost danger" onClick={() => store.resolvePermission(perm.id, "deny")}>
+        <button className="ghost danger" disabled title="Permission confirmation is not connected to the backend yet">
           <span className="row" style={{ gap: 6 }}>
             <IconReject size={11} /> Deny
           </span>

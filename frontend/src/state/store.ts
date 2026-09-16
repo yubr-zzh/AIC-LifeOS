@@ -9,9 +9,9 @@ import type {
   MemoryStore,
   PermissionRequest,
   PipelineStageId,
-  RunOnceResponse,
   SkillRegistryState,
   ToolCall,
+  ToolResult,
 } from "../api/types";
 
 // Re-export domain types so panels can import everything from the store.
@@ -26,14 +26,19 @@ export type {
   PipelineStageId,
   SkillRegistryState,
   ToolCall,
+  ToolResult,
 };
 import {
+  approvePendingSkill,
+  commitMemoryCandidate,
   getEvents,
   getMemory,
   getPermissions,
   getSkills,
   getTrace,
   runBackgroundOnce,
+  rejectMemoryCandidate,
+  rejectPendingSkill,
   sendChat,
   submitFeedback,
 } from "../api/client";
@@ -45,6 +50,7 @@ export interface ChatMessage {
   content: string;
   trace_id?: string;
   tool_calls?: ToolCall[];
+  tool_results?: ToolResult[];
   created_at: string;
   // execution status: pending until /chat returns, then succeeded/blocked.
   execution?: "pending" | "succeeded" | "blocked" | "error";
@@ -103,15 +109,9 @@ type Action =
   | { type: "PIPELINE_VISIT"; stages: PipelineStageId[] }
   | { type: "PIPELINE_RESET" }
   | { type: "SET_EVENTS"; events: EventRecord[]; source: "backend" | "preview" }
-  | { type: "PATCH_EVENT"; id: string; patch: Partial<EventRecord> }
-  | { type: "APPEND_EVENT"; event: EventRecord }
   | { type: "SET_MEMORY"; memory: MemoryStore; source: "backend" | "preview" }
-  | { type: "PATCH_CANDIDATE"; id: string; patch: Partial<MemoryCandidate> }
-  | { type: "APPEND_BACKUP_AT"; index: number }
   | { type: "SET_SKILLS"; skills: SkillRegistryState; source: "backend" | "preview" }
-  | { type: "PATCH_PENDING"; id: string; status: "approved" | "rejected" }
   | { type: "SET_PERMISSIONS"; permissions: PermissionRequest[]; source: "backend" | "preview" }
-  | { type: "RESOLVE_PERMISSION"; id: string; decision: "allow" | "deny" }
   | {
       type: "SET_FEEDBACK";
       messageId: string;
@@ -215,64 +215,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, pipeline: { active: null, visited: [] } };
     case "SET_EVENTS":
       return { ...state, events: action.events };
-    case "PATCH_EVENT":
-      return {
-        ...state,
-        events: state.events.map((e) =>
-          e.id === action.id ? { ...e, ...action.patch } : e,
-        ),
-      };
-    case "APPEND_EVENT":
-      return { ...state, events: [action.event, ...state.events] };
     case "SET_MEMORY":
       return { ...state, memory: action.memory };
-    case "PATCH_CANDIDATE":
-      return {
-        ...state,
-        memory: {
-          ...state.memory,
-          candidates: state.memory.candidates.map((c) =>
-            c.id === action.id ? { ...c, ...action.patch } : c,
-          ),
-        },
-      };
-    case "APPEND_BACKUP_AT":
-      return {
-        ...state,
-        memory: {
-          ...state.memory,
-          backups: [...state.memory.backups, { created_at: isoNow(), store: {} }],
-        },
-      };
     case "SET_SKILLS":
       return { ...state, skills: action.skills };
-    case "PATCH_PENDING":
-      return {
-        ...state,
-        skills: {
-          approved:
-            action.status === "approved"
-              ? [
-                  ...state.skills.approved,
-                  ...state.skills.pending
-                    .filter((s) => s.id === action.id)
-                    .map((s) => ({ ...s, status: "approved" as const })),
-                ]
-              : state.skills.approved,
-          pending: state.skills.pending
-            .filter((s) => s.id !== action.id)
-            .map((s) =>
-              s.id === action.id ? { ...s, status: action.status } : s,
-            ),
-        },
-      };
     case "SET_PERMISSIONS":
       return { ...state, permissions: action.permissions };
-    case "RESOLVE_PERMISSION":
-      return {
-        ...state,
-        permissions: state.permissions.filter((p) => p.id !== action.id),
-      };
     case "SET_FEEDBACK":
       return {
         ...state,
@@ -281,7 +229,7 @@ function reducer(state: AppState, action: Action): AppState {
             ? {
                 ...m,
                 feedback: action.rating,
-                feedbackSending: action.sending ?? m.feedbackSending,
+                feedbackSending: action.sending ?? false,
               }
             : m,
         ),
@@ -386,7 +334,7 @@ export function useStore() {
     setLoading("memory", false);
     setLoading("skills", false);
     setLoading("permissions", false);
-    return { anyPreview, allBackend };
+    return { anyPreview, allBackend, events: evR.events };
   }, [setLoading]);
 
   // Initial load.
@@ -473,29 +421,15 @@ export function useStore() {
           content: chatRes.response,
           trace_id: chatRes.trace_id,
           tool_calls: chatRes.tool_calls,
-          execution: "succeeded",
+          tool_results: chatRes.tool_results,
+          execution: chatRes.tool_results?.some((result) => result.status === "blocked") ? "blocked" : "succeeded",
         },
       });
       setUi({ selectedTraceId: chatRes.trace_id });
 
-      // Optimistic append of conversation.completed pending event.
-      const optimisticEvent: EventRecord = {
-        id: rid("evt"),
-        type: "conversation.completed",
-        payload: {
-          session_id: "console",
-          user_input: trimmed,
-          result: { response: chatRes.response },
-        },
-        trace_id: chatRes.trace_id,
-        status: "pending",
-        attempts: 0,
-        created_at: isoNow(),
-        updated_at: isoNow(),
-        error: null,
-      };
-      dispatch({ type: "APPEND_EVENT", event: optimisticEvent });
-      setBusStatus("queued");
+      const eventSnapshot = await getEvents();
+      dispatch({ type: "SET_EVENTS", events: eventSnapshot.events, source: eventSnapshot.source });
+      setBusStatus(eventSnapshot.events.some((event) => event.status === "failed") ? "failed" : "queued");
       setLoading("chat", false);
 
       // Brief tool-calling animation, then back to idle/responded.
@@ -518,19 +452,13 @@ export function useStore() {
     setError(null);
     dispatch({
       type: "PIPELINE_VISIT",
-      stages: [
-        "event_bus",
-        "global_agent",
-        "reflection",
-        "memory_candidate",
-        "security_review",
-        "commit",
-      ],
+      stages: ["event_bus", "global_agent"],
     });
 
-    let res: RunOnceResponse;
+    let processedCount = 0;
     try {
-      res = await runBackgroundOnce();
+      const result = await runBackgroundOnce();
+      processedCount = result.processed.length;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`background failed: ${msg}`);
@@ -539,58 +467,17 @@ export function useStore() {
       return;
     }
 
-    // Mark processed events as done. Events that weren't processed before
-    // this call (e.g. the optimistic one we just appended) get processed now.
-    const processed = new Set(res.processed);
-    stateRef.current.events.forEach((e) => {
-      if (e.status === "pending" || e.status === "processing" || e.status === "failed") {
-        if (processed.has(e.id) || (e.type === "conversation.completed" && !processed.size)) {
-          dispatch({
-            type: "PATCH_EVENT",
-            id: e.id,
-            patch: { status: "done", updated_at: isoNow() },
-          });
-        }
-      }
-    });
-
-    setBusStatus("stable");
-    setGlobalStatus("reflecting");
-    await new Promise((r) => setTimeout(r, 400));
-
-    // Reflective side-effects: for the most recent conversation.completed
-    // event, propose a memory candidate if none exists yet. This mirrors
-    // the backend behavior documented in api-contract.md.
-    const latest = stateRef.current.events
-      .filter((e) => e.type === "conversation.completed")
-      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
-    if (latest) {
-      const userInput =
-        (latest.payload as Record<string, unknown>)?.user_input ?? null;
-      const exists = stateRef.current.memory.candidates.some(
-        (c) => c.trace_id === latest.trace_id,
-      );
-      if (!exists && userInput && typeof userInput === "string") {
-        dispatch({
-          type: "PATCH_CANDIDATE",
-          id: "__noop__", // unused; we append manually instead
-          patch: {},
-        });
-        // We can't APPEND via reducer; trigger a re-fetch via refreshAll.
-        void refreshAll();
-      }
+    const snapshot = await refreshAll();
+    setBusStatus(snapshot.events.some((event) => event.status === "failed") ? "failed" :
+      snapshot.events.some((event) => event.status === "pending") ? "queued" : "stable");
+    if (processedCount > 0) {
+      setGlobalStatus("reflecting");
+      await new Promise((r) => setTimeout(r, 400));
     }
-
-    setGlobalStatus("writing_memory");
-    await new Promise((r) => setTimeout(r, 300));
-    setGlobalStatus("detecting_skills");
-    await new Promise((r) => setTimeout(r, 300));
     setGlobalStatus("idle");
     setLastRun(isoNow());
     setLoading("background", false);
 
-    // Refresh everything to pull any new state.
-    void refreshAll();
   }, [
     setError,
     setGlobalStatus,
@@ -605,8 +492,6 @@ export function useStore() {
       const msg = stateRef.current.messages.find((m) => m.id === messageId);
       if (!msg || msg.role !== "assistant") return;
       if (msg.feedback === rating) {
-        // Clicking the same rating again clears it.
-        dispatch({ type: "SET_FEEDBACK", messageId, rating: null });
         return;
       }
       dispatch({ type: "SET_FEEDBACK", messageId, rating, sending: true });
@@ -626,58 +511,24 @@ export function useStore() {
     [setError],
   );
 
-  const approveCandidate = useCallback(
-    (id: string) => {
-      dispatch({
-        type: "PATCH_CANDIDATE",
-        id,
-        patch: { status: "committed", committed_at: isoNow() },
-      });
-      dispatch({ type: "APPEND_BACKUP_AT", index: 0 });
-      // Move into project memory.
-      const cand = stateRef.current.memory.candidates.find((c) => c.id === id);
-      if (cand) {
-        const newEntry = {
-          id: cand.id,
-          source: cand.source,
-          content: cand.content,
-          trace_id: cand.trace_id ?? null,
-          created_at: cand.created_at,
-          committed_at: isoNow(),
-        };
-        dispatch({
-          type: "SET_MEMORY",
-          memory: {
-            ...stateRef.current.memory,
-            candidates: stateRef.current.memory.candidates.map((c) =>
-              c.id === id ? { ...c, status: "committed" } : c,
-            ),
-            project: [...stateRef.current.memory.project, newEntry],
-          },
-          source: stateRef.current.ui.dataMode,
-        });
-      }
-    },
-    [],
-  );
+  const performAction = useCallback(async (action: () => Promise<unknown>) => {
+    try {
+      setError(null);
+      await action();
+      await refreshAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [refreshAll, setError]);
 
-  const rejectCandidate = useCallback((id: string) => {
-    dispatch({ type: "PATCH_CANDIDATE", id, patch: { status: "rejected" } });
-  }, []);
-
-  const approveSkill = useCallback((id: string) => {
-    dispatch({ type: "PATCH_PENDING", id, status: "approved" });
-  }, []);
-  const rejectSkill = useCallback((id: string) => {
-    dispatch({ type: "PATCH_PENDING", id, status: "rejected" });
-  }, []);
-
-  const resolvePermission = useCallback(
-    (id: string, decision: "allow" | "deny") => {
-      dispatch({ type: "RESOLVE_PERMISSION", id, decision });
-    },
-    [],
-  );
+  const approveCandidate = useCallback((id: string) =>
+    performAction(() => commitMemoryCandidate(id)), [performAction]);
+  const rejectCandidate = useCallback((id: string) =>
+    performAction(() => rejectMemoryCandidate(id)), [performAction]);
+  const approveSkill = useCallback((id: string) =>
+    performAction(() => approvePendingSkill(id)), [performAction]);
+  const rejectSkill = useCallback((id: string) =>
+    performAction(() => rejectPendingSkill(id)), [performAction]);
 
   const selectTrace = useCallback(
     (id: string | null) => dispatch({ type: "SELECT_TRACE", id }),
@@ -706,7 +557,6 @@ export function useStore() {
     rejectCandidate,
     approveSkill,
     rejectSkill,
-    resolvePermission,
     selectTrace,
     selectPermission,
     busCounts,

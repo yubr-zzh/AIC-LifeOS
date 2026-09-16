@@ -175,7 +175,7 @@ class SkillDetector:
                 if content.get("rating"):
                     rated.append(content)
             for candidate in store.get("candidates", []):
-                if candidate.get("source") == "user_feedback":
+                if candidate.get("source") == "user_feedback" and candidate.get("status") == "candidate":
                     content = candidate.get("content", {})
                     if content.get("rating"):
                         rated.append(content)

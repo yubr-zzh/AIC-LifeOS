@@ -107,18 +107,18 @@ function PendingCard({ skill, store }: { skill: SkillCandidate; store: Store }) 
         </div>
       ) : null}
       <div className="row" style={{ marginTop: 8, gap: 6 }}>
-        <button onClick={() => store.approveSkill(skill.id)}>
+        <button disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.approveSkill(skill.id)}>
           <span className="row" style={{ gap: 6 }}>
             <IconApprove size={11} /> Approve install
           </span>
         </button>
-        <button className="ghost danger" onClick={() => store.rejectSkill(skill.id)}>
+        <button className="ghost danger" disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.rejectSkill(skill.id)}>
           <span className="row" style={{ gap: 6 }}>
             <IconReject size={11} /> Reject
           </span>
         </button>
         <span className="mono muted" style={{ fontSize: 10 }}>
-          (POST /skills/pending/{skill.id}/approve — not implemented yet)
+          {store.state.ui.dataMode === "backend" ? "saved by backend" : "preview data — actions unavailable"}
         </span>
       </div>
     </div>

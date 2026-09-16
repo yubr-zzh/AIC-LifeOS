@@ -55,6 +55,31 @@ class SkillRegistry:
                 return skill
         return None
 
+    async def approve_by_id(self, skill_id):
+        data = self._read()
+        for skill in data["approved"]:
+            if skill.get("id") == skill_id:
+                return skill
+        for index, skill in enumerate(data["pending"]):
+            if skill.get("id") == skill_id:
+                skill["status"] = "approved"
+                skill["approved_at"] = _now()
+                data["approved"].append(skill)
+                data["pending"].pop(index)
+                self._write(data)
+                return skill
+        raise KeyError(f"skill not found: {skill_id}")
+
+    async def reject_by_id(self, skill_id):
+        data = self._read()
+        for index, skill in enumerate(data["pending"]):
+            if skill.get("id") == skill_id:
+                skill["status"] = "rejected"
+                data["pending"].pop(index)
+                self._write(data)
+                return skill
+        raise KeyError(f"pending skill not found: {skill_id}")
+
     async def find(self, name):
         data = self._read()
         for skill in data["approved"]:

@@ -66,7 +66,7 @@ export function MemoryPanel({ store }: Props) {
       {tab === "project" ? <EntryList entries={mem.project} empty="no project memory yet" /> : null}
       {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" /> : null}
       {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" /> : null}
-      {tab === "markdown" ? <MarkdownTab /> : null}
+      {tab === "markdown" ? <MarkdownTab store={store} /> : null}
       {tab === "candidates" ? (
         <CandidateList candidates={mem.candidates} store={store} />
       ) : null}
@@ -92,7 +92,7 @@ export function MemoryPanel({ store }: Props) {
   );
 }
 
-function MarkdownTab() {
+function MarkdownTab({ store }: { store: Store }) {
   const [md, setMd] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -116,6 +116,7 @@ function MarkdownTab() {
     importMemoryMarkdown(md)
       .then((r) => {
         setMessage(`imported — user:${r.categories.user} project:${r.categories.project} feedback:${r.categories.feedback} reference:${r.categories.reference}`);
+        void store.refreshAll();
       })
       .catch((e) => {
         setMessage(`import failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -195,7 +196,6 @@ function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
   // Synthetic lifecycle: candidate -> validated -> backed_up -> applied -> vector_upserted -> cache_invalidated.
   // We compute "how far along" from status + presence in project memory.
   const inProject = store.state.memory.project.some((p) => p.id === c.id);
-  const hasBackup = store.state.memory.backups.length > 0;
   let stages: LifecycleStage[] = ["candidate"];
   if (c.status === "rejected") {
     stages = ["candidate"];
@@ -208,10 +208,6 @@ function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
       "vector_upserted",
       "cache_invalidated",
     ];
-  } else {
-    // Heuristic: if any backup exists, show validated+backed_up so the
-    // operator sees the lifecycle has progressed at least once.
-    if (hasBackup) stages = ["candidate", "validated", "backed_up"];
   }
 
   return (
@@ -255,18 +251,18 @@ function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
       </div>
       {c.status === "candidate" ? (
         <div className="row" style={{ gap: 6, marginTop: 10 }}>
-          <button onClick={() => store.approveCandidate(c.id)} title="Approve (POST /memory/candidates/:id/commit)">
+          <button disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.approveCandidate(c.id)} title="Commit memory candidate">
             <span className="row" style={{ gap: 6 }}>
               <IconApprove size={11} /> Approve
             </span>
           </button>
-          <button className="ghost danger" onClick={() => store.rejectCandidate(c.id)}>
+          <button className="ghost danger" disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.rejectCandidate(c.id)}>
             <span className="row" style={{ gap: 6 }}>
               <IconReject size={11} /> Reject
             </span>
           </button>
           <span className="mono muted" style={{ fontSize: 10 }}>
-            (POST /memory/candidates/{c.id}/commit — not implemented in backend yet)
+            {store.state.ui.dataMode === "backend" ? "saved by backend" : "preview data — actions unavailable"}
           </span>
         </div>
       ) : null}
