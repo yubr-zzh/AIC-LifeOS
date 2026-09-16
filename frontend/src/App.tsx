@@ -10,7 +10,7 @@ import { TracePanel } from "./panels/TracePanel";
 import { SkillsPanel } from "./panels/SkillsPanel";
 import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
-import { IconBolt } from "./components/Icons";
+import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
   | "home"
@@ -24,37 +24,38 @@ type SectionId =
   | "insight"
   | "admin";
 
-const navigation: { group: string; items: { id: SectionId; label: string; icon: string; hint?: string }[] }[] = [
+type NavIcon = "home" | "message" | "calendar" | "book" | "spark";
+const navigation: { group: string; items: { id: SectionId; label: string; icon: NavIcon; hint?: string }[] }[] = [
   {
     group: "工作台",
     items: [
-      { id: "home", label: "今日概览", icon: "⌂" },
-      { id: "chat", label: "对话", icon: "◌", hint: "与 LifeOS 对话" },
+      { id: "home", label: "今日概览", icon: "home" },
+      { id: "chat", label: "对话", icon: "message", hint: "与 LifeOS 对话" },
     ],
   },
   {
     group: "计划与复盘",
     items: [
-      { id: "daily-plan", label: "每日规划", icon: "☼", hint: "安排今天" },
-      { id: "daily-review", label: "每日复盘", icon: "↗", hint: "收束今天" },
-      { id: "phase-plan", label: "阶段性规划", icon: "◇", hint: "看长期方向" },
-      { id: "phase-review", label: "阶段性复盘", icon: "◒", hint: "校准路径" },
-      { id: "diary", label: "日记", icon: "▤", hint: "留住今天" },
-      { id: "insight", label: "心得 / 体验", icon: "❋", hint: "沉淀感受" },
+      { id: "daily-plan", label: "每日规划", icon: "calendar", hint: "安排今天" },
+      { id: "daily-review", label: "每日复盘", icon: "spark", hint: "收束今天" },
+      { id: "phase-plan", label: "阶段性规划", icon: "calendar", hint: "看长期方向" },
+      { id: "phase-review", label: "阶段性复盘", icon: "spark", hint: "校准路径" },
+      { id: "diary", label: "日记", icon: "book", hint: "留住今天" },
+      { id: "insight", label: "心得 / 体验", icon: "spark", hint: "沉淀感受" },
     ],
   },
   {
     group: "反馈与记忆",
-    items: [{ id: "feedback", label: "反馈", icon: "✦", hint: "留下你的声音" }],
+    items: [{ id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" }],
   },
   {
     group: "系统",
-    items: [{ id: "admin", label: "系统后台", icon: "⌘", hint: "工程与运行状态" }],
+    items: [{ id: "admin", label: "系统后台", icon: "spark", hint: "工程与运行状态" }],
   },
 ];
 
 const sectionMeta: Record<SectionId, { eyebrow: string; title: string; description: string }> = {
-  home: { eyebrow: "星期六 · 8 月 23 日", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
+  home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
   "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
   "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
   "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
@@ -66,12 +67,23 @@ const sectionMeta: Record<SectionId, { eyebrow: string; title: string; descripti
   admin: { eyebrow: "后台 · 系统", title: "LifeOS 的运行后台", description: "这里放置事件、记忆、技能与运行状态等工程信息。" },
 };
 
+function NavIconGlyph({ name }: { name: NavIcon }) {
+  if (name === "home") return <IconHome size={17} />;
+  if (name === "message") return <IconMessage size={17} />;
+  if (name === "calendar") return <IconCalendar size={17} />;
+  if (name === "book") return <IconBook size={17} />;
+  return <IconSpark size={17} />;
+}
+
 export default function App() {
   const store = useStore();
   const [active, setActive] = useState<SectionId>("home");
   const [dark, setDark] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const meta = sectionMeta[active];
+  const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
+  const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
+  const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
 
   const select = (id: SectionId) => {
     setActive(id);
@@ -98,8 +110,10 @@ export default function App() {
                   key={item.id}
                   className={`nav-item ${active === item.id ? "active" : ""}`}
                   onClick={() => select(item.id)}
+                  aria-current={active === item.id ? "page" : undefined}
+                  title={item.hint}
                 >
-                  <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+                  <span className="nav-icon" aria-hidden="true"><NavIconGlyph name={item.icon} /></span>
                   <span className="nav-label">{item.label}</span>
                   {item.id === "daily-review" ? <span className="nav-dot" /> : null}
                 </button>
@@ -119,8 +133,8 @@ export default function App() {
           <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.eyebrow.split(" · ")[0]}</strong></div>
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
-            <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label="切换主题">{dark ? "☼" : "◐"}</button>
-            <button className="header-icon-button" onClick={() => setSettingsOpen(!settingsOpen)} title="设置" aria-label="设置">⚙</button>
+            <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
+            <button className="header-icon-button" onClick={() => setSettingsOpen(!settingsOpen)} title="设置" aria-label="设置" aria-expanded={settingsOpen}><IconSettings size={16} /></button>
             <div className="avatar">Z</div>
           </div>
           {settingsOpen ? (
@@ -139,7 +153,7 @@ export default function App() {
               <h1>{meta.title}</h1>
               <p>{meta.description}</p>
             </div>
-            <div className="intro-date"><span>今日</span><strong>23</strong><small>八月 2026</small></div>
+            <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
           </div>
           <SectionContent active={active} store={store} onNavigate={select} />
         </main>
@@ -165,9 +179,10 @@ function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; o
   const completed = 2;
   const total = 4;
   const progress = useMemo(() => `${Math.round((completed / total) * 100)}%`, []);
+  const today = new Intl.DateTimeFormat("zh-CN", { weekday: "short", month: "long", day: "numeric" }).format(new Date());
   return <div className="home-grid">
     <section className="focus-card content-card">
-      <div className="focus-top"><span className="card-kicker">今日焦点</span><span className="focus-date">周六，8 月 23 日</span></div>
+      <div className="focus-top"><span className="card-kicker">今日焦点</span><span className="focus-date">{today}</span></div>
       <h2>慢一点，但要向前。</h2>
       <p>今天适合完成一件需要专注的事，也适合给自己留一点空白。</p>
       <button className="green-button" onClick={() => onNavigate("daily-plan")}>开始今日规划 <span>→</span></button>
