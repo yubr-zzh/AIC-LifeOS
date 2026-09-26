@@ -20,6 +20,10 @@ logs/
 .logs/
 backend/.lifeos-state/
 
+# Local runtime / TypeScript incremental state
+.run_pids.txt
+*.tsbuildinfo
+
 # OS / editor
 .DS_Store
 Thumbs.db
