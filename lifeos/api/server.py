@@ -54,6 +54,12 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[:2] == ["memory", "candidates"] and parts[3] in {"commit", "reject"}:
             self._handle_memory_candidate(unquote(parts[2]), parts[3])
             return
+        if len(parts) == 3 and parts[0] == "memory" and parts[2] in {"correct", "retract"}:
+            self._handle_memory_mutation(unquote(parts[1]), parts[2])
+            return
+        if len(parts) == 3 and parts[0] == "entries" and parts[2] == "memory-candidates":
+            self._handle_structured_entry_memory_candidate(unquote(parts[1]))
+            return
         if len(parts) == 4 and parts[:2] == ["skills", "pending"] and parts[3] in {"approve", "reject"}:
             self._handle_skill_candidate(unquote(parts[2]), parts[3])
             return
@@ -83,7 +89,19 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_chat(self):
         body = self._read_json()
-        result = asyncio.run(self.agent.run(body.get("message", "")))
+        try:
+            result = asyncio.run(
+                self.agent.run(
+                    body.get("message", ""),
+                    memory_scope=body.get("memory_scope"),
+                )
+            )
+        except ValueError as exc:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": str(exc)}},
+                status=400,
+            )
+            return
         self._send_json(result)
 
     def _handle_background_once(self):
@@ -177,6 +195,87 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
             return
         self._send_json({"status": "committed" if action == "commit" else "rejected", "item": item})
+
+    def _handle_memory_mutation(self, memory_id, action):
+        body = self._read_json()
+        try:
+            if action == "correct":
+                item = asyncio.run(
+                    self.agent.memory.correct_memory(
+                        memory_id, body.get("content"), reason=body.get("reason")
+                    )
+                )
+            else:
+                item = asyncio.run(
+                    self.agent.memory.retract_memory(memory_id, reason=body.get("reason"))
+                )
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except ValueError as exc:
+            self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
+            return
+        self._send_json({"status": item.get("status"), "memory": item})
+
+    def _handle_structured_entry_memory_candidate(self, entry_id):
+        entry = self.structured_store.get(entry_id)
+        if entry is None:
+            self._send_json(
+                {"error": {"code": "not_found", "message": "structured entry not found"}},
+                status=404,
+            )
+            return
+        if entry["kind"] not in {"daily_plan", "daily_review", "phase_plan", "phase_review"}:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": "entry kind is not enabled for memory capture"}},
+                status=400,
+            )
+            return
+        body = self._read_json()
+        content = body.get("content")
+        category = body.get("category")
+        scope = body.get("scope")
+        if not isinstance(content, dict) or not content:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": "non-empty distilled content is required"}},
+                status=400,
+            )
+            return
+        if not category or not isinstance(scope, dict):
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": "category and scope are required"}},
+                status=400,
+            )
+            return
+        try:
+            candidate = asyncio.run(
+                self.agent.memory.propose_update(
+                    source="structured_entry",
+                    content=content,
+                    source_ref={
+                        "kind": "structured_entry",
+                        "record_id": entry["id"],
+                        "record_kind": entry["kind"],
+                        "revision": entry["updated_at"],
+                    },
+                    scope=scope,
+                    category=category,
+                    confidence=body.get("confidence"),
+                    confidence_method=body.get("confidence_method"),
+                    occurred_at=entry["entry_date"],
+                )
+            )
+        except ValueError as exc:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": str(exc)}},
+                status=400,
+            )
+            return
+        response_status = 201 if candidate.get("status") == "candidate" else 200
+        self._send_json(
+            {"status": candidate.get("status"), "candidate": candidate},
+            status=response_status,
+        )
 
     def _handle_skill_candidate(self, skill_id, action):
         try:

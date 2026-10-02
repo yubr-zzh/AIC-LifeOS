@@ -1,8 +1,10 @@
 import type {
   ChatResponse,
+  MemoryScope,
   EventRecord,
   FeedbackPayload,
   MemoryMarkdownResponse,
+  MemoryEntry,
   MemoryStore,
   PermissionRequest,
   RunOnceResponse,
@@ -75,12 +77,13 @@ async function readError(res: Response): Promise<ApiError> {
 export async function sendChat(
   message: string,
   opts?: ApiOptions,
+  memoryScope?: MemoryScope,
 ): Promise<ChatResponse> {
   const base = getBase(opts);
   const res = await f(opts)(`${base}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, ...(memoryScope ? { memory_scope: memoryScope } : {}) }),
   });
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as ChatResponse;
@@ -186,6 +189,39 @@ export async function importMemoryMarkdown(
   });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { ok: boolean; categories: Record<string, number> };
+}
+
+export async function correctMemory(
+  memoryId: string,
+  content: Record<string, unknown>,
+  reason?: string,
+  opts?: ApiOptions,
+): Promise<MemoryEntry> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/${encodeURIComponent(memoryId)}/correct`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ content, ...(reason ? { reason } : {}) }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { memory: MemoryEntry };
+  return data.memory;
+}
+
+export async function retractMemory(
+  memoryId: string,
+  reason?: string,
+  opts?: ApiOptions,
+): Promise<MemoryEntry> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/${encodeURIComponent(memoryId)}/retract`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { memory: MemoryEntry };
+  return data.memory;
 }
 
 async function postAction<T>(path: string, opts?: ApiOptions): Promise<T> {

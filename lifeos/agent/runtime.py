@@ -48,8 +48,8 @@ class LifeOSAgent:
             trace=self.trace,
         )
 
-    async def run(self, user_input: str):
-        return await self.chat.handle_message(user_input)
+    async def run(self, user_input: str, memory_scope=None):
+        return await self.chat.handle_message(user_input, memory_scope=memory_scope)
 
     async def run_background_once(self, limit=10):
         return await self.global_agent.process_once(limit=limit)

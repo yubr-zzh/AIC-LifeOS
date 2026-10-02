@@ -1,10 +1,9 @@
 """Markdown export / import for the LifeOS memory store.
 
 The memory store is JSON internally, but the project's knowledge
-management story is "readable, editable, auditable". This module
-renders the store to a human-friendly Markdown file (memory.md) and
-parses an edited Markdown document back into the store, so users can
-review and edit long-term memory with any text editor.
+management story is "readable, reviewable, auditable". This module renders
+the store to Markdown; imports may add entries, while existing accepted
+memories must use the explicit correction/retraction lifecycle APIs.
 
 Format:
 
@@ -40,7 +39,7 @@ def render_markdown(store: dict) -> str:
         "",
         "导出时间: " + datetime.utcnow().isoformat(),
         "",
-        "> 本文件由 LifeOS 自动生成。编辑后可通过导入接口写回 memory.json。",
+        "> 本文件由 LifeOS 自动生成。可导入新增条目；既有记忆请使用显式纠正或撤回操作。",
         "",
     ]
     for category in CATEGORY_ORDER:
