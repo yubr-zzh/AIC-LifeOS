@@ -48,11 +48,11 @@ flowchart LR
 
     subgraph MEMORY[记忆与回溯]
         RAW["多源原始记录<br/>来源各自持久化、按需读取"]
-        PROJECT["可选 ai-memory 项目记忆<br/>项目隔离、决策进展、Handoff"]
-        CANDIDATE["LifeOS 记忆候选<br/>来源 / 时间 / scope"]
-        COGNITION["LifeOS 权威 Memory<br/>人工审核后的长期认知"]
-        PROFILE["LifeOS 派生画像<br/>全局 / 场景 / 项目"]
-        TENCENT["TencentDB 能力参考 / 隔离评测<br/>当前不接入生产权威链路"]
+        PROJECT["ai-memory 项目连续性<br/>项目 Wiki / Handoff"]
+        CANDIDATE["LifeOS 记忆候选与审核<br/>来源 / 时间 / scope"]
+        LOCALMEM["LifeOS 本地 Memory store<br/>当前运行版 / 后续迁移"]
+        TENCENT["TencentDB 语义记忆<br/>目标 L1 权威 + L2/L3"]
+        PROFILE["画像读取与展示<br/>依据 TencentDB L2/L3"]
         HISTORY["Archify 历史工作图<br/>进展与完成工作可视化"]
     end
 
@@ -69,10 +69,11 @@ flowchart LR
     RAW -.->|显式提炼并保留引用| CANDIDATE
     PROJECT -.->|经授权的项目证据| ROUTER
     PROJECT -.->|用户确认后可提出候选| CANDIDATE
-    CANDIDATE -->|用户审核| COGNITION
-    COGNITION -->|动态重建| PROFILE
-    COGNITION -->|范围受限的记忆| ROUTER
+    CANDIDATE -->|用户审核后写入| TENCENT
+    TENCENT -->|动态生成/读取| PROFILE
+    TENCENT -->|范围受限的 L1/L2/L3| ROUTER
     PROFILE -->|解释画像依据| ROUTER
+    LOCALMEM -.->|当前仅本地实现；迁移期后停止双写| TENCENT
     PROJECT -->|近期项目进展与完成工作| HISTORY
     RESULT -.->|作为下一轮记录来源| INPUT
 ```
@@ -202,7 +203,7 @@ LifeOS 只统一最小执行生命周期，不强行抹平不同 Agent 的能力
 - 仅在召回结果需要验证或补充细节时按需读取；
 - 原始记录不等于长期 Memory。
 
-### 5.2 ai-memory：可选项目工作连续性来源
+### 5.2 ai-memory：目标项目工作连续性来源
 
 ai-memory 回答的问题是：**这个具体项目发生了什么，现在进行到哪里？**
 
@@ -214,13 +215,13 @@ ai-memory 回答的问题是：**这个具体项目发生了什么，现在进�
 - 通过 Git/Markdown 形式支持版本化、审查和回滚；
 - 支持 Codex、Claude Code 等不同 Agent 接续同一项目。
 
-ai-memory 是未来可选的项目工作连续性来源，不是 LifeOS 用户长期画像的权威。本地代码尚未集成 ai-memory；在接入前，不能把架构图中的跨工具共享能力描述为已实现。若接入，第一步限定为显式项目映射下的只读召回，不做全量同步或双写。项目专属事实不自动提升为全局用户认知。
+ai-memory 是目标架构中的项目工作连续性组件，不是 LifeOS 用户长期画像的权威。它的项目 Wiki、lifecycle capture 与 handoff 用于解决 Codex/Claude Code 等工具之间的项目接续。当前 LifeOS 本地代码尚未集成，因此不能把跨工具共享描述为已实现。接入时通过显式项目映射调用其项目能力，不复制整套 Wiki；项目专属事实也不自动提升为通用用户认知。
 
 ### 5.3 LifeOS 权威认知与 TencentDB 能力参考
 
-**LifeOS 自身是已审核用户长期认知、生命周期和画像的唯一权威。** 当前实现由 LifeOS Memory store 保存候选/active Memory，并按 scope 派生画像；它不依赖 TencentDB。
+**目标架构会实际使用 TencentDB Agent Memory 的 L1-L3 认知能力。** TencentDB 负责已审核原子记忆及其场景/画像层；LifeOS 负责授权、候选审核、scope 约束和编排。这样保留 TencentDB 的核心价值，同时避免 LifeOS 与 TencentDB 永久双写同一份 active 认知。
 
-TencentDB-Agent-Memory 的 L0-L3 分层、渐进式召回和生成溯源可作为设计参考或隔离评测对象，但目前不作为 LifeOS 的生产认知存储后端。它自己的 L1-L3 管线与 LifeOS 的候选、active Memory 和画像有重叠；并行写入真实用户数据会造成重复存储、版本冲突与画像权威不明。
+当前阶段 2–7 的 `.lifeos/memory.json` 是已工作的本地 MVP，当前运行仍以它为准；它是过渡期实现而非最终要求的第三套权威。阶段 9 需验证 TencentDB v3 接口能否承接“LifeOS 用户先审核、随后写入 L1”的流程，验证通过后再做一次性迁移与切换。切换前不把 TencentDB 描述为已接入，也不启用生产双写。
 
 建议采用以下逻辑层次：
 
@@ -242,7 +243,7 @@ TencentDB-Agent-Memory 的 L0-L3 分层、渐进式召回和生成溯源可作�
 
 画像不是一段不可解释的固定总结，而是由多条带来源、时间和置信度的 Memory 动态生成的可更新视图。
 
-当前阶段 6 的实现提供确定性的结构化画像视图：按 `global`、`scenario_type` 和 `project_id` 分组，仅纳入 active 且有明确范围的 LifeOS Memory，并保留每条认知及其来源、时间和置信度。该视图按需从 LifeOS Memory store 重建，不保存第二份权威画像，不调用 LLM 生成摘要，也不自动执行项目/场景到全局的晋升。详见[外部记忆能力边界与适配决策](memory-provider-boundaries.md)。
+当前阶段 6–7 的画像视图目前仍从 LifeOS 本地 Memory store 按 `global`、`scenario_type` 和 `project_id` 分组、动态重建；这是迁移前的当前行为。目标上，LifeOS 读取 TencentDB 经来源约束的 L2/L3，并负责用户可见的解释与管理 UI。项目/场景到全局的晋升仍需明确审核，不得自动跨 scope。详见[外部记忆能力组合与数据权威](memory-provider-boundaries.md)。
 
 ### 5.4 记忆纠错、撤回与删除
 
@@ -260,36 +261,36 @@ LifeOS 区分候选记忆与已采纳记忆，并区分“不再用于当前理�
 
 ## 6. ai-memory 与 TencentDB 的组合方式
 
-这些系统可在未来通过受控读接口协同，但目前不需要物理合并或全量双向同步。LifeOS Memory 是用户认知唯一权威；`ai-memory` 可成为项目连续性来源；TencentDB 暂为参考/隔离评测对象。
+这两个项目是目标架构中要实际使用的互补能力，不做物理合并，也不全量双向同步。`ai-memory` 处理具体项目连续性；TencentDB 处理跨来源的长期认知 L1-L3；LifeOS 负责入口、审核、身份/范围映射和任务级组合。
 
 | 模块 | 权威范围 | 不负责的内容 |
 | --- | --- | --- |
 | 原始记录归档 | 当时具体发生了什么 | 长期认知判断 |
-| LifeOS Memory | 审核后的用户认知、scope、纠正/撤回生命周期及派生画像 | 完整项目日志与所有原始文件 |
-| ai-memory（未来可选） | 具体项目的事实、进展和 Agent 连续性 | LifeOS 全局用户画像；未经确认直接写入 LifeOS |
-| TencentDB（当前仅参考/隔离评测） | 可借鉴或评测其分层记忆、检索和生成溯源 | 当前不作为生产权威；不与 LifeOS 双写真实记忆 |
+| LifeOS | 多源原始记录、授权/候选/审核账本、Router 与 UI；当前本地 active store 为过渡实现 | 永久复制另一系统的完整权威数据 |
+| ai-memory | 项目 Wiki、编码 Agent lifecycle 和跨 Agent handoff | 用户全局画像与长期通用认知 |
+| TencentDB Agent Memory | 已审核 L1 以及以其为依据的 L2/L3 认知记忆层 | 未经 LifeOS 授权/审核的来源自动进入生产长期记忆 |
 | Memory Router | 本次任务的动态组合与裁剪 | 成为第三套权威存储 |
 
 组合发生在两个时刻：
 
 ### 6.1 读取时的受控联合召回（目标能力，尚未实现）
 
-将来可由 Memory Router 同时获取 LifeOS 长期认知和经过用户授权的项目上下文，再生成本次 Memory Context。当前 `ChatRuntime` 只调用本地 LifeOS `MemoryManager`；外部 provider 尚未接入。适配器需要显式项目身份、结果来源标注、长度限制和故障隔离。
+目标上 Memory Router 会按任务模式组合 TencentDB 的长期认知与 ai-memory 的当前项目上下文。当前 `ChatRuntime` 只调用本地 LifeOS `MemoryManager`；两个外部后端都尚未接入。各自适配器保留原生调用能力，但交给模型的结果必须统一携带身份、scope、provenance 和边界长度。
 
 ### 6.2 写入时的显式候选审核（LifeOS 已实现 MVP）
 
-来源记录或外部项目证据只有在用户显式提炼/确认后，才通过 LifeOS 候选流程进入 LifeOS active Memory。当前 MVP 支持规划/复盘记录创建候选并由用户审核；自动跨系统晋升和自动场景归纳尚未实现。
+来源记录或外部项目证据先通过 LifeOS 候选流程并由用户审核。目标上审核通过的 L1 写入 TencentDB，再由 TencentDB 基于 approved L1 生成可追溯的 L2/L3；项目 wiki/handoff 继续由 ai-memory 管理。当前 MVP 的候选与 active Memory 仍落在 LifeOS 本地 store，外部写入及切换尚未实现。
 
 ```mermaid
 flowchart LR
     EVENT["项目事件或用户反馈"] --> RAW["原始记录"]
-    EVENT --> PM["可选项目记忆来源"]
+    EVENT --> PM["ai-memory 项目记忆"]
     RAW --> CANDIDATE["LifeOS 认知候选"]
     PM -.->|明确引用/用户提炼| CANDIDATE
     CANDIDATE --> CHECK{"是否长期、稳定、可泛化？"}
     CHECK -->|否| KEEP["保留在原始记录或项目记忆"]
-    CHECK -->|用户确认| ATOMIC["LifeOS active Memory"]
-    ATOMIC --> PROFILE["LifeOS 动态画像"]
+    CHECK -->|用户确认| ATOMIC["TencentDB L1"]
+    ATOMIC --> PROFILE["TencentDB L2/L3"]
 ```
 
 例如：
@@ -330,8 +331,8 @@ Archify 历史工作图不是新的 Memory 权威源，而是项目记忆的可�
 
 1. 接入 LifeOS 对话、规划/复盘和 Codex 执行记录；
 2. 将原始记录可靠存盘，并保留来源引用；
-3. （可选后续）通过只读、显式项目映射接入 ai-memory 项目连续上下文与 Handoff；
-4. 使用 LifeOS 自身审核后的 Memory 生成结构化画像；TencentDB 仅在独立评测证明收益且身份/溯源/删除边界清楚后再决定是否接入；
+3. 接入 ai-memory 项目连续上下文与 Handoff（显式项目映射、按需召回）；
+4. 由 LifeOS 审核来源和 scope，并接入 TencentDB 的 L1-L3 认知记忆能力；
 5. 实现 Memory Router，生成一次任务所需的 Memory Context；
 6. 完成 Codex 执行、结果反馈和再次沉淀的闭环；
 7. 再扩展 Claude Code、多 Agent 任务图和外部工具。

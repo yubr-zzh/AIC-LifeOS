@@ -1,85 +1,92 @@
-# LifeOS 外部记忆能力边界与适配决策
+# LifeOS 外部记忆能力组合与数据权威
 
-> 状态：阶段 8 决策记录（2026-10-03）  
-> 范围：评估 `ai-memory` 与 TencentDB Agent Memory 对 LifeOS 的职责、数据权威和未来适配面。本文不代表已实现外部服务集成。
+> 状态：阶段 8 修订后的目标架构决策（2026-10-03）
+> 说明：目标是实际使用 `ai-memory` 与 TencentDB Agent Memory 的互补能力。本文区分目标架构与当前实现；适配器尚未落地，API/身份/审核契约仍需在阶段 9 验证。
 
-## 决策摘要
+## 核心决策
 
-1. **LifeOS 是用户长期认知的唯一权威。** 当前已采纳的 Memory、候选审核状态和由 active Memory 构建的画像都归 LifeOS 管理；外部系统的结果不能直接覆盖或创建 active Memory。
-2. **`ai-memory` 定位为可选的项目工作连续性来源。** 它擅长编码项目中的 lifecycle capture、项目 wiki、handoff 和跨 Agent 接续。将来若接入，第一步只做当前项目的只读召回，不做全量同步或双写。
-3. **TencentDB Agent Memory 暂不作为 LifeOS 的生产记忆后端。** 它的 L0–L3 记忆管线与 LifeOS 当前的原始记录、候选/active Memory 和画像模型有显著重叠。当前只借鉴分层渐进披露、召回和溯源设计，并可做独立对照评测；不得同时维护两份用户画像权威。
-4. **暂不增加通用 Adapter 框架或运行时依赖。** 当前只有一个明确的潜在只读项目召回场景，且 LifeOS 尚无外部 Memory Provider 接口、项目身份映射和服务配置。先把最小契约定清楚，等具体接入时用单一垂直切片验证。
+1. **两个项目都是目标方案中的实际能力组件，不是“只作参考”或可有可无。** `ai-memory` 承担具体项目的 Agent 工作连续性；TencentDB Agent Memory 承担跨来源的分层长期认知（L1 原子、L2 场景、L3 画像）。
+2. **LifeOS 是用户入口、授权/审核边界和编排中枢。** 它负责接收多源记录、确定用户/场景/项目范围、审核候选、决定何时调用哪种后端，并将带来源的结果组合到本次任务上下文。
+3. **权威按数据职责划分，而非让三套系统保存同一份 active 记忆：** `ai-memory` 的 Git Markdown wiki 是具体 coding project 连续性的权威；TencentDB 是已审核长期认知 L1 及其 L2/L3 派生层的目标权威；LifeOS 保留来源记录、授权/候选/审核与跨系统引用。LifeOS 当前 `.lifeos/memory.json` 的 active Memory 是阶段 2–7 的本地 MVP，目标上属于迁移期实现，不应与 TencentDB 永久双写。
+4. **LifeOS 审核先于语义记忆写入。** 新认知先成为带 source/scope 的 LifeOS 候选；用户确认后再提交给 TencentDB 的 L1。L2/L3 只能基于已审核的 L1 生成，必须保留回溯引用；不得把未经确认的项目内容自动提升成场景或全局认知。
+5. **保留两类适配器的差异。** 不造一个抹平差异的万能 Memory CRUD 接口：`AiMemoryProjectAdapter` 对接项目查询、页面读取与 handoff；`TencentDBCognitiveAdapter` 对接 L0/L1 写入策略、L1/L2/L3 召回与生成溯源。LifeOS Router 只统一授权、范围、结果来源和上下文预算等编排约束。
 
-## 事实基线
+## 职责与权威矩阵
 
-| 能力/数据 | LifeOS 当前实现 | `ai-memory` 当前定位 | TencentDB Agent Memory 当前定位 |
+| 数据/能力 | 目标权威 | LifeOS 职责 | 另一后端的边界 |
 | --- | --- | --- | --- |
-| 项目连续性 | 有 project scope 的 Memory 候选/召回原型；无跨 Agent 项目 wiki/handoff 后端 | 面向 coding agent 的项目级 Git Markdown wiki，SQLite 是派生检索索引；支持 lifecycle hooks、MCP/HTTP、handoff | 支持 Agent/Team 等隔离坐标，也能保存对话与场景，但并非专门的 Git 项目工作 wiki |
-| 用户长期认知 | `.lifeos/memory.json` 保存候选和已采纳 Memory；`GET /memory/profile` 从 active 项目/场景/全局 Memory 动态重建 | 支持项目 wiki 及可选 global/supplemental global 内容；不应把其 global scope 解释为 LifeOS 的用户画像 | 提供 L0 conversation、L1 atomic、L2 scenario、L3 core profile，且自带生成/召回管线 |
-| 来源与治理 | `source_ref`、scope、confidence metadata、candidate → commit/reject、correct/retract | hook sanitizer、wiki 版本链、audit、来源/证据元信息；契约围绕 workspace/project/operator | L0–L3 generation references/logs；v3 请求要求 `team_id`、`agent_id`、`user_id` |
-| 与 LifeOS 的重叠风险 | —— | 若将其项目 wiki 写回 LifeOS，会重复保存项目进展；若将其 global notes 当作 persona，会混淆范围 | 若同时接收 LifeOS 的原始记录并生成 L1–L3，会重复存储和推导长期认知，且产生画像冲突 |
+| LifeOS 对话、每日/阶段规划复盘、用户反馈的原始记录 | LifeOS 来源存储（当前结构化记录为 SQLite；各来源归档仍需补齐） | 记录来源 ID、时间、授权和保留策略；只提交必要内容 | TencentDB L0 可承载获准用于认知处理的对话/记录，但须保留 LifeOS source ref；是否复制全文或只存引用需阶段 9 验证 |
+| coding Agent 项目 lifecycle、项目 wiki、决策、进展、handoff | **ai-memory 项目空间** | 按显式 project mapping 调用/呈现；保留外部 page/session/handoff 引用 | 不把整套项目 wiki 复制进 LifeOS/TencentDB；可转成 LifeOS 候选的仅是用户确认后要泛化的认知 |
+| 已审核的长期原子认知 L1 | **TencentDB 目标权威** | 收集候选、执行用户审核、发起写入并保存审核/外部 ID 对应关系 | 不长期双写到 LifeOS active Memory；阶段迁移前旧 JSON store 暂为现行运行时权威 |
+| 场景认知 L2、全局/场景画像 L3 | **TencentDB 目标派生层** | 决定哪些 scope 可参与当前任务，向用户呈现来源和生成依据 | 仅从 approved L1 生成；不得无证据跨项目/场景提升；无法追溯的输出不进入上下文 |
+| 单次任务的混合上下文 | **LifeOS Memory Router** | 按 task + user + scenario + project 汇合 TencentDB 认知与 ai-memory 项目证据，限长并标注来源 | Router 是运行时组合，不是第三个持久化权威 |
 
-当前 LifeOS 的长期 Memory 权威位于 `MemoryManager` 所持有的本地 JSON store；结构化规划/复盘等原始条目位于 `StructuredStore` SQLite。现有聊天事件存储不能据此视为完整、永久的原始对话档案。不同来源的原始归档策略仍需后续单独完善。
+“权威按数据职责划分”不代表无重复字节：同一已授权来源可能被引用或投影到另一个系统。必须保留稳定 `source_ref`、去重键和删除/更正关联；投影副本不能与来源权威冲突，也不能被误当作新的独立证据。
 
-## 职责与数据归属
+## 目标数据流
 
-| 数据类 | 权威系统 | 外部系统允许扮演的角色 |
-| --- | --- | --- |
-| LifeOS 对话、规划/复盘、用户反馈原始内容 | 各 LifeOS 来源存储；来源 ID/修订必须可追溯 | 不自动复制完整内容；确有授权的场景可传递最小必要片段 |
-| 用户长期认知候选、审核决定、active Memory、纠正/撤回历史 | **LifeOS** | 可提供带来源的只读证据或建议；不得直接写 active Memory |
-| 全局/场景/项目画像视图 | **LifeOS 派生 read model** | TencentDB 的 L3 可作为隔离评测输出，不作为生产画像来源 |
-| Agent coding session、项目决策 wiki、handoff | 未来可选 **`ai-memory`** 项目空间；当前 LifeOS 尚未接入 | 通过明确项目身份只读查询；若之后启用外部写入，仍由 ai-memory 自己治理其 wiki |
-| 召回结果的本次上下文组合 | **LifeOS Memory Router** | 将外部命中作为带 provider 标记的证据片段；不可静默并入会话历史或画像 |
-
-跨系统传播只允许“最小必要、带引用、单向进入当前任务上下文”。如果用户明确要求把外部证据沉淀为长期认知，应在 LifeOS 创建候选，保留原始 provider/ref，再走既有人工审核流程。
-
-## 最小未来适配契约（设计，不是当前代码）
-
-```text
-ExternalMemoryProvider
-  provider_id: stable identifier
-  capabilities: declared read/write surfaces
-  recall(request) -> Evidence[]
-
-RecallRequest
-  query: current task text
-  scope: { user_id?, scenario_type?, project_id?, workspace_id? }
-  limit: bounded result count
-
-Evidence
-  provider_id
-  external_ref
-  title / bounded excerpt
-  source_scope
-  occurred_at / updated_at (when available)
-  retrieval metadata (when available)
+```mermaid
+flowchart LR
+    SRC["LifeOS 对话 / 规划复盘 / 反馈"] --> RAW["LifeOS 原始来源记录"]
+    AGENT["Codex / Claude Code 等项目执行"] --> AIM["ai-memory 项目 wiki / observations / handoff"]
+    RAW --> CAND["LifeOS 记忆候选<br/>source_ref + scope + 状态"]
+    AIM -.->|被任务需要时只读召回| ROUTER["LifeOS Memory Router"]
+    AIM -.->|用户明确提炼后作为证据| CAND
+    CAND -->|用户审核通过| L1["TencentDB L1<br/>approved atomics"]
+    L1 -->|受控归纳并保留 generation refs| L2["TencentDB L2 / L3<br/>scene / profile"]
+    L1 --> ROUTER
+    L2 --> ROUTER
+    ROUTER --> CTX["本次最小化 Memory Context"]
+    CTX --> AGENT
 ```
 
-适配边界：
+这是目标链路，不是当前代码现状。当前 `ChatRuntime` 仍只调用 LifeOS 本地 `MemoryManager`，既没有调用 `ai-memory`，也没有调用 TencentDB。图中 L0/L1/L2/L3 具体写入和生成 API 必须经阶段 9 的接口核对与测试后才能落为代码。
 
-- 第一种实现只需 `recall`，不要求所有 provider 支持统一写入、删除、画像生成或任务管理。
-- LifeOS 项目 ID 到 provider 项目坐标的映射必须显式且稳定；不能只靠模糊 repo 名称推断。缺失/歧义时跳过项目 provider，不做全局兜底。
-- 结果带明确的 `provider_id` 与 `external_ref`，作为不可信外部上下文展示/注入；受统一条数和长度上限约束。具体额度、超时和重试策略由阶段 9 的效率评测确定。
-- Provider 超时/不可用不能阻断 LifeOS 本地召回；UI/trace 必须能区分“没有命中”和“外部源不可用”。
-- 外部命中只有在再次显式提出候选并经用户审核后，才可能进入 LifeOS active Memory。
-- 任何可写适配都必须另行规定用户授权、幂等键、版本冲突、删除语义和审计；不从只读接口隐式扩展。
+## 适配边界
 
-## 采用顺序与决策门
+### `AiMemoryProjectAdapter`
 
-1. **优先候选：`ai-memory` 只读项目召回。** 触发条件：LifeOS 执行项目任务时，用户确实需要跨 Codex/Claude Code 等工具共享项目决策、handoff 或进展，而且当前 LifeOS 项目记忆不能可靠提供这些内容。
-2. 触发后先验证一个已明确映射的测试项目，通过 MCP/HTTP 读取少量项目 wiki/handoff；不捕获新 hook、不自动写 wiki、不导入为 LifeOS Memory。
-3. 验收必须覆盖正确项目命中、相似项目不串用、无映射时拒绝查询、provider 故障时本地召回仍可用，以及每条结果能回到外部页面引用。
-4. **TencentDB 暂无生产 adapter。** 只有当隔离评测证明其层级召回/归纳在 LifeOS 的具体场景上优于现有实现，且输出能保留原子证据与 provenance、身份映射和删除责任也能明确时，才重新评估。初次实验使用合成或脱敏数据，不双写真实用户记忆。
+- 目标用途：编码/项目任务开始时按明确 workspace/project identity 查询相关 wiki、handoff 或近期进展；需要时读取指定页面。
+- 项目身份必须由用户/项目设置显式绑定到 ai-memory 的 workspace/project 坐标；禁止仅凭模糊项目名猜测。缺失或歧义时跳过外部项目召回，不能 fallback 到全局检索。
+- 对已配置的 Codex/Claude Code 项目，复用 ai-memory 自身的 hooks/lifecycle capture、MCP/HTTP 和项目隔离，不由 LifeOS 再抓一份相同执行日志或复制 wiki；LifeOS 另通过项目 adapter 查询/读取所需上下文。
+- 召回作为带 provider/page/session ref 的外部项目证据；如需变成通用用户认知，回到 LifeOS 候选和审核，再由 TencentDB 保存。
 
-## 证据与版本边界
+### `TencentDBCognitiveAdapter`
 
-- `ai-memory` 上游架构：[docs/ARCHITECTURE.md](https://github.com/akitaonrails/ai-memory/blob/main/docs/ARCHITECTURE.md)；使用方式：[docs/cookbook.md](https://github.com/akitaonrails/ai-memory/blob/main/docs/cookbook.md)。该项目说明 Markdown wiki 是事实来源，SQLite 是派生索引，并提供 MCP/HTTP、hook 和 handoff 等能力。
-- TencentDB Agent Memory 上游：[MemoryCore/README_CN.md](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/feat/server_team/MemoryCore/README_CN.md)。当前文档列出 L0–L3、HTTP Gateway/SDK、generation reference；v3 记忆数据面要求 `team_id`、`agent_id`、`user_id`。此接口/分支状态可能变化，真正实施前必须复核。
-- 本地 `upstream/ai-memory` 检查时处于 `docs/codex-shared-daemon-recovery`，HEAD `82b9c581`，不是 `main`；其 cookbook/architecture 仅作为本地补充材料。本决策采用上游 main 的官方架构文档核对能力，不把本地分支状态误称为最新。
-- LifeOS 代码证据：`lifeos/memory/manager.py`、`lifeos/memory/retriever.py`、`lifeos/memory/profile.py`、`lifeos/storage/sqlite.py`、`lifeos/api/server.py`。
+- 目标用途：让 LifeOS 来源在授权后进入 TencentDB 记忆管线，管理已审核的 L1，并召回相关 L1/L2/L3 认知及 generation refs。
+- 新接入优先评估上游推荐的 v3 API/SDK，并稳定映射 LifeOS `user_id`、`project_id`、`scenario_type` 到 `team_id`、`agent_id`、`user_id` 和 session 等坐标；禁止用固定默认 ID 代替真实隔离。
+- 公开文档列出了 v3 conversation/atomic/scenario/core 路由及身份字段，但没有证明它提供与 LifeOS 等价的 pending-candidate/user-approval 工作流。必须先验证“先审核再写 L1”的可实现方式；未解决前不可启用自动提取到生产数据。
+- TencentDB 的 L2/L3 是长期认知能力的目标组成，不是仅供展示的可选参考；但生成结果需要 generation refs，且范围和上游 approved L1 可解释。缺来源、scope 不符或 generator 故障时不注入模型。
 
-## 后续工作
+## 迁移与切换原则
 
-- 本决策不引入运行时代码或外部服务依赖。
-- 下一阶段先补一次阶段 7 UI 浏览器验收并建立召回质量评测基线；如真实任务证明需要跨工具项目连续性，再单独开 `ai-memory` 只读 provider 纵向切片。
-- 暂不以“架构上可接入”为理由预先抽象多 provider 插件框架。
+当前 LifeOS 阶段 2–7 已有 `.lifeos/memory.json`、候选生命周期、范围检索和画像 UI。接入 TencentDB 时采用一次明确切换，不长期双写：
+
+1. 盘点并导出当前 active/candidate 数据及来源引用，映射到 TencentDB 的用户/项目/场景坐标；无法映射的保持待处理，不猜测范围。
+2. 用独立测试租户验证导入幂等、读取、纠正、撤回、画像来源与隔离；对照检查数量、ID/source refs 和 scope。
+3. 验收后切换权威：新 active L1 只写 TencentDB；LifeOS 留存审核/审计状态和外部 ID/ref，本地旧 active store 只读归档并提供回滚窗口。
+4. 验收失败则继续使用 LifeOS 本地 store，不做半切换；不同时开启两处写入。
+
+L0 的保存策略、候选审批如何映射 TencentDB 写 API、跨系统纠正/撤回/删除语义是阶段 9 必须用实际接口验证的阻塞设计点，当前文档不假设已解决。
+
+## 阶段 9 后续实施次序
+
+1. **TencentDB vertical slice（认知核心）**：隔离测试实例；确认 v3 读写/身份/生成引用和审核前置写入方案；用合成数据完成一条 LifeOS candidate → 用户批准 → L1 → L2/L3 → 带来源召回链路。
+2. **ai-memory project slice（项目连续性）**：为一个测试项目配置稳定身份映射；接入项目检索、handoff/page 引用；验证相邻项目隔离和 provider 故障不阻断本地 Memory。
+3. **LifeOS Router 组合**：两个不同适配器按任务模式组合；保留原生能力差异，但在上下文输出中统一 provenance、scope 与限长元数据。
+4. **迁移与回滚**：对现有 LifeOS active Memory 做一次性导入、对照、切换/回滚计划，完成前禁止生产双写。
+5. **阶段 10 再评估召回质量与成本/效率**：先测正确性、隔离与来源可解释性，再量化延迟、LLM/embedding 成本及缓存收益。
+
+## 上游依据与版本说明
+
+- [`ai-memory` 架构](https://github.com/akitaonrails/ai-memory/blob/main/docs/ARCHITECTURE.md)：Git Markdown wiki 为事实来源，SQLite 为派生索引；支持 hooks、MCP/HTTP、项目召回和 handoff。LifeOS 应借它解决项目 Agent 连续性，而不是再造同一套 wiki。
+- [TencentDB MemoryCore 文档](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/feat/server_team/MemoryCore/README_CN.md)：描述 L0 conversation、L1 atomic、L2 scenario、L3 core profile、HTTP/SDK；推荐新接入 v3，并要求 team/agent/user 隔离坐标。官方文档当前没有证明 LifeOS 所需的审批前置语义，因此列为实施前验证项。
+- 本地 `upstream/ai-memory` 当前检出的 `docs/codex-shared-daemon-recovery` / `82b9c581` 不是 `main`；本地分支仅作辅助材料，正式集成前继续以当时上游文档和 API 合约为准。
+
+## 当前未实现项
+
+- 两个外部系统的运行时适配、身份映射、服务配置、授权界面及统一 Router 调用。
+- TencentDB 侧 candidate/approval gate 的具体映射；L0 原始内容使用复制还是引用的保留策略。
+- 从 LifeOS 本地 active Memory 到 TencentDB 的迁移与单点切换。
+- `ai-memory` 外部项目召回在不同任务模式下的选择/限额策略。
+- 跨后端更正、撤回、删除与 provider down 时的回滚测试。
