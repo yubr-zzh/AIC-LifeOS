@@ -29,7 +29,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 5. 分层检索与隔离 | 支持全局/场景/项目检索范围，确保项目记忆不串用 | 完成（显式范围与 fail-closed 默认；自动识别延期） | 层级召回规则、用户标记过滤、跨项目/场景隔离测试；`memory_scope` 从 `/chat` 传至检索并写入事件 |
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 完成（结构化只读 MVP；自然语言摘要/UI 展示延期） | `/memory/profile` 按 scope 动态重建；仅 active；稳定版本 hash；来源与置信度可追溯 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 完成 | 画像 UI、来源可追溯、从日/阶段规划复盘显式提炼候选；浏览器端手工复核待做 |
-| 8. 外部记忆能力适配 | 评估并隔离 ai-memory / TencentDB 的职责与适配面 | 待开始 | adapter 选择依据；不重复存储为双重权威 |
+| 8. 外部记忆能力适配 | 评估并隔离 ai-memory / TencentDB 的职责与适配面 | 完成（决策阶段；暂不实现运行时 adapter） | 权威数据矩阵、单一职责决策、最小只读 provider 契约与 go/no-go 门槛 |
 | 9. 评估与效率 | 评估召回正确性、隔离性、可解释性；再量化成本与效率 | 待开始 | 小型评测集与基线；成本优化放在正确性之后 |
 
 ## 阶段 0 验收记录
@@ -234,6 +234,16 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 相关实现：`frontend/src/App.tsx`、`frontend/src/api/client.ts`、`frontend/src/panels/MemoryPanel.tsx`；使用既有 `POST /entries/{id}/memory-candidates` 与 `GET /memory/profile`，后端契约未改变。
 - 构建与类型检查通过；本地需启动真实后端并手动走一遍“保存规划/复盘 → 提炼候选 → 后台审核 → 画像出现”的浏览器端流程。本轮尚未做浏览器自动化/人工截图验收。
 
+## 阶段 8 验收记录
+
+- 新增 `docs/memory-provider-boundaries.md`，记录能力矩阵、权威系统、外部证据适配契约、隔离要求、接入门槛和上游证据链接。
+- 决策：LifeOS 是已审核用户长期认知、生命周期与画像的唯一权威；当前画像仍从 LifeOS active Memory 动态构建。
+- `ai-memory` 定位为未来可选的项目 wiki/handoff/lifecycle 来源。若真实需求成立，优先评估当前显式项目映射下的只读 recall；本阶段不实现服务调用或写入桥接。
+- TencentDB Agent Memory 的 L0-L3、分层召回与生成溯源保留为架构参考/隔离评测对象；由于与 LifeOS 候选、active Memory 和画像存在明显重叠，当前不作为生产后端，不双写真实用户 Memory。
+- 暂不抽象通用 provider 插件框架。已记录最小未来契约 `ExternalMemoryProvider.recall(request) -> Evidence[]`，包括显式身份映射、来源标记、限长、失败隔离及候选审核规则。
+- 更新 `docs/lifeos-workflow-and-memory-architecture.md`，将原先“ai-memory 与 TencentDB 各自作为权威”的目标性表述修订为阶段 8 决策；图中区分已实现的 LifeOS 权威、未来可选的项目 recall 与 TencentDB 隔离评测。
+- 本阶段仅做代码/文档审计与架构决策，无运行时依赖、服务部署或代码行为改动；验证以引用核对和文档 diff 检查为主。
+
 ## 风险与未决决策
 
 - 每日/阶段记录当前采用“用户手动撰写认知并提交候选”的显式触发方式；后续如增加 AI 辅助提炼，需单独设计授权、确认、错误更正和范围选择，不可静默自动写入。
@@ -241,6 +251,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 缺失 `project_id` 的候选必须使用 `unassigned` scope，且当前检索器排除该类记录。
 - 自动场景/项目识别尚未实现；在设计出可审计、可纠正的 resolver 与 fail-closed fallback 前，UI 未传 scope 时应保持 global-only。
 - `/memory` 当前返回整个内部 store；后续设计需要考虑 API 向用户暴露范围、候选和运行态存储的分离。
+- ai-memory 项目身份到 LifeOS `project_id` 的稳定映射、provider 的运行/授权配置和隔离测试未实现；没有这三者前，不应启用外部召回。
 - 成本和效率优化暂不作为当前实现阶段的目标；先建立召回正确性、隔离性和可追溯性基线。
 
 ## 本次最新验证记录（2026-10-03）
@@ -251,13 +262,14 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - `frontend/` 中 `npm run typecheck`：通过（`tsc --noEmit`）。
 - `frontend/` 中 `npm run build`：通过（49 modules transformed；本轮页面交互尚未做浏览器自动化验收）。
 - 阶段 7 再次通过 `npm run typecheck`、`npm run build`、`git diff --check` 与 Python 23 项回归；前端 UI 流程仍需浏览器手工验收。
+- 阶段 8 `python -m unittest discover -s tests -v`：23 tests passed；`python -m compileall -q lifeos tests` 与 `git diff --check` 通过。本阶段没有运行时代码变更。
 - 自动场景识别与自然语言画像总结未实现。
-- 工作区原有未跟踪的上游仓库、图稿和交接内容均保留；本轮只修改 Memory 代码、API/TS 契约、架构/交接文档与回归测试，其它已有改动未动。
+- 阶段 8 只修改 `docs/memory-provider-boundaries.md`、整体架构和交接文档；工作区原有未跟踪的上游仓库、图稿和交接内容均保留。
 
 ## 交接给下一位 Agent
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2、阶段 3 后端 MVP、阶段 4 生命周期 MVP、阶段 5 显式范围隔离、阶段 6 结构化画像 read model、阶段 7 用户审核 UI 均已完成。下一步为阶段 8：评估 ai-memory / TencentDB 的能力边界与适配方式；不得把自动场景识别、LLM persona 摘要或自动晋升描述为已实现。
+3. 阶段 2 至阶段 8 均已完成；下一步为阶段 9：建立小型检索正确性、项目/场景隔离、来源可解释性评测基线，再讨论 cost/efficiency。阶段 8 没有接入外部 provider；ai-memory 只读项目 recall 是有条件的后续垂直切片，TencentDB 暂为参考/隔离评测。不得把自动场景识别、LLM persona 摘要或自动晋升描述为已实现。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。
