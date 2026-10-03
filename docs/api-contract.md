@@ -48,6 +48,15 @@ When supplied, it must be a valid explicit scope and is included in the durable
 `conversation.completed` event; the backend does not infer scenario or project
 identity yet.
 
+Recall is hierarchical: `global` sees global entries; `scenario` sees global
+plus entries in the same `scenario_type`; `project` sees global, same-scenario,
+and entries with the same `project_id`. Other scenarios/projects and
+`unassigned` entries are excluded. If a Memory has a non-null `user_id`, the
+request must supply the same ID for that entry to match. This is a retrieval
+filter only, not authentication or authorization. The current API does not
+automatically classify a message into a scenario/project; callers must pass an
+explicit scope or accept the global-only default.
+
 Response body:
 
 ```json

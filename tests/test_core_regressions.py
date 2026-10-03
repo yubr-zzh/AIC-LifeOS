@@ -237,21 +237,43 @@ class CoreRegressionTests(unittest.TestCase):
             "user": [
                 {"id": "global", "scope": {"kind": "global"}, "content": "study preference"},
                 {
+                    "id": "alice-global",
+                    "scope": {"kind": "global", "user_id": "alice"},
+                    "content": "study with alice preferences",
+                },
+                {
                     "id": "learning",
                     "scope": {"kind": "scenario", "scenario_type": "learning"},
                     "content": "study with examples",
                 },
                 {
+                    "id": "writing",
+                    "scope": {"kind": "scenario", "scenario_type": "writing"},
+                    "content": "study by drafting examples",
+                },
+                {
                     "id": "project",
-                    "scope": {"kind": "project", "project_id": "lifeos"},
+                    "scope": {"kind": "project", "project_id": "lifeos", "user_id": "alice"},
                     "content": "study with examples in this project",
                 },
                 {
                     "id": "other-project",
-                    "scope": {"kind": "project", "project_id": "other"},
+                    "scope": {"kind": "project", "project_id": "other", "user_id": "alice"},
                     "content": "study with examples in another project",
                 },
+                {
+                    "id": "other-user-same-project",
+                    "scope": {"kind": "project", "project_id": "lifeos", "user_id": "bob"},
+                    "content": "study with examples for another user",
+                },
                 {"id": "unassigned", "scope": {"kind": "unassigned"}, "content": "study notes"},
+                {"id": "legacy-unscoped", "content": "study from an unscoped legacy entry"},
+                {
+                    "id": "superseded",
+                    "scope": {"kind": "global"},
+                    "status": "superseded",
+                    "content": "study from an old superseded memory",
+                },
             ]
         }
         retriever = MemoryRetriever(store)
@@ -263,7 +285,7 @@ class CoreRegressionTests(unittest.TestCase):
                 scope={
                     "kind": "scenario",
                     "scenario_type": "learning",
-                    "project_id": None,
+                    "user_id": "alice",
                 },
             )
         )
@@ -274,18 +296,19 @@ class CoreRegressionTests(unittest.TestCase):
                     "kind": "project",
                     "scenario_type": "learning",
                     "project_id": "lifeos",
+                    "user_id": "alice",
                 },
             )
         )
 
-        self.assertEqual([item["id"] for item in default_result["user"]], ["global"])
+        self.assertEqual({item["id"] for item in default_result["user"]}, {"global"})
         self.assertEqual(
             {item["id"] for item in learning_result["user"]},
-            {"global", "learning"},
+            {"global", "alice-global", "learning"},
         )
         self.assertEqual(
             {item["id"] for item in project_result["user"]},
-            {"global", "learning", "project"},
+            {"global", "alice-global", "learning", "project"},
         )
 
     def test_legacy_memory_store_is_upgraded_once_with_backup(self):

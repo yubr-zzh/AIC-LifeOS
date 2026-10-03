@@ -26,7 +26,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 2. 领域数据契约 | 定义原始来源引用、记忆候选、已采纳 Memory、画像视图所需字段及兼容策略 | 完成 | `lifeos/memory/schema.py` v3 契约、一次性备份迁移、API/TS 类型、回归测试 |
 | 3. 记忆写入与来源接入 | 打通至少一条非 Agent 来源的计划/复盘到候选 Memory 的可审计链路 | 完成（后端 MVP） | `POST /entries/{id}/memory-candidates`；结构化来源、revision 幂等、人工审核测试 |
 | 4. 生命周期与可纠错性 | 明确候选、采纳、拒绝、修正、冲突等状态变化；不擅自决定跨范围晋升 | 完成（生命周期 MVP；自动冲突检测与物理删除明确延期） | schema v3 active/superseded/retracted；显式纠正/撤回 API；非法状态转换、召回过滤与索引失效测试 |
-| 5. 分层检索与隔离 | 支持全局/场景/项目检索范围，确保项目记忆不串用 | 进行中（范围过滤与显式传递已完成，自动识别待定） | 默认仅召回 global；显式 `memory_scope` 从 `/chat` 传至检索并写入事件；项目隔离测试 |
+| 5. 分层检索与隔离 | 支持全局/场景/项目检索范围，确保项目记忆不串用 | 完成（显式范围与 fail-closed 默认；自动识别延期） | 层级召回规则、用户标记过滤、跨项目/场景隔离测试；`memory_scope` 从 `/chat` 传至检索并写入事件 |
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 待开始 | 可重建视图、版本/来源说明、更新测试 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 待开始 | API 契约与端到端测试；可见来源与状态 |
 | 8. 外部记忆能力适配 | 评估并隔离 ai-memory / TencentDB 的职责与适配面 | 待开始 | adapter 选择依据；不重复存储为双重权威 |
@@ -59,7 +59,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - **当前反思是摘要而非长期认知提炼**：`ReflectionEngine.reflect` 将用户输入和回答放进反思结果，尚无稳定性/置信度/范围判定。现有两阶段候选与用户审批是可复用起点，不应绕开。
 - **配置/并发/迁移待查**：当前 JSON 文件写入路径需进一步验证并发写、崩溃恢复及已有 `.lifeos/memory.json` 的 schema 迁移策略，再决定是否调整存储。
 
-> 以上为阶段 1 当时的观察；未知来源兜底与 schema 迁移问题已在阶段 2 修复。检索范围已在阶段 5 首轮实现，仍需接入场景识别并加强项目隔离测试。
+> 以上为阶段 1 当时的观察；未知来源兜底与 schema 迁移问题已在阶段 2 修复。阶段 5 已完成显式范围过滤和项目隔离基线；自动场景识别另行决策，不作为显式隔离验收前置条件。
 
 ### 测试基线
 
@@ -163,12 +163,15 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - **未实现**前端按钮，也未接入自动提炼/保存触发；后续由阶段 7 接用户审核 UI，提炼器需另行选择真实模型/策略。当前接口可供调用方显式使用。
 - 阶段 3 验收：后端 API 纵向切片通过；完整测试结果在本次验证记录中。
 
-## 阶段 5 首轮隔离策略
+## 阶段 5 验收记录
 
 - `MemoryManager.retrieve(query, scope=None)` 与 `MemoryRetriever.retrieve` 接受可选 scope。
 - 没有显式 scope 时仅召回 `global`；`scenario` scope 能召回全局 + 同场景记忆；`project` scope 能召回全局 + 同场景 + 相同 `project_id` 的项目记忆。`unassigned` 永不进入检索结果。
 - `direct`（用户主动提供）且未指定 scope 的新记忆默认 global；迁移时也只把旧 `user/direct` 记忆认作 global，其它旧记忆保持 unassigned。
-- 现已允许 `LifeOSAgent.run`、`ChatRuntime.handle_message` 和 `POST /chat` 显式接收 `memory_scope`，传给检索并写入 `conversation.completed` 事件。`frontend/src/api/client.ts` 的 `sendChat` 有可选参数，但当前 UI 不传值，也没有自动场景识别；未指定 scope 时默认只使用全局记忆，这是有意的 fail-closed 行为。
+- `user_id` 匹配可过滤显式归属的 Memory；缺少请求 user_id 时不返回绑定到某用户的条目。该字段目前只是召回过滤，不是身份认证/授权机制。
+- `LifeOSAgent.run`、`ChatRuntime.handle_message` 和 `POST /chat` 显式接收 `memory_scope`，传给检索并写入 `conversation.completed` 事件。`frontend/src/api/client.ts` 的 `sendChat` 可传可选 scope，但当前 UI 不传值；未指定时默认只使用全局记忆。
+- 阶段 5 的 Goal 是建立可靠的显式隔离语义，不要求隐式场景识别。自动场景/项目识别暂缓，须另行决定规则/模型、置信度阈值、用户纠正方式和失败时的 fallback；在此之前保持 global-only 默认。
+- 检索回归测试现覆盖默认 global-only、global+同场景+同项目层级、排除不同场景/项目/用户、排除 unassigned 与缺省 scope 的旧条目，以及排除 superseded 记忆。
 
 ## 阶段 4 验收记录
 
@@ -212,24 +215,23 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 每日/阶段记录的候选提炼方式和触发 UX 尚未定；不应默认对每次保存都调用模型。
 - `confidence` 的生成/校准策略仍待设计；目前它是 nullable metadata，不代表客观概率。
 - 缺失 `project_id` 的候选必须使用 `unassigned` scope，且当前检索器排除该类记录。
+- 自动场景/项目识别尚未实现；在设计出可审计、可纠正的 resolver 与 fail-closed fallback 前，UI 未传 scope 时应保持 global-only。
 - `/memory` 当前返回整个内部 store；后续设计需要考虑 API 向用户暴露范围、候选和运行态存储的分离。
 - 成本和效率优化暂不作为当前实现阶段的目标；先建立召回正确性、隔离性和可追溯性基线。
 
-## 本次最新验证记录（2026-10-02）
+## 本次最新验证记录（2026-10-03）
 
-- `python -m unittest discover -s tests -v`：**22 tests passed**，包含 schema v2 → v3 的一次性生命周期状态迁移测试。
+- `python -m unittest discover -s tests -v`：**22 tests passed**；阶段 5 范围测试覆盖 global-only 默认、global+同场景+同项目层级、不同场景/项目/用户隔离、unassigned/legacy 无 scope 排除和非 active 排除。
 - `python -m compileall -q lifeos tests`：通过。
 - `git diff --check`：通过。
-- `npm install --no-save --no-package-lock`：安装 68 个前端依赖；未修改 `package.json` 或 lockfile。
-- `npm run typecheck`：通过（`tsc --noEmit`）。
-- `npm run build`：通过（`tsc -b && vite build`，48 modules transformed）。
-- 本轮实现已采纳记忆显式纠正/撤回、schema v3 状态迁移、非 active 检索过滤、Markdown 生命周期保护、`MemoryPanel` 用户确认表单，以及前后端 API 契约；并补充管理器与 HTTP 层对 superseded/retracted 非法变更的回归断言。自动冲突检测、画像和物理删除仍是后续阶段/独立设计项。
+- 前端 `npm run typecheck` 与 `npm run build` 最近一次于 2026-10-02 通过；本阶段未修改前端代码。
+- 本阶段更新检索契约和交接记录；自动场景识别保持延期，不影响显式隔离语义验收。阶段 4 的自动冲突检测、画像和物理删除仍是后续阶段/独立设计项。
 - 工作区原有未跟踪的上游仓库、图稿和交接内容均保留；本轮只修改 Memory 代码、API/TS 契约、架构/交接文档与回归测试，其它已有改动未动。
 
 ## 交接给下一位 Agent
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2 完成、阶段 3 后端 MVP 完成、阶段 4 生命周期 MVP 完成、阶段 5 范围过滤和显式 `memory_scope` 传递已实现。后续转入阶段 6（动态画像视图）前，仍需另行确认阶段 5 自动场景识别是否纳入近期范围；不要自动晋升全局画像。
+3. 阶段 2、阶段 3 后端 MVP、阶段 4 生命周期 MVP 和阶段 5 显式范围隔离均已完成。下一步为阶段 6（动态画像视图）；画像只由 active Memory 可重建地产生，保留证据来源，不自动晋升全局画像。自动场景识别暂缓，不是阶段 5 的阻塞项。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。
