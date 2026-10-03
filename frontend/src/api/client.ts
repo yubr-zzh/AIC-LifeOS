@@ -6,6 +6,7 @@ import type {
   MemoryMarkdownResponse,
   MemoryEntry,
   MemoryStore,
+  MemoryProfileView,
   PermissionRequest,
   RunOnceResponse,
   SkillRegistryState,
@@ -166,6 +167,23 @@ export async function getEvents(opts?: ApiOptions): Promise<EventsResponse> {
 
 export async function getMemory(opts?: ApiOptions): Promise<SourceTag<MemoryStore>> {
   return safeGet<MemoryStore>("/memory", mockMemory, opts);
+}
+
+export async function getMemoryProfile(
+  opts?: ApiOptions,
+): Promise<SourceTag<MemoryProfileView>> {
+  return safeGet<MemoryProfileView>(
+    "/memory/profile",
+    () => ({
+      schema_version: 1,
+      version: "preview-empty",
+      generated_at: "",
+      core_profiles: [],
+      scenario_profiles: [],
+      project_profiles: [],
+    }),
+    opts,
+  );
 }
 
 export async function getMemoryMarkdown(

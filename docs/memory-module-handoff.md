@@ -27,7 +27,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 3. 记忆写入与来源接入 | 打通至少一条非 Agent 来源的计划/复盘到候选 Memory 的可审计链路 | 完成（后端 MVP） | `POST /entries/{id}/memory-candidates`；结构化来源、revision 幂等、人工审核测试 |
 | 4. 生命周期与可纠错性 | 明确候选、采纳、拒绝、修正、冲突等状态变化；不擅自决定跨范围晋升 | 完成（生命周期 MVP；自动冲突检测与物理删除明确延期） | schema v3 active/superseded/retracted；显式纠正/撤回 API；非法状态转换、召回过滤与索引失效测试 |
 | 5. 分层检索与隔离 | 支持全局/场景/项目检索范围，确保项目记忆不串用 | 完成（显式范围与 fail-closed 默认；自动识别延期） | 层级召回规则、用户标记过滤、跨项目/场景隔离测试；`memory_scope` 从 `/chat` 传至检索并写入事件 |
-| 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 待开始 | 可重建视图、版本/来源说明、更新测试 |
+| 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 完成（结构化只读 MVP；自然语言摘要/UI 展示延期） | `/memory/profile` 按 scope 动态重建；仅 active；稳定版本 hash；来源与置信度可追溯 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 待开始 | API 契约与端到端测试；可见来源与状态 |
 | 8. 外部记忆能力适配 | 评估并隔离 ai-memory / TencentDB 的职责与适配面 | 待开始 | adapter 选择依据；不重复存储为双重权威 |
 | 9. 评估与效率 | 评估召回正确性、隔离性、可解释性；再量化成本与效率 | 待开始 | 小型评测集与基线；成本优化放在正确性之后 |
@@ -198,7 +198,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 本阶段 Goal 已达成：候选 commit/reject 与已采纳记忆纠正/撤回的状态转换明确、可重放且有审计关联。为避免把未经验证的语义判断做成自动行为，后续扩展遵循以下边界：
 
 - **冲突识别后续项**：未来检测器必须提供候选 ID、目标 active Memory ID、双方来源引用及检测理由；标记冲突本身不能改变当前 active 版本。用户确认后走显式版本替代流程，拒绝后候选进入 rejected；目标在确认前若已非 active，操作必须冲突失败。不能仅因两条文本相似就自动覆盖或撤回记忆。
-- **画像后续项**：阶段 6 的画像视图只消费 `status=active` 的 Memory；superseded/retracted 状态变化后，视图可从权威条目重建，不将旧版回流。
+- **画像后续项**：阶段 6 已实现按需重建的画像视图，只消费 active Memory；superseded/retracted 状态变化后重建，不将旧版回流。自然语言 persona 摘要仍未实现。
 - **物理删除后续项**：单独定义授权、删除范围、备份保留、原始记录是否删除、索引/缓存/画像级联、部分失败重试与完成状态，再实现不可逆清理。
 - **身份与权限后续项**：当前本地原型依赖 UI 的明确操作文案；多用户身份认证和服务端授权尚未接入，不应将其描述为安全边界已由 API 强制保障。
 
@@ -209,6 +209,22 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - superseded/retracted 条目不参与召回，向量索引移除、缓存清空；历史条目和来源引用保留。
 - Markdown 导入不能绕过生命周期端点改写或移除既有条目。
 - 不跨项目/场景晋升，不执行自动冲突覆盖，不做物理删除。
+
+## 阶段 6 验收记录
+
+- 新增 `MemoryManager.profile_view()` 和 `GET /memory/profile`，每次请求从当前权威 Memory store 动态重建，不持久化派生画像、不修改原 store，也不调用 LLM。
+- 视图按 `user_id` 与 scope 隔离为 `core_profiles`、`scenario_profiles`、`project_profiles`；项目画像按 `project_id` 单独分组，不向场景/全局自动晋升。
+- 仅纳入 active 且 scope 有效、非 `unassigned` 的记忆；候选、拒绝、superseded、retracted 与畸形 scope 均不进入画像。
+- 每条画像 Memory 保留 claim、source/source_ref、evidence_source_ref、scope、created/occurred 时间、confidence/method、trace 和版本关联，支持未来 UI 解释来源。
+- `version` 为不含 `generated_at` 的派生内容 SHA-256：输入内容未变时稳定，任何画像成员或内容变化时更新。无画像时返回空 profile 数组。
+- 阶段 6 仅完成结构化可解释读模型；尚不生成 LLM 自然语言 persona、画像编辑 UI 或对画像内容自动归纳/提升，这些由后续阶段决定。
+
+### 阶段 6 验收标准
+
+- 同一权威 store 可重复生成相同 version；画像读取不写回 store。
+- 不同 scope / user / project 不混组；没有身份认证时不得将 user_id 过滤误称为访问控制。
+- correction 后画像仅出现新 active 版本；retraction 后对应记忆从画像中消失。
+- API 契约与 TypeScript 只读类型同步；前端可编译。
 
 ## 风险与未决决策
 
@@ -221,17 +237,18 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 
 ## 本次最新验证记录（2026-10-03）
 
-- `python -m unittest discover -s tests -v`：**22 tests passed**；阶段 5 范围测试覆盖 global-only 默认、global+同场景+同项目层级、不同场景/项目/用户隔离、unassigned/legacy 无 scope 排除和非 active 排除。
+- `python -m unittest discover -s tests -v`：**23 tests passed**，包括画像视图分组、来源保留、稳定版本、读取无写入，以及纠正/撤回后的重建测试。
 - `python -m compileall -q lifeos tests`：通过。
 - `git diff --check`：通过。
-- 前端 `npm run typecheck` 与 `npm run build` 最近一次于 2026-10-02 通过；本阶段未修改前端代码。
-- 本阶段更新检索契约和交接记录；自动场景识别保持延期，不影响显式隔离语义验收。阶段 4 的自动冲突检测、画像和物理删除仍是后续阶段/独立设计项。
+- `frontend/` 中 `npm run typecheck`：通过（`tsc --noEmit`）。
+- `frontend/` 中 `npm run build`：通过（48 modules transformed）。
+- 本阶段新增纯函数画像 read model、manager/API 接口、TypeScript 类型/API client、API/架构契约和生命周期变化测试；自动场景识别、画像 UI 和自然语言总结未实现。
 - 工作区原有未跟踪的上游仓库、图稿和交接内容均保留；本轮只修改 Memory 代码、API/TS 契约、架构/交接文档与回归测试，其它已有改动未动。
 
 ## 交接给下一位 Agent
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2、阶段 3 后端 MVP、阶段 4 生命周期 MVP 和阶段 5 显式范围隔离均已完成。下一步为阶段 6（动态画像视图）；画像只由 active Memory 可重建地产生，保留证据来源，不自动晋升全局画像。自动场景识别暂缓，不是阶段 5 的阻塞项。
+3. 阶段 2、阶段 3 后端 MVP、阶段 4 生命周期 MVP、阶段 5 显式范围隔离、阶段 6 结构化画像 read model 均已完成。下一步为阶段 7（用户审核入口与画像来源展示）；不得把自动场景识别、LLM persona 摘要或晋升策略描述为已实现。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。

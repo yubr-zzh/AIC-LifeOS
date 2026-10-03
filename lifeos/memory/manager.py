@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from lifeos.memory.export import parse_markdown, render_markdown
 from lifeos.memory.lifecycle import MemoryLifecycle
+from lifeos.memory.profile import build_memory_profile
 from lifeos.memory.retriever import MemoryRetriever
 from lifeos.memory.schema import (
     CURRENT_SCHEMA_VERSION,
@@ -45,6 +46,10 @@ class MemoryManager:
     async def retrieve(self, query, scope=None):
         store = self._read()
         return await MemoryRetriever(store).retrieve(query, scope=scope)
+
+    def profile_view(self):
+        """Return a fresh, non-persisted profile view from the current store."""
+        return build_memory_profile(self._read())
 
     async def propose_update(
         self,

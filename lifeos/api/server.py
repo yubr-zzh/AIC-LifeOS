@@ -24,6 +24,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/memory":
             self._send_json(self.agent.memory._read())
             return
+        if parsed.path == "/memory/profile":
+            self._send_json(self.agent.memory.profile_view())
+            return
         if parsed.path == "/skills":
             self._send_json(self.agent.skills._read())
             return

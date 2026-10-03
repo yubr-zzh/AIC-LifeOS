@@ -144,6 +144,26 @@ export interface MemoryStore {
   cache: Record<string, unknown>;
 }
 
+export interface MemoryProfileMemory extends MemoryEntry {
+  status: "active";
+}
+
+export interface MemoryProfileGroup {
+  scope: MemoryScope;
+  memory_count: number;
+  memories: MemoryProfileMemory[];
+}
+
+/** Rebuildable read model; the memory store remains the source of truth. */
+export interface MemoryProfileView {
+  schema_version: 1;
+  version: string;
+  generated_at: string;
+  core_profiles: MemoryProfileGroup[];
+  scenario_profiles: MemoryProfileGroup[];
+  project_profiles: MemoryProfileGroup[];
+}
+
 export interface MemoryMarkdownResponse {
   markdown: string;
   source?: "backend";

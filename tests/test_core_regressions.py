@@ -311,6 +311,128 @@ class CoreRegressionTests(unittest.TestCase):
             {"global", "alice-global", "learning", "project"},
         )
 
+    def test_memory_profile_view_is_rebuildable_scoped_and_provenance_backed(self):
+        memory = MemoryManager(self.path)
+        global_candidate = run(
+            memory.propose_update(
+                "direct",
+                {"claim": "prefers concise answers"},
+                source_ref={"kind": "manual", "record_id": "global-note"},
+                confidence=0.9,
+                confidence_method="user_confirmed",
+            )
+        )
+        learning_candidates = [
+            run(
+                memory.propose_update(
+                    "structured_entry",
+                    {"claim": claim},
+                    category="user",
+                    scope={"kind": "scenario", "scenario_type": "learning", "user_id": "alice"},
+                    source_ref={"kind": "structured_entry", "record_id": source_id},
+                    occurred_at=occurred_at,
+                )
+            )
+            for claim, source_id, occurred_at in (
+                ("learns by building examples", "review-1", "2026-10-01"),
+                ("likes small runnable exercises", "review-2", "2026-10-02"),
+            )
+        ]
+        project_candidate = run(
+            memory.propose_update(
+                "structured_entry",
+                {"claim": "LifeOS project uses a memory module"},
+                category="project",
+                scope={"kind": "project", "project_id": "lifeos", "user_id": "alice"},
+                source_ref={"kind": "project_event", "record_id": "lifeos-event-1"},
+            )
+        )
+        bob_candidate = run(
+            memory.propose_update(
+                "structured_entry",
+                {"claim": "learning preference owned by another user"},
+                category="user",
+                scope={"kind": "scenario", "scenario_type": "learning", "user_id": "bob"},
+                source_ref={"kind": "structured_entry", "record_id": "bob-review-1"},
+            )
+        )
+        unassigned_candidate = run(
+            memory.propose_update(
+                "external",
+                {"claim": "unassigned source is not a profile fact"},
+                category="reference",
+            )
+        )
+
+        for candidate in [
+            global_candidate,
+            *learning_candidates,
+            project_candidate,
+            bob_candidate,
+            unassigned_candidate,
+        ]:
+            run(memory.commit_candidate(candidate["id"]))
+        pending = run(memory.propose_update("direct", {"claim": "not committed yet"}))
+
+        malformed_store = memory._read()
+        malformed_store["reference"].append(
+            {
+                "id": "malformed-scope",
+                "scope": {"kind": "unrecognized"},
+                "status": "active",
+                "content": {"claim": "must fail closed"},
+            }
+        )
+        memory._write(malformed_store)
+
+        before = memory._read()
+        profile = memory.profile_view()
+        repeated = memory.profile_view()
+
+        self.assertEqual(profile["schema_version"], 1)
+        self.assertEqual(profile["version"], repeated["version"])
+        self.assertEqual(len(profile["version"]), 64)
+        self.assertEqual(len(profile["core_profiles"]), 1)
+        self.assertEqual(profile["core_profiles"][0]["memories"][0]["id"], global_candidate["id"])
+        global_item = profile["core_profiles"][0]["memories"][0]
+        self.assertEqual(global_item["source_ref"]["record_id"], "global-note")
+        self.assertEqual(global_item["confidence"], 0.9)
+        self.assertEqual(global_item["confidence_method"], "user_confirmed")
+        self.assertEqual(len(profile["scenario_profiles"]), 2)
+        alice_learning_profile = next(
+            group for group in profile["scenario_profiles"] if group["scope"]["user_id"] == "alice"
+        )
+        self.assertEqual(alice_learning_profile["memory_count"], 2)
+        self.assertEqual(
+            [item["source_ref"]["record_id"] for item in alice_learning_profile["memories"]],
+            ["review-2", "review-1"],
+        )
+        self.assertEqual(len(profile["project_profiles"]), 1)
+        all_profile_ids = {
+            item["id"]
+            for group in [*profile["core_profiles"], *profile["scenario_profiles"], *profile["project_profiles"]]
+            for item in group["memories"]
+        }
+        self.assertNotIn(unassigned_candidate["id"], all_profile_ids)
+        self.assertNotIn(pending["id"], all_profile_ids)
+        self.assertNotIn("malformed-scope", all_profile_ids)
+        self.assertEqual(memory._read(), before)
+
+        corrected = run(memory.correct_memory(global_candidate["id"], {"claim": "prefers concise, structured answers"}))
+        corrected_profile = memory.profile_view()
+        self.assertNotEqual(corrected_profile["version"], profile["version"])
+        corrected_global_ids = {
+            item["id"] for group in corrected_profile["core_profiles"] for item in group["memories"]
+        }
+        self.assertEqual(corrected_global_ids, {corrected["id"]})
+
+        run(memory.retract_memory(learning_candidates[0]["id"], "user withdrew this memory"))
+        retracted_profile = memory.profile_view()
+        active_learning_ids = {
+            item["id"] for group in retracted_profile["scenario_profiles"] for item in group["memories"]
+        }
+        self.assertEqual(active_learning_ids, {learning_candidates[1]["id"], bob_candidate["id"]})
+
     def test_legacy_memory_store_is_upgraded_once_with_backup(self):
         legacy_store = {
             "user": [{"id": "old-user", "source": "direct", "content": {"preference": "short"}}],
@@ -433,6 +555,8 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(fetch("/memory")["candidates"][0]["status"], "candidate")
         self.assertEqual(fetch(f"/memory/candidates/{candidate['id']}/commit", "POST")["status"], "committed")
         self.assertEqual(fetch("/memory")["user"][0]["id"], candidate["id"])
+        profile = fetch("/memory/profile")
+        self.assertEqual(profile["core_profiles"][0]["memories"][0]["id"], candidate["id"])
         corrected = fetch(
             f"/memory/{candidate['id']}/correct",
             "POST",
@@ -444,6 +568,7 @@ class CoreRegressionTests(unittest.TestCase):
             f"/memory/{corrected['id']}/retract", "POST", {"reason": "user request"}
         )["memory"]
         self.assertEqual(retracted["status"], "retracted")
+        self.assertEqual(fetch("/memory/profile")["core_profiles"], [])
         with self.assertRaises(HTTPError) as superseded_error:
             fetch(f"/memory/{candidate['id']}/retract", "POST")
         self.assertEqual(superseded_error.exception.code, 409)

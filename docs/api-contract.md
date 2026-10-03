@@ -294,6 +294,50 @@ Request: `{"reason":"optional explanation"}`
 Response: `{"status":"retracted","memory":{...}}`. Repeating a retraction
 returns the existing retracted memory.
 
+### GET /memory/profile
+
+Returns a derived, on-demand profile view from active Memory entries. This is a
+read model only: it is not persisted as a second source of truth, does not call
+an LLM, and does not promote entries between scopes. The view contains the
+original structured claims with source references, timestamps, confidence, and
+scope so that a later presentation layer can explain every item.
+
+```json
+{
+  "schema_version": 1,
+  "version": "sha256-of-profile-content",
+  "generated_at": "2026-10-03T00:00:00",
+  "core_profiles": [
+    {
+      "scope": {"kind": "global", "scenario_type": null, "project_id": null, "user_id": null},
+      "memory_count": 1,
+      "memories": [
+        {
+          "id": "memory-id",
+          "source": "direct",
+          "source_ref": {"kind": "manual", "record_id": "note-id"},
+          "confidence": 0.9,
+          "confidence_method": "user_confirmed",
+          "content": {"claim": "prefers concise answers"},
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "scenario_profiles": [],
+  "project_profiles": []
+}
+```
+
+Groups are keyed by their exact scope dimensions, including `user_id`; project
+profiles remain separate by project ID. `unassigned`, malformed-scope, and
+non-active entries are omitted. `version` is a stable SHA-256 digest of the
+profile content and is unchanged by `generated_at`; consumers can use it to
+detect whether the derived view changed. An empty store returns empty profile
+arrays. The endpoint has no authenticated-user filtering yet and must be
+treated as a local prototype inspection endpoint, not a per-user access-control
+boundary.
+
 ### SkillRegistry
 
 Source: `.lifeos/skills.json`
