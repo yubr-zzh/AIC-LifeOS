@@ -25,7 +25,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 1. 现状审计 | 搞清现有 Memory、事件流、API、持久化和测试的实际行为 | 完成 | 本文“阶段 1 验收记录”；现有测试 8/8 通过 |
 | 2. 领域数据契约 | 定义原始来源引用、记忆候选、已采纳 Memory、画像视图所需字段及兼容策略 | 完成 | `lifeos/memory/schema.py` v3 契约、一次性备份迁移、API/TS 类型、回归测试 |
 | 3. 记忆写入与来源接入 | 打通至少一条非 Agent 来源的计划/复盘到候选 Memory 的可审计链路 | 完成（后端 MVP） | `POST /entries/{id}/memory-candidates`；结构化来源、revision 幂等、人工审核测试 |
-| 4. 生命周期与可纠错性 | 明确候选、采纳、拒绝、修正、冲突等状态变化；不擅自决定跨范围晋升 | 进行中（明确纠正/撤回 MVP 已实现；自动冲突判定与硬删除待定） | schema v3 active/superseded/retracted；显式纠正/撤回 API；不再召回与索引失效测试 |
+| 4. 生命周期与可纠错性 | 明确候选、采纳、拒绝、修正、冲突等状态变化；不擅自决定跨范围晋升 | 完成（生命周期 MVP；自动冲突检测与物理删除明确延期） | schema v3 active/superseded/retracted；显式纠正/撤回 API；非法状态转换、召回过滤与索引失效测试 |
 | 5. 分层检索与隔离 | 支持全局/场景/项目检索范围，确保项目记忆不串用 | 进行中（范围过滤与显式传递已完成，自动识别待定） | 默认仅召回 global；显式 `memory_scope` 从 `/chat` 传至检索并写入事件；项目隔离测试 |
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 待开始 | 可重建视图、版本/来源说明、更新测试 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 待开始 | API 契约与端到端测试；可见来源与状态 |
@@ -170,7 +170,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - `direct`（用户主动提供）且未指定 scope 的新记忆默认 global；迁移时也只把旧 `user/direct` 记忆认作 global，其它旧记忆保持 unassigned。
 - 现已允许 `LifeOSAgent.run`、`ChatRuntime.handle_message` 和 `POST /chat` 显式接收 `memory_scope`，传给检索并写入 `conversation.completed` 事件。`frontend/src/api/client.ts` 的 `sendChat` 有可选参数，但当前 UI 不传值，也没有自动场景识别；未指定 scope 时默认只使用全局记忆，这是有意的 fail-closed 行为。
 
-## 阶段 4 当前验收记录
+## 阶段 4 验收记录
 
 - 确认重复 reject 是幂等的；rejected candidate 不能 commit。
 - 确认 committed candidate 不能 reject，避免状态回退。
@@ -180,35 +180,32 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 已实现 `POST /memory/{id}/correct` 与 `POST /memory/{id}/retract`；重复相同纠正、重复撤回均幂等。superseded/retracted 记忆被检索过滤，向量索引条目移除且缓存清空；记录本身与 backup 保留。
 - `MemoryPanel` 已提供显式纠正表单与撤回二次确认；preview 模式禁用操作。后续任何调用方仍必须对应用户明确意图，反思/提炼流程不得自动调用。
 - Markdown 导入仍可读写新条目，但禁止删除已有条目或原位改写已有内容，须通过显式纠正/撤回操作维持生命周期语义。
-- 阶段 4 仍未全部完成：自动冲突识别、`needs_confirmation` 状态、硬删除与跨持久层级联清理待后续设计。
+- 本阶段不实现自动冲突识别，也不伪造 `needs_confirmation` 运行态：当前没有经验证的冲突检测器或结构化冲突证据生产者。所有候选仍必须经用户显式 commit/reject；检测器接入后再引入冲突专属状态与转换。
+- 硬删除、原始来源删除、备份保留策略及跨持久层级联清理是独立的强操作，明确不属于本阶段 MVP。
 
 ### 验收标准
 
 - 已覆盖 commit/reject 的幂等和非法状态转换；不重复应用或回退状态。
 - Markdown 往返保留来源引用、scope 和运行时状态；既有条目不允许由导入流程静默覆盖或删除。
 - 用户显式纠正产生关联新版本，旧版不再参与召回；用户显式撤回产生 tombstone，原始来源不被删除。
-- 自动冲突识别、用户确认候选流、硬删除及多层派生数据级联仍未实现。
+- 自动冲突识别和硬删除不是本阶段 MVP 验收项；前者等待可靠检测器和证据契约，后者等待删除授权、范围及级联/备份策略。
 
-## 下一步规划：阶段 4
+### 阶段 4 完成边界与后续项
 
-### Goal
+本阶段 Goal 已达成：候选 commit/reject 与已采纳记忆纠正/撤回的状态转换明确、可重放且有审计关联。为避免把未经验证的语义判断做成自动行为，后续扩展遵循以下边界：
 
-把记忆生命周期的状态转换和用户纠错能力表达清楚，确保重复操作安全、错误候选不会被重新采纳，并保留足够的审计信息。此阶段不设计跨项目/跨场景晋升。
+- **冲突识别后续项**：未来检测器必须提供候选 ID、目标 active Memory ID、双方来源引用及检测理由；标记冲突本身不能改变当前 active 版本。用户确认后走显式版本替代流程，拒绝后候选进入 rejected；目标在确认前若已非 active，操作必须冲突失败。不能仅因两条文本相似就自动覆盖或撤回记忆。
+- **画像后续项**：阶段 6 的画像视图只消费 `status=active` 的 Memory；superseded/retracted 状态变化后，视图可从权威条目重建，不将旧版回流。
+- **物理删除后续项**：单独定义授权、删除范围、备份保留、原始记录是否删除、索引/缓存/画像级联、部分失败重试与完成状态，再实现不可逆清理。
+- **身份与权限后续项**：当前本地原型依赖 UI 的明确操作文案；多用户身份认证和服务端授权尚未接入，不应将其描述为安全边界已由 API 强制保障。
 
-### 关键设计任务
+### 本阶段验收结论
 
-1. 对候选 commit/reject 的幂等与非法状态转换补齐公共接口回归测试。
-2. 为 `needs_confirmation` 冲突状态设计显式的证据来源与用户确认/拒绝转换；未经确认不得影响当前 active 版本。
-3. 画像视图接入时只消费 active 记忆，并验证 superseded/retracted 状态更新会使视图可重建且不回流。
-4. 将彻底删除作为独立后续设计项；明确授权范围、来源记录策略、备份保留及重试/失败状态后再实现物理清理。
-5. 后续将用户身份/权限接入这些端点；当前本地原型 UI 提供明确操作文案，但 API 仍依赖调用方履行确认边界。
-
-### 验收标准
-
-- commit/reject 重放不会重复写入；已拒绝候选不能 commit，已 commit 候选不能 reject。
-- 同一旧 ID 的相同纠正重放返回同一新版本；其它非 active 状态不能被再次改写。
-- 明确撤回后目标条目不再召回，向量索引移除且缓存失效；原始结构化记录不被误删。
-- Markdown 导入不能绕过纠正/撤回端点改写或移除已有记忆。
+- commit/reject 重放幂等；拒绝候选不能 commit，已 commit 候选不能 reject。
+- 相同纠正重放返回同一版本；superseded/retracted 条目的非法二次修改在管理器层拒绝，HTTP API 返回 409。
+- superseded/retracted 条目不参与召回，向量索引移除、缓存清空；历史条目和来源引用保留。
+- Markdown 导入不能绕过生命周期端点改写或移除既有条目。
+- 不跨项目/场景晋升，不执行自动冲突覆盖，不做物理删除。
 
 ## 风险与未决决策
 
@@ -226,13 +223,13 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - `npm install --no-save --no-package-lock`：安装 68 个前端依赖；未修改 `package.json` 或 lockfile。
 - `npm run typecheck`：通过（`tsc --noEmit`）。
 - `npm run build`：通过（`tsc -b && vite build`，48 modules transformed）。
-- 本轮实现已采纳记忆显式纠正/撤回、schema v3 状态迁移、非 active 检索过滤、Markdown 生命周期保护、`MemoryPanel` 用户确认表单，以及前后端 API 契约；详见 `lifeos/memory/manager.py`、`lifeos/api/server.py`、`frontend/src/panels/MemoryPanel.tsx`、`docs/api-contract.md`。
+- 本轮实现已采纳记忆显式纠正/撤回、schema v3 状态迁移、非 active 检索过滤、Markdown 生命周期保护、`MemoryPanel` 用户确认表单，以及前后端 API 契约；并补充管理器与 HTTP 层对 superseded/retracted 非法变更的回归断言。自动冲突检测、画像和物理删除仍是后续阶段/独立设计项。
 - 工作区原有未跟踪的上游仓库、图稿和交接内容均保留；本轮只修改 Memory 代码、API/TS 契约、架构/交接文档与回归测试，其它已有改动未动。
 
 ## 交接给下一位 Agent
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2 完成、阶段 3 后端 MVP 完成、阶段 5 范围过滤和显式 `memory_scope` 传递已实现；阶段 4 本轮第一版纠错/撤回纵向切片已完成并通过 Python 测试、前端 typecheck 与 build。阶段 4 后续的自动冲突判定和硬删除另属未来范围；不要自动晋升全局画像。
+3. 阶段 2 完成、阶段 3 后端 MVP 完成、阶段 4 生命周期 MVP 完成、阶段 5 范围过滤和显式 `memory_scope` 传递已实现。后续转入阶段 6（动态画像视图）前，仍需另行确认阶段 5 自动场景识别是否纳入近期范围；不要自动晋升全局画像。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。

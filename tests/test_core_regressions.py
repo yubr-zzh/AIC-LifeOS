@@ -95,6 +95,11 @@ class CoreRegressionTests(unittest.TestCase):
         recalled = run(memory.retrieve("concise"))
         self.assertEqual([item["id"] for item in recalled["user"]], [corrected["id"]])
         self.assertEqual(run(memory.retrieve("short"))["user"], [])
+        with self.assertRaisesRegex(ValueError, "cannot be corrected from status: superseded"):
+            run(memory.correct_memory(original["id"], {"preference": "brief"}))
+        with self.assertRaisesRegex(ValueError, "cannot be retracted from status: superseded"):
+            run(memory.retract_memory(original["id"]))
+        self.assertEqual(memory._find_memory(memory._read(), original["id"])["superseded_by"], corrected["id"])
 
     def test_explicit_memory_retraction_is_idempotent_and_not_recallable(self):
         memory = MemoryManager(self.path)
@@ -110,6 +115,8 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertIn(accepted["id"], {item["id"] for item in store["user"]})
         self.assertNotIn(accepted["id"], store["vector_index"])
         self.assertEqual(run(memory.retrieve("quiet"))["user"], [])
+        with self.assertRaisesRegex(ValueError, "cannot be corrected from status: retracted"):
+            run(memory.correct_memory(accepted["id"], {"preference": "calm"}))
 
     def test_committing_same_candidate_twice_is_idempotent(self):
         memory = MemoryManager(self.path)
@@ -414,6 +421,19 @@ class CoreRegressionTests(unittest.TestCase):
             f"/memory/{corrected['id']}/retract", "POST", {"reason": "user request"}
         )["memory"]
         self.assertEqual(retracted["status"], "retracted")
+        with self.assertRaises(HTTPError) as superseded_error:
+            fetch(f"/memory/{candidate['id']}/retract", "POST")
+        self.assertEqual(superseded_error.exception.code, 409)
+        with self.assertRaises(HTTPError) as retracted_error:
+            fetch(
+                f"/memory/{corrected['id']}/correct",
+                "POST",
+                {"content": {"preference": "calm"}},
+            )
+        self.assertEqual(retracted_error.exception.code, 409)
+        persisted = fetch("/memory")
+        self.assertEqual(persisted["user"][0]["status"], "superseded")
+        self.assertEqual(persisted["user"][1]["status"], "retracted")
         self.assertEqual(fetch("/skills/pending/skill-1/approve", "POST")["status"], "approved")
         self.assertEqual(fetch("/skills")["approved"][0]["id"], "skill-1")
         chat = fetch(

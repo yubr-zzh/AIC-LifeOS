@@ -250,9 +250,10 @@ active --POST /memory/{id}/correct--> superseded + new active version
 active --POST /memory/{id}/retract--> retracted
 ```
 
-Both operations are intended only for explicit user-directed actions; an API
-caller/UI must obtain the user's intent before invoking them. The current
-frontend does not yet expose confirmation controls. Correction requires a
+Both operations are intended only for explicit user-directed actions. The
+current Memory UI provides a correction form and a second-step retraction
+confirmation; the local prototype has no authenticated user identity, so the
+API relies on its caller to honor that intent boundary. Correction requires a
 non-empty replacement `content`; it keeps the prior evidence reference on the
 new version and links the versions with `version_of` / `superseded_by`.
 Retraction and supersession remove the prior item from recall, vector index and
@@ -261,6 +262,13 @@ idempotent. Physical deletion and deletion of original source records are not
 implemented by these endpoints. Markdown export remains readable, but import
 cannot remove accepted memories or rewrite their content; callers must use the
 explicit correction/retraction endpoints so the lifecycle state is preserved.
+
+The current candidate states are `candidate`, `committed`, and `rejected`.
+There is no `needs_confirmation` runtime state yet: no conflict detector
+currently produces a structured conflict target and evidence. Candidates
+remain subject to explicit commit/reject review. A future detector must not
+mutate an active memory; conflict confirmation should use a separate, auditable
+transition after the detector and evidence contract are defined.
 
 ### POST /memory/{memory_id}/correct
 
