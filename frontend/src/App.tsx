@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "./state/store";
-import { listEntries, saveEntry } from "./api/client";
-import type { StructuredEntryKind } from "./api/types";
+import { listEntries, proposeEntryMemoryCandidate, saveEntry } from "./api/client";
+import type { MemoryScope, StructuredEntryKind } from "./api/types";
 import { ChatPanel } from "./panels/ChatPanel";
 import { RuntimeRail } from "./panels/RuntimeRail";
 import { EventsPanel } from "./panels/EventsPanel";
@@ -171,8 +171,8 @@ function SectionContent({ active, store, onNavigate }: { active: SectionId; stor
   if (active === "diary") return <DiaryPage />;
   if (active === "insight") return <InsightPage />;
   if (active === "admin") return <AdminPage store={store} />;
-  if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} />;
-  if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} />;
+  if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
+  if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
   return <HomePage store={store} onNavigate={onNavigate} />;
 }
 
@@ -227,18 +227,54 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
   return { id, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, save };
 }
 
-function PlanningPage({ phase }: { phase: boolean }) {
+function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", { content: phase ? "建立一个更稳定的学习与创作节奏。" : "" });
-  return <div className="planning-layout"><section className="content-card editor-card"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段规划" : "今日规划"}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的三件事"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div><textarea className="big-editor" placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "从最重要的事情开始，不必一次写完…"} value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div></section><aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "试着写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？先把这一件事放在最前面。"}</p></aside></div>;
+  return <div className="planning-layout"><section className="content-card editor-card"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段规划" : "今日规划"}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的三件事"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div><textarea className="big-editor" placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "从最重要的事情开始，不必一次写完…"} value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>{draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}</section><aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "试着写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？先把这一件事放在最前面。"}</p></aside></div>;
 }
 
-function ReviewPage({ phase }: { phase: boolean }) {
+function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const questions = phase ? ["这段时间，什么真正带来了进展？", "什么消耗了你，却没有带来相应的回报？", "下一阶段，你要继续、停止或开始什么？"] : ["今天最有能量的时刻是什么？", "有什么事情没有完成？真正的原因是什么？", "明天醒来后，你最想先做什么？"];
   const draft = useEntryDraft(phase ? "phase_review" : "daily_review", {});
   const [answers, setAnswers] = useState<string[]>(["", "", ""]);
   useEffect(() => { const saved = draft.metadata.answers; if (Array.isArray(saved)) setAnswers(saved.map(String)); }, [draft.metadata]);
   const save = () => void draft.save({ content: JSON.stringify({ answers }), metadata: { answers } });
-  return <div className="review-layout"><section className="content-card review-prompts"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段性复盘" : "每日复盘"}</span><h2>{phase ? "回看这段路，你发现了什么？" : "今天发生了什么？"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>{questions.map((question, index) => <label className="prompt-block" key={question}><span>{question}</span><textarea placeholder="写下你的想法…" value={answers[index]} onChange={(event) => setAnswers((current) => current.map((value, position) => position === index ? event.target.value : value))} /></label>)}<button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></section><aside className="content-card review-aside"><span className="card-kicker">复盘不是审判</span><div className="big-emoji">☁</div><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside></div>;
+  return <div className="review-layout"><section className="content-card review-prompts"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段性复盘" : "每日复盘"}</span><h2>{phase ? "回看这段路，你发现了什么？" : "今天发生了什么？"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>{questions.map((question, index) => <label className="prompt-block" key={question}><span>{question}</span><textarea placeholder="写下你的想法…" value={answers[index]} onChange={(event) => setAnswers((current) => current.map((value, position) => position === index ? event.target.value : value))} /></label>)}<button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button>{draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}</section><aside className="content-card review-aside"><span className="card-kicker">复盘不是审判</span><div className="big-emoji">☁</div><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside></div>;
+}
+
+function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: boolean; store: ReturnType<typeof useStore> }) {
+  const [open, setOpen] = useState(false);
+  const [claim, setClaim] = useState("");
+  const [scopeKind, setScopeKind] = useState<"global" | "scenario" | "project">("global");
+  const [scenario, setScenario] = useState(phase ? "learning" : "information_execution");
+  const [projectId, setProjectId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const submit = async () => {
+    if (!claim.trim()) { setMessage("请先写下你希望 LifeOS 记住的一条认知。"); return; }
+    if (scopeKind === "project" && !projectId.trim()) { setMessage("项目范围必须填写项目 ID，避免项目记忆串用。"); return; }
+    const scope: MemoryScope = scopeKind === "global" ? { kind: "global" } : scopeKind === "scenario" ? { kind: "scenario", scenario_type: scenario } : { kind: "project", project_id: projectId.trim(), scenario_type: "project" };
+    setBusy(true); setMessage("");
+    try {
+      const result = await proposeEntryMemoryCandidate(entryId, { claim, scope, category: scopeKind === "project" ? "project" : "user" });
+      await store.refreshAll();
+      setMessage(result.status === "candidate" ? "已提交为待审核候选。请到「系统后台 → Memory → Candidates」确认采纳或拒绝。" : "这条来源修订已处理过，未重复创建候选。");
+      setClaim("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+  return <div style={{ marginTop: 14, padding: 12, border: "1px solid var(--bd-1)", borderRadius: "var(--r-2)" }}>
+    <button type="button" className="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "收起记忆提炼" : "从这条记录提炼一条记忆候选"}</button>
+    {open ? <div className="col" style={{ gap: 8, marginTop: 10 }}>
+      <p className="mono muted" style={{ margin: 0, fontSize: 10 }}>手动写出长期有用的结论；原始规划/复盘仍留在 SQLite，候选必须经你审核后才会成为 Memory。</p>
+      <label className="col" style={{ gap: 4, fontSize: 12 }}>希望 LifeOS 记住什么？<textarea value={claim} onChange={(e) => setClaim(e.target.value)} rows={3} placeholder="例如：连续安排过多晚间任务会降低第二天的专注度。" /></label>
+      <label className="row" style={{ gap: 8, flexWrap: "wrap", fontSize: 12 }}>记忆范围<select value={scopeKind} onChange={(e) => setScopeKind(e.target.value as typeof scopeKind)}><option value="global">全局核心</option><option value="scenario">场景</option><option value="project">具体项目</option></select></label>
+      {scopeKind === "scenario" ? <label className="row" style={{ gap: 8, fontSize: 12 }}>场景<select value={scenario} onChange={(e) => setScenario(e.target.value)}><option value="learning">学习型</option><option value="project">项目型</option><option value="document">文档型</option><option value="information_execution">信息型执行</option><option value="external_operation">外部操作型</option></select></label> : null}
+      {scopeKind === "project" ? <label className="col" style={{ gap: 4, fontSize: 12 }}>项目 ID<input value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="填写稳定的项目标识" /></label> : null}
+      <button className="green-button" onClick={() => void submit()} disabled={busy || store.state.ui.dataMode !== "backend"}>{busy ? "提交中…" : "提交候选，等待我审核"}</button>
+      {store.state.ui.dataMode !== "backend" ? <span className="mono muted" style={{ fontSize: 10 }}>预览模式不能写入记忆候选。</span> : null}
+      {message ? <div role="status" className="mono muted" style={{ fontSize: 10 }}>{message}</div> : null}
+    </div> : null}
+  </div>;
 }
 
 function FeedbackPage() { const draft = useEntryDraft("feedback", {}); const [category, setCategory] = useState("使用感受"); return <div className="feedback-layout"><section className="content-card feedback-main"><span className="card-kicker">写给 LifeOS</span><h2>哪里让你觉得顺手？哪里还不够像你？</h2><textarea className="feedback-editor" placeholder="可以是一句话，也可以是一段具体的经历…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="feedback-tags">{["功能建议", "使用感受", "发现问题", "其他"].map((tag) => <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>)}</div><button className="green-button" onClick={() => void draft.save({ metadata: { category } })} disabled={draft.saving}>{draft.saving ? "提交中…" : "提交反馈"} <span>→</span></button></section><section className="content-card feedback-history"><div className="card-heading"><div><span className="card-kicker">你的声音</span><h2>最近反馈</h2></div><span className="soft-count">来自 SQLite</span></div>{draft.content ? <div className="feedback-note"><span>✓</span><div><strong>{draft.content.slice(0, 24)}{draft.content.length > 24 ? "…" : ""}</strong><small>刚刚 · 已保存</small></div></div> : <div className="state-empty">还没有新的反馈</div>}</section></div>; }

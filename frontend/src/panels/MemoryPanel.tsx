@@ -4,6 +4,7 @@ import { LIFECYCLE_STAGES } from "../api/types";
 import type { Store } from "../state/store";
 import {
   correctMemory,
+  getMemoryProfile,
   getMemoryMarkdown,
   importMemoryMarkdown,
   retractMemory,
@@ -17,6 +18,7 @@ type Tab =
   | "feedback"
   | "reference"
   | "candidates"
+  | "profile"
   | "backups"
   | "markdown";
 
@@ -26,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "feedback", label: "Feedback" },
   { id: "reference", label: "Reference" },
   { id: "candidates", label: "Candidates" },
+  { id: "profile", label: "画像" },
   { id: "backups", label: "Backups" },
   { id: "markdown", label: "Markdown" },
 ];
@@ -72,6 +75,7 @@ export function MemoryPanel({ store }: Props) {
       {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" store={store} /> : null}
       {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" store={store} /> : null}
       {tab === "markdown" ? <MarkdownTab store={store} /> : null}
+      {tab === "profile" ? <ProfileTab /> : null}
       {tab === "candidates" ? (
         <CandidateList candidates={mem.candidates} store={store} />
       ) : null}
@@ -95,6 +99,65 @@ export function MemoryPanel({ store }: Props) {
       ) : null}
     </Panel>
   );
+}
+
+function ProfileTab() {
+  const [result, setResult] = useState<Awaited<ReturnType<typeof getMemoryProfile>> | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true); setError("");
+    getMemoryProfile()
+      .then(setResult).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(load, [load]);
+  const view = result?.data;
+  return <div className="col" style={{ padding: "4px 6px", gap: 8 }}>
+    <div className="row between" style={{ flexWrap: "wrap" }}>
+      <span className="mono muted" style={{ fontSize: 10 }}>由 active memory 动态重建 · {result?.source === "backend" ? "实时后端" : "预览数据"}{view?.version ? ` · ${view.version.slice(0, 12)}` : ""}</span>
+      <button className="ghost" onClick={load} disabled={loading}>{loading ? "读取中…" : "刷新画像"}</button>
+    </div>
+    {error ? <div className="state-error" role="alert">画像读取失败：{error}</div> : null}
+    {loading && !view ? <div className="state-empty" role="status">正在从当前记忆重建画像…</div> : null}
+    {view ? <>
+      <ProfileGroups title="全局核心画像" groups={view.core_profiles} />
+      <ProfileGroups title="场景画像" groups={view.scenario_profiles} />
+      <ProfileGroups title="项目画像" groups={view.project_profiles} />
+      {view.core_profiles.length + view.scenario_profiles.length + view.project_profiles.length === 0 ? <div className="state-empty">当前没有可展示的 active 记忆。先在候选页审核并采纳记忆。</div> : null}
+    </> : null}
+  </div>;
+}
+
+function ProfileGroups({ title, groups }: { title: string; groups: import("../api/types").MemoryProfileGroup[] }) {
+  if (!groups.length) return null;
+  return <section className="col" style={{ gap: 6 }}><h3 style={{ margin: "4px 0", fontSize: 13 }}>{title}</h3>{groups.map((group, index) => <div key={`${group.scope.kind}-${group.scope.project_id ?? group.scope.scenario_type ?? index}`} className="card-flat">
+    <div className="row between"><strong style={{ fontSize: 12 }}>{scopeLabel(group.scope)}</strong><span className="mono muted" style={{ fontSize: 10 }}>{group.memory_count} 条依据</span></div>
+    {group.memories.map((memory) => <div key={memory.id} style={{ borderTop: "1px solid var(--bd-1)", marginTop: 7, paddingTop: 7 }}>
+      <div style={{ fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{claimText(memory.content)}</div>
+      <Provenance item={memory} />
+    </div>)}
+  </div>)}</section>;
+}
+
+function scopeLabel(scope?: import("../api/types").MemoryScope) {
+  if (!scope) return "范围未标注";
+  if (scope.kind === "global") return "全局";
+  if (scope.kind === "scenario") return `场景 · ${scope.scenario_type ?? "未命名"}`;
+  if (scope.kind === "project") return `项目 · ${scope.project_id ?? "未命名"}`;
+  return "未分配";
+}
+
+function claimText(content: Record<string, unknown>) {
+  return typeof content.claim === "string" ? content.claim : JSON.stringify(content);
+}
+
+function Provenance({ item }: { item: Pick<MemoryCandidate, "source" | "source_ref" | "scope" | "confidence" | "confidence_method" | "occurred_at" | "created_at"> }) {
+  const ref = item.source_ref;
+  return <div className="mono muted" style={{ fontSize: 10, marginTop: 5, lineHeight: 1.5 }}>
+    来源：{ref ? `${ref.kind} / ${ref.record_kind ?? "record"} / ${ref.record_id}` : item.source}{ref?.revision ? ` · 版本 ${ref.revision}` : ""}
+    {` · ${scopeLabel(item.scope)}`}{item.occurred_at ? ` · 发生于 ${item.occurred_at}` : ""}{item.confidence != null ? ` · 置信度 ${item.confidence}${item.confidence_method ? `（${item.confidence_method}）` : ""}` : ""}
+  </div>;
 }
 
 function MarkdownTab({ store }: { store: Store }) {
@@ -237,6 +300,7 @@ function MemoryEntryCard({ entry, store }: { entry: MemoryEntry; store: Store })
       >
         {JSON.stringify(entry.content, null, 2)}
       </pre>
+      <Provenance item={entry} />
       {entry.version_of ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>corrects {entry.version_of}</div> : null}
       {entry.superseded_by ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>superseded by {entry.superseded_by}</div> : null}
       {entry.trace_id ? (
@@ -337,6 +401,7 @@ function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
       >
         {JSON.stringify(c.content, null, 2)}
       </pre>
+      <Provenance item={c} />
       <div className="row" style={{ gap: 4, marginTop: 8, flexWrap: "wrap" }}>
         {LIFECYCLE_STAGES.map((s) => (
           <span
