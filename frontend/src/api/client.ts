@@ -1,4 +1,5 @@
 import type {
+  AgentRoutingPolicy,
   ChatResponse,
   MemoryScope,
   EventRecord,
@@ -8,12 +9,21 @@ import type {
   MemoryStore,
   MemoryProfileView,
   MemoryCandidate,
+  ModelCatalog,
+  ModelProfile,
+  ModelProfileInput,
+  ModelTestResult,
   PermissionRequest,
   RunOnceResponse,
   SkillRegistryState,
   TraceRecord,
   StructuredEntry,
   StructuredEntryKind,
+  VaultExportResult,
+  VaultFile,
+  VaultImportResult,
+  VaultReadResult,
+  VaultStatus,
 } from "./types";
 import {
   mockEvents,
@@ -78,6 +88,8 @@ async function readError(res: Response): Promise<ApiError> {
 
 export async function sendChat(
   message: string,
+  profileId?: string | null,
+  routingPolicy: AgentRoutingPolicy = "auto",
   opts?: ApiOptions,
   memoryScope?: MemoryScope,
 ): Promise<ChatResponse> {
@@ -85,7 +97,12 @@ export async function sendChat(
   const res = await f(opts)(`${base}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ message, ...(memoryScope ? { memory_scope: memoryScope } : {}) }),
+    body: JSON.stringify({
+      message,
+      profile_id: profileId || undefined,
+      routing_policy: routingPolicy,
+      ...(memoryScope ? { memory_scope: memoryScope } : {}),
+    }),
   });
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as ChatResponse;
@@ -97,7 +114,110 @@ export async function sendChat(
     response: data.response,
     tool_calls: Array.isArray(data.tool_calls) ? data.tool_calls : [],
     tool_results: Array.isArray(data.tool_results) ? data.tool_results : [],
+    provider: data.provider ?? null,
+    model: data.model ?? null,
+    decision: data.decision,
+    decision_reason: data.decision_reason,
+    decision_confidence: data.decision_confidence,
+    plan_steps: Array.isArray(data.plan_steps) ? data.plan_steps : [],
+    agent_enabled: Boolean(data.agent_enabled),
+    routing_policy: data.routing_policy ?? routingPolicy,
+    route_source: data.route_source,
+    route_signals: Array.isArray(data.route_signals) ? data.route_signals : [],
+    requires_side_effects: Boolean(data.requires_side_effects),
   };
+}
+
+const fallbackModelCatalog = (): ModelCatalog => ({
+  active_profile_id: "mock",
+  profiles: [
+    {
+      id: "mock",
+      name: "LifeOS 本地演示",
+      provider: "mock",
+      provider_label: "LifeOS Mock",
+      protocol: "mock",
+      base_url: "",
+      model: "lifeos-mock",
+      models: ["lifeos-mock"],
+      enabled: true,
+      builtin: true,
+      has_api_key: false,
+      api_key_hint: "",
+    },
+  ],
+  presets: [],
+});
+
+export async function getModels(opts?: ApiOptions): Promise<SourceTag<ModelCatalog>> {
+  return safeGet<ModelCatalog>("/models", fallbackModelCatalog, opts);
+}
+
+export async function saveModelProfile(
+  profile: ModelProfileInput,
+  profileId?: string,
+  opts?: ApiOptions,
+): Promise<ModelProfile> {
+  const base = getBase(opts);
+  const res = await f(opts)(
+    profileId
+      ? `${base}/models/profiles/${encodeURIComponent(profileId)}`
+      : `${base}/models/profiles`,
+    {
+      method: profileId ? "PUT" : "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(profile),
+    },
+  );
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { profile: ModelProfile };
+  return data.profile;
+}
+
+export async function activateModelProfile(
+  profileId: string,
+  opts?: ApiOptions,
+): Promise<ModelProfile> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/models/profiles/${encodeURIComponent(profileId)}/activate`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: "{}",
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { profile: ModelProfile };
+  return data.profile;
+}
+
+export async function deleteModelProfile(
+  profileId: string,
+  opts?: ApiOptions,
+): Promise<void> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/models/profiles/${encodeURIComponent(profileId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function testModelProfile(
+  profile: ModelProfileInput | string,
+  opts?: ApiOptions,
+): Promise<ModelTestResult> {
+  const base = getBase(opts);
+  const isSaved = typeof profile === "string";
+  const res = await f(opts)(
+    isSaved
+      ? `${base}/models/profiles/${encodeURIComponent(profile)}/test`
+      : `${base}/models/test`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(isSaved ? {} : profile),
+    },
+  );
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as ModelTestResult;
 }
 
 export async function submitFeedback(
@@ -310,12 +430,21 @@ export async function getPermissions(
   ).then(({ data, source }) => ({ data: data.requests, source }));
 }
 
+export interface ListEntriesOptions {
+  entryDate?: string;
+  limit?: number;
+}
+
 export async function listEntries(
   kind: StructuredEntryKind,
+  options: ListEntriesOptions = {},
   opts?: ApiOptions,
 ): Promise<StructuredEntry[]> {
   const base = getBase(opts);
-  const res = await f(opts)(`${base}/entries?kind=${encodeURIComponent(kind)}`, { method: "GET" });
+  const params = new URLSearchParams({ kind });
+  if (options.entryDate) params.set("date", options.entryDate);
+  if (options.limit) params.set("limit", String(options.limit));
+  const res = await f(opts)(`${base}/entries?${params.toString()}`, { method: "GET" });
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as { entries: StructuredEntry[] };
   return Array.isArray(data.entries) ? data.entries : [];
@@ -344,4 +473,92 @@ export async function saveEntry(
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as { entry: StructuredEntry };
   return data.entry;
+}
+
+export async function getVaultStatus(opts?: ApiOptions): Promise<VaultStatus> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/vault`, { method: "GET" });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as VaultStatus;
+}
+
+export async function configureVault(
+  vaultPath: string,
+  folder = "LifeOS",
+  opts?: ApiOptions,
+): Promise<VaultStatus> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/vault/configure`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ vault_path: vaultPath, folder }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = await res.json() as { vault: VaultStatus };
+  return data.vault;
+}
+
+export async function listVaultFiles(
+  query = "",
+  limit = 100,
+  opts?: ApiOptions,
+): Promise<{ files: VaultFile[]; vault: VaultStatus }> {
+  const base = getBase(opts);
+  const params = new URLSearchParams();
+  if (query) params.set("query", query);
+  if (limit) params.set("limit", String(limit));
+  const res = await f(opts)(`${base}/vault/files?${params.toString()}`, { method: "GET" });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as { files: VaultFile[]; vault: VaultStatus };
+}
+
+export async function readVaultFile(path: string, opts?: ApiOptions): Promise<VaultReadResult> {
+  const base = getBase(opts);
+  const params = new URLSearchParams({ path });
+  const res = await f(opts)(`${base}/vault/file?${params.toString()}`, { method: "GET" });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as VaultReadResult;
+}
+
+export async function exportEntryToVault(
+  entryId: string,
+  opts?: ApiOptions,
+): Promise<VaultExportResult> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/vault/export`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ entry_id: entryId }),
+  });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as VaultExportResult;
+}
+
+export async function importVaultFile(
+  path: string,
+  kind?: StructuredEntryKind,
+  opts?: ApiOptions,
+): Promise<VaultImportResult> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/vault/import`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ path, kind }),
+  });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as VaultImportResult;
+}
+
+export async function syncEntryFromVault(
+  entryId: string,
+  opts?: ApiOptions,
+): Promise<VaultImportResult> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/vault/sync`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ entry_id: entryId }),
+  });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as VaultImportResult;
 }

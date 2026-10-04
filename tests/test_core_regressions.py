@@ -18,6 +18,7 @@ from lifeos.memory.retriever import MemoryRetriever
 from lifeos.security.permission import PermissionManager
 from lifeos.skills.registry import SkillRegistry
 from lifeos.storage.sqlite import StructuredStore
+from lifeos.storage.vault import VaultManager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
@@ -251,14 +252,14 @@ class CoreRegressionTests(unittest.TestCase):
                 }
 
         class CaptureExecutor:
-            async def execute_chat_turn(self, user_input, memory, trace_id=None):
+            async def execute_chat_turn(self, user_input, memory, trace_id=None, planning=None):
                 observations["memory"] = memory
                 return {"response": "ok", "tool_calls": [], "tool_results": []}
 
         agent.external_memory = FakeExternalMemory()
         agent.chat.external_memory = agent.external_memory
         agent.chat.executor = CaptureExecutor()
-        run(agent.run("question", memory_scope={"kind": "global"}))
+        run(agent.run("question", memory_scope={"kind": "global"}, routing_policy="force_agent"))
 
         self.assertEqual(observations["allowed"], {candidate["id"]})
         self.assertEqual(observations["scope"]["kind"], "global")
@@ -790,6 +791,10 @@ class CoreRegressionTests(unittest.TestCase):
 
         Handler.agent = agent
         Handler.structured_store = StructuredStore(self.path / "lifeos.db")
+        Handler.vault_manager = VaultManager(
+            settings_path=self.path / "vault.json",
+            structured_store=Handler.structured_store,
+        )
         server = HTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -799,7 +804,7 @@ class CoreRegressionTests(unittest.TestCase):
         base = f"http://127.0.0.1:{server.server_address[1]}"
 
         def fetch(path, method="GET", payload=None):
-            data = json.dumps(payload or {}).encode() if method == "POST" else None
+            data = json.dumps(payload or {}).encode() if method in {"POST", "PUT"} else None
             request = Request(base + path, data=data, method=method)
             with urlopen(request) as response:
                 return json.load(response)
@@ -866,6 +871,70 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(len(fetch("/background/run-once", "POST")["processed"]), 1)
         self.assertTrue(any(c["source"] == "reflection" for c in fetch("/memory")["candidates"]))
         self.assertEqual(fetch("/permissions"), {"requests": []})
+        today_entry = fetch(
+            "/entries",
+            "POST",
+            {
+                "kind": "daily_plan",
+                "entry_date": "2026-10-04",
+                "title": "today",
+                "content": "focus",
+            },
+        )["entry"]
+        fetch(
+            "/entries",
+            "POST",
+            {
+                "kind": "daily_plan",
+                "entry_date": "2026-10-03",
+                "title": "yesterday",
+                "content": "old",
+            },
+        )
+        listed = fetch("/entries?kind=daily_plan&date=2026-10-04&limit=1")["entries"]
+        self.assertEqual([entry["id"] for entry in listed], [today_entry["id"]])
+        updated = fetch(
+            f"/entries/{today_entry['id']}",
+            "PUT",
+            {**today_entry, "content": "updated"},
+        )["entry"]
+        self.assertEqual(updated["content"], "updated")
+        vault_path = self.path / "vault"
+        vault_path.mkdir()
+        configured = fetch(
+            "/vault/configure",
+            "POST",
+            {"vault_path": str(vault_path), "folder": "LifeOS"},
+        )["vault"]
+        self.assertTrue(configured["configured"])
+        exported = fetch("/vault/export", "POST", {"entry_id": today_entry["id"]})
+        self.assertTrue((vault_path / exported["relative_path"]).is_file())
+        self.assertEqual(fetch("/vault/files?limit=10")["files"][0]["path"], exported["relative_path"])
+        synced = fetch("/vault/sync", "POST", {"entry_id": today_entry["id"]})
+        self.assertEqual(synced["entry"]["id"], today_entry["id"])
+        self.assertEqual(synced["entry"]["metadata"]["vault_path"], exported["relative_path"])
+
+        catalog = fetch("/models")
+        self.assertEqual(catalog["active_profile_id"], "mock")
+        self.assertIn("presets", catalog)
+        created = fetch(
+            "/models/profiles",
+            "POST",
+            {
+                "name": "Test Local",
+                "provider": "ollama",
+                "protocol": "openai",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": "qwen3:8b",
+                "api_key": "secret",
+            },
+        )["profile"]
+        self.assertTrue(created["has_api_key"])
+        self.assertNotIn("api_key", created)
+        activated = fetch(f"/models/profiles/{created['id']}/activate", "POST")
+        self.assertEqual(activated["active_profile_id"], created["id"])
+        deleted = fetch(f"/models/profiles/{created['id']}", "DELETE")
+        self.assertTrue(deleted["deleted"])
 
     def test_structured_entry_can_create_idempotent_memory_candidate_with_source_link(self):
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)

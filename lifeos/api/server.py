@@ -1,20 +1,28 @@
 import asyncio
 import json
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 from lifeos.agent.runtime import LifeOSAgent
-from lifeos.llm.client import LLMClient
+from lifeos.llm.client import LLMClient, LLMRequestError
+from lifeos.llm.profiles import ModelManager, ModelProfileStore
 from lifeos.storage.sqlite import StructuredStore
+from lifeos.storage.vault import VaultManager
 
 
-def create_agent():
-    return LifeOSAgent(LLMClient())
+def create_agent(storage_dir=".lifeos"):
+    model_store = ModelProfileStore(f"{storage_dir}/models.json")
+    return LifeOSAgent(
+        ModelManager(model_store, fallback=LLMClient()),
+        storage_dir=storage_dir,
+        model_store=model_store,
+    )
 
 
 class LifeOSRequestHandler(BaseHTTPRequestHandler):
     agent = create_agent()
     structured_store = StructuredStore()
+    vault_manager = VaultManager(structured_store=structured_store)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -33,6 +41,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/permissions":
             self._send_json({"requests": []})
             return
+        if parsed.path == "/models":
+            self._handle_model_catalog()
+            return
         if parsed.path.startswith("/traces/"):
             trace = self.agent.trace.get(unquote(parsed.path.rsplit("/", 1)[-1]))
             if trace is None:
@@ -48,6 +59,15 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/memory/markdown":
             self._handle_export_markdown()
+            return
+        if parsed.path == "/vault":
+            self._handle_vault_status()
+            return
+        if parsed.path == "/vault/files":
+            self._handle_vault_files(parse_qs(parsed.query))
+            return
+        if parsed.path == "/vault/file":
+            self._handle_vault_file(parse_qs(parsed.query))
             return
         self.send_error(404, "not found")
 
@@ -69,6 +89,18 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[:2] == ["skills", "pending"] and parts[3] in {"approve", "reject"}:
             self._handle_skill_candidate(unquote(parts[2]), parts[3])
             return
+        if parsed.path == "/models/profiles":
+            self._handle_create_model_profile()
+            return
+        if parsed.path == "/models/test":
+            self._handle_model_test_payload()
+            return
+        if len(parts) == 4 and parts[:2] == ["models", "profiles"] and parts[3] == "activate":
+            self._handle_model_activate(unquote(parts[2]))
+            return
+        if len(parts) == 4 and parts[:2] == ["models", "profiles"] and parts[3] == "test":
+            self._handle_model_test(unquote(parts[2]))
+            return
         if self.path == "/chat":
             self._handle_chat()
             return
@@ -84,28 +116,147 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/memory/markdown":
             self._handle_import_markdown()
             return
+        if parsed.path == "/vault/configure":
+            self._handle_vault_configure()
+            return
+        if parsed.path == "/vault/export":
+            self._handle_vault_export()
+            return
+        if parsed.path == "/vault/import":
+            self._handle_vault_import()
+            return
+        if parsed.path == "/vault/sync":
+            self._handle_vault_sync()
+            return
         self.send_error(404, "not found")
 
     def do_PUT(self):
         parsed = urlparse(self.path)
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
+            self._handle_update_model_profile(unquote(parts[2]))
+            return
         if parsed.path.startswith("/entries/"):
             self._handle_update_entry(unquote(parsed.path.rsplit("/", 1)[-1]))
             return
         self.send_error(404, "not found")
 
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
+            self._handle_delete_model_profile(unquote(parts[2]))
+            return
+        self.send_error(404, "not found")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._send_cors_headers()
+        self.send_header("content-length", "0")
+        self.end_headers()
+
     def _handle_chat(self):
-        body = self._read_json()
         try:
+            body = self._read_json()
+            message = body.get("message", "")
+            if not isinstance(message, str) or not message.strip():
+                raise ValueError("message is required")
+            routing_policy = body.get("routing_policy", "auto")
+            if routing_policy not in {"auto", "force_self_plan", "force_agent"}:
+                raise ValueError("routing_policy must be auto, force_self_plan, or force_agent")
             result = asyncio.run(
                 self.agent.run(
-                    body.get("message", ""),
+                    message,
+                    model_profile_id=body.get("profile_id"),
+                    routing_policy=routing_policy,
                     memory_scope=body.get("memory_scope"),
                 )
             )
-        except ValueError as exc:
+        except (KeyError, ValueError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        except LLMRequestError as exc:
             self._send_json(
-                {"error": {"code": "invalid_request", "message": str(exc)}},
-                status=400,
+                {
+                    "error": {
+                        "code": "model_provider_error",
+                        "message": str(exc),
+                        "status": exc.status,
+                    }
+                },
+                status=502,
+            )
+            return
+        except NotImplementedError as exc:
+            self._send_json({"error": {"code": "provider_not_supported", "message": str(exc)}}, status=501)
+            return
+        self._send_json(result)
+
+    def _handle_model_catalog(self):
+        self._send_json(self.agent.model_store.catalog())
+
+    def _handle_create_model_profile(self):
+        try:
+            profile = self.agent.model_store.create(self._read_json())
+        except (TypeError, ValueError, KeyError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"profile": profile}, status=201)
+
+    def _handle_update_model_profile(self, profile_id):
+        try:
+            profile = self.agent.model_store.update(profile_id, self._read_json())
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except (TypeError, ValueError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"profile": profile})
+
+    def _handle_model_activate(self, profile_id):
+        try:
+            profile = self.agent.model_store.activate(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        self._send_json({"active_profile_id": profile["id"], "profile": profile})
+
+    def _handle_delete_model_profile(self, profile_id):
+        try:
+            profile = self.agent.model_store.delete(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except ValueError as exc:
+            self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
+            return
+        self._send_json({"deleted": True, "profile": profile})
+
+    def _handle_model_test(self, profile_id):
+        try:
+            result = self.agent.model_store.test(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except LLMRequestError as exc:
+            self._send_json(
+                {"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}},
+                status=502,
+            )
+            return
+        self._send_json(result)
+
+    def _handle_model_test_payload(self):
+        try:
+            result = self.agent.model_store.test(self._read_json())
+        except (TypeError, ValueError, KeyError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        except LLMRequestError as exc:
+            self._send_json(
+                {"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}},
+                status=502,
             )
             return
         self._send_json(result)
@@ -117,8 +268,14 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     def _handle_list_entries(self, query):
         kind = query.get("kind", [None])[0]
         entry_date = query.get("date", [None])[0]
+        limit_raw = query.get("limit", ["100"])[0]
         try:
-            entries = self.structured_store.list_entries(kind=kind, entry_date=entry_date)
+            limit = int(limit_raw)
+            entries = self.structured_store.list_entries(
+                kind=kind,
+                entry_date=entry_date,
+                limit=limit,
+            )
         except (TypeError, ValueError) as exc:
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
             return
@@ -147,6 +304,81 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
             return
         self._send_json({"entry": entry}, status=201 if entry_id is None else 200)
+
+    def _vault(self):
+        manager = type(self).vault_manager
+        if manager.structured_store is not self.structured_store:
+            manager = VaultManager(structured_store=self.structured_store)
+            type(self).vault_manager = manager
+        return manager
+
+    def _handle_vault_status(self):
+        try:
+            self._send_json(self._vault().status())
+        except (OSError, ValueError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+
+    def _handle_vault_files(self, query):
+        query_text = query.get("query", [""])[0]
+        limit_raw = query.get("limit", ["100"])[0]
+        try:
+            limit = int(limit_raw)
+            files = self._vault().list_files(query=query_text, limit=limit)
+        except (OSError, TypeError, ValueError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"files": files, "vault": self._vault().status()})
+
+    def _handle_vault_file(self, query):
+        relative_path = query.get("path", [""])[0]
+        try:
+            payload = self._vault().read_file(relative_path)
+        except (OSError, ValueError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json(payload)
+
+    def _handle_vault_configure(self):
+        try:
+            body = self._read_json()
+            status = self._vault().configure(
+                str(body.get("vault_path") or ""),
+                str(body.get("folder") or "LifeOS"),
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"vault": status})
+
+    def _handle_vault_export(self):
+        try:
+            body = self._read_json()
+            result = self._vault().export_entry(str(body.get("entry_id") or ""))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json(result, status=200 if result["updated"] else 201)
+
+    def _handle_vault_import(self):
+        try:
+            body = self._read_json()
+            result = self._vault().import_file(
+                str(body.get("path") or ""),
+                str(body.get("kind") or "") or None,
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json(result, status=201)
+
+    def _handle_vault_sync(self):
+        try:
+            body = self._read_json()
+            result = self._vault().sync_entry(str(body.get("entry_id") or ""))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "vault_error", "message": str(exc)}}, status=400)
+            return
+        self._send_json(result)
 
     def _handle_feedback(self):
         body = self._read_json()
@@ -380,12 +612,27 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("content-type", "application/json; charset=utf-8")
         self.send_header("content-length", str(len(data)))
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_cors_headers(self):
+        origin = self.headers.get("origin")
+        allowed = {
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+        }
+        if origin in allowed:
+            self.send_header("access-control-allow-origin", origin)
+            self.send_header("vary", "origin")
+            self.send_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("access-control-allow-headers", "content-type")
+
 
 def run(host="127.0.0.1", port=8765):
-    server = HTTPServer((host, port), LifeOSRequestHandler)
+    server = ThreadingHTTPServer((host, port), LifeOSRequestHandler)
     print(f"LifeOS API listening on http://{host}:{port}")
     server.serve_forever()
 

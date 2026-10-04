@@ -2,6 +2,7 @@ from lifeos.agent.chat.runtime import ChatRuntime
 from lifeos.agent.executor.executor import Executor
 from lifeos.agent.planner.planner import Planner
 from lifeos.event.bus import ReliableEventBus
+from lifeos.llm.profiles import ModelProfileStore
 from lifeos.memory.manager import MemoryManager
 from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBMemoryAdapter
 from lifeos.reflection.engine import ReflectionEngine
@@ -14,8 +15,9 @@ from lifeos.trace.system import TraceSystem
 class LifeOSAgent:
     """Top-level composition root for foreground and background agents."""
 
-    def __init__(self, llm, storage_dir=".lifeos", external_memory=None):
+    def __init__(self, llm, storage_dir=".lifeos", model_store=None, external_memory=None):
         self.llm = llm
+        self.model_store = model_store or ModelProfileStore(f"{storage_dir}/models.json")
         self.memory = MemoryManager(storage_dir=storage_dir)
         if external_memory is None:
             config = TencentDBConfig.from_env()
@@ -35,6 +37,7 @@ class LifeOSAgent:
         self.chat = ChatRuntime(
             llm=llm,
             memory=self.memory,
+            planner=self.planner,
             executor=self.executor,
             event_bus=self.event_bus,
             trace=self.trace,
@@ -54,8 +57,25 @@ class LifeOSAgent:
             trace=self.trace,
         )
 
-    async def run(self, user_input: str, memory_scope=None):
-        return await self.chat.handle_message(user_input, memory_scope=memory_scope)
+    async def run(
+        self,
+        user_input: str,
+        model_profile_id: str | None = None,
+        routing_policy: str = "auto",
+        memory_scope=None,
+    ):
+        if model_profile_id and hasattr(self.llm, "bind"):
+            with self.llm.bind(model_profile_id):
+                return await self.chat.handle_message(
+                    user_input,
+                    memory_scope=memory_scope,
+                    routing_policy=routing_policy,
+                )
+        return await self.chat.handle_message(
+            user_input,
+            memory_scope=memory_scope,
+            routing_policy=routing_policy,
+        )
 
     async def run_background_once(self, limit=10):
         return await self.global_agent.process_once(limit=limit)

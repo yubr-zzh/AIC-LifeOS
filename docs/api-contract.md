@@ -39,7 +39,9 @@ Request body:
     "scenario_type": "learning",
     "project_id": null,
     "user_id": null
-  }
+  },
+  "profile_id": "deepseek-main",
+  "routing_policy": "auto"
 }
 ```
 
@@ -57,14 +59,35 @@ filter only, not authentication or authorization. The current API does not
 automatically classify a message into a scenario/project; callers must pass an
 explicit scope or accept the global-only default.
 
+`profile_id` is optional. If omitted, the backend uses the profile currently
+activated through `POST /models/profiles/{id}/activate`.
+
+`routing_policy` is optional and accepts `auto`, `force_self_plan`, or
+`force_agent`. Forced policies take precedence over rules, plugins, and model
+classification.
+
 Response body:
 
 ```json
 {
   "trace_id": "6f2af4b1-2c45-4f98-a43f-1b1b3a0f79f2",
-  "response": "LifeOS mock response: hello lifeos",
+  "response": "这项任务不需要 Agent。长期规划已直接把步骤反馈给你自规划。",
   "tool_calls": [],
-  "tool_results": []
+  "tool_results": [],
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "decision": "self_plan",
+  "decision_reason": "这是个人日程与习惯规划，属于自规划范畴。",
+  "decision_confidence": 0.95,
+  "plan_steps": [
+    {
+      "id": 1,
+      "action": "self_plan",
+      "title": "确定下周核心目标",
+      "detail": "只保留一到两个真正重要的结果。",
+      "time": "今天"
+    }
+  ]
 }
 ```
 
@@ -76,6 +99,17 @@ Fields:
 | `response` | string | Assistant response text. |
 | `tool_calls` | array | Tool calls requested by the LLM. Currently usually empty in mock mode. |
 | `tool_results` | array | Execution or blocked status for each requested tool call. |
+| `provider` | string \| null | Provider preset ID that handled the turn. |
+| `model` | string \| null | Actual model ID returned by the provider. |
+| `decision` | `"self_plan"` \| `"agent"` \| undefined | Long-term planning result. |
+| `decision_reason` | string \| undefined | Model explanation for the routing decision. |
+| `decision_confidence` | number \| undefined | Normalized confidence from 0 to 1. |
+| `plan_steps` | array \| undefined | Structured steps for self-planning or Agent confirmation. |
+| `agent_enabled` | boolean | Final executor routing state. |
+| `routing_policy` | `"auto"` \| `"force_self_plan"` \| `"force_agent"` | Policy used for this turn. |
+| `route_source` | string \| undefined | `rules`, `external_plugin`, `model`, `user_override`, or `fallback`. |
+| `route_signals` | string[] \| undefined | Signals used by rules, plugins, or the model. |
+| `requires_side_effects` | boolean | Whether the final route can produce external side effects. |
 
 Side effect:
 
@@ -85,6 +119,10 @@ Frontend expectations:
 
 - Render the assistant response immediately.
 - Store `trace_id` on the message.
+- When `decision === "self_plan"`, render the structured steps as a user self-planning card and do not show Agent execution controls.
+- When `decision === "agent"`, keep the existing confirmation/tool-call execution flow.
+- Display the active routing policy and final `agent_enabled` state before or with the response.
+- Let the user override automatic routing with `force_self_plan` or `force_agent`.
 - If `tool_calls` is non-empty, render them as execution cards.
 - Optimistically show one pending `conversation.completed` event if no event-list endpoint exists yet.
 
@@ -376,6 +414,76 @@ There are two permission categories:
 
 - Tool execution confirmation: confirms whether a high-risk existing tool/skill can run this time.
 - Skill installation confirmation: confirms whether a new detected skill can be persisted into pending/registry.
+
+## Model/API Configuration Endpoints
+
+The chat composer uses these endpoints to implement a CCswitch-style model
+switcher. Profiles and API Keys are persisted locally in `.lifeos/models.json`.
+The backend never returns a saved API Key; it returns `has_api_key` and a
+masked `api_key_hint` instead.
+
+### GET /models
+
+Returns:
+
+```json
+{
+  "active_profile_id": "deepseek-main",
+  "profiles": [
+    {
+      "id": "deepseek-main",
+      "name": "DeepSeek 主力",
+      "provider": "deepseek",
+      "protocol": "openai",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "has_api_key": true,
+      "api_key_hint": "sk-…cdef"
+    }
+  ],
+  "presets": []
+}
+```
+
+### POST /models/profiles
+
+Creates a profile. Request fields:
+
+```ts
+type ModelProfileInput = {
+  name: string;
+  provider: string;
+  protocol: "mock" | "openai" | "anthropic";
+  base_url: string;
+  model: string;
+  models?: string[];
+  api_key?: string;
+  enabled?: boolean;
+};
+```
+
+### PUT /models/profiles/{profile_id}
+
+Updates a profile. If `api_key` is omitted or empty, the saved key is preserved;
+set `clear_api_key: true` to remove it.
+
+### POST /models/profiles/{profile_id}/activate
+
+Makes the profile the default for subsequent `/chat` requests.
+
+### POST /models/profiles/{profile_id}/test
+
+Calls the saved provider with a minimal prompt and returns latency, provider,
+model, and a short preview.
+
+### POST /models/test
+
+Tests an unsaved profile payload. This powers the `测试连接` action in the
+configuration form.
+
+### DELETE /models/profiles/{profile_id}
+
+Deletes a custom profile. The built-in `mock` profile cannot be deleted.
 
 ## Additional Implemented Endpoints
 

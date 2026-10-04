@@ -29,11 +29,91 @@ export interface ToolResult {
   review?: PermissionReview;
 }
 
+export type PlanningDecision = "self_plan" | "agent";
+export type AgentRoutingPolicy = "auto" | "force_self_plan" | "force_agent";
+export type RoutingSource = "user_override" | "rules" | "external_plugin" | "model" | "fallback";
+
+export interface PlanStep {
+  id?: number;
+  action?: string;
+  title: string;
+  detail?: string;
+  time?: string;
+  input?: string;
+}
+
 export interface ChatResponse {
   trace_id: string;
   response: string;
   tool_calls: ToolCall[];
   tool_results?: ToolResult[];
+  provider?: string | null;
+  model?: string | null;
+  decision?: PlanningDecision;
+  decision_reason?: string;
+  decision_confidence?: number;
+  plan_steps?: PlanStep[];
+  agent_enabled?: boolean;
+  routing_policy?: AgentRoutingPolicy;
+  route_source?: RoutingSource;
+  route_signals?: string[];
+  requires_side_effects?: boolean;
+}
+
+export type ModelProtocol = "mock" | "openai" | "anthropic";
+
+export interface ModelProviderPreset {
+  id: string;
+  label: string;
+  protocol: ModelProtocol;
+  base_url: string;
+  models: string[];
+  api_key_required: boolean;
+  description: string;
+}
+
+export interface ModelProfile {
+  id: string;
+  name: string;
+  provider: string;
+  provider_label: string;
+  protocol: ModelProtocol;
+  base_url: string;
+  model: string;
+  models: string[];
+  enabled: boolean;
+  builtin: boolean;
+  has_api_key: boolean;
+  api_key_hint: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ModelProfileInput {
+  id?: string;
+  name: string;
+  provider: string;
+  protocol: ModelProtocol;
+  base_url: string;
+  model: string;
+  models?: string[];
+  api_key?: string;
+  clear_api_key?: boolean;
+  enabled?: boolean;
+}
+
+export interface ModelCatalog {
+  active_profile_id: string;
+  profiles: ModelProfile[];
+  presets: ModelProviderPreset[];
+}
+
+export interface ModelTestResult {
+  ok: boolean;
+  latency_ms: number;
+  provider?: string | null;
+  model?: string | null;
+  preview?: string;
 }
 
 export interface ChatRequest {
@@ -314,4 +394,41 @@ export interface PipelineStage {
   id: PipelineStageId;
   label: string;
   detail: string;
+}
+
+export interface VaultStatus {
+  configured: boolean;
+  path: string;
+  folder: string;
+  exists: boolean;
+  file_count: number;
+}
+
+export interface VaultFile {
+  path: string;
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
+export interface VaultReadResult {
+  path: string;
+  metadata: Record<string, unknown>;
+  content: string;
+  body: string;
+}
+
+export interface VaultExportResult {
+  entry_id: string;
+  entry: StructuredEntry;
+  path: string;
+  relative_path: string;
+  folder: string;
+  filename: string;
+  updated: boolean;
+}
+
+export interface VaultImportResult {
+  entry: StructuredEntry;
+  relative_path: string;
 }

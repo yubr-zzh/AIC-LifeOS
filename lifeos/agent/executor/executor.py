@@ -22,7 +22,7 @@ class Executor:
             return None
         return similar[0]
 
-    async def execute_chat_turn(self, user_input, memory, trace_id=None):
+    async def execute_chat_turn(self, user_input, memory, trace_id=None, planning=None):
         skill = await self._match_skill(user_input)
         if skill and self.trace and trace_id:
             self.trace.event(
@@ -31,12 +31,29 @@ class Executor:
                 {"skill": skill.get("name"), "description": skill.get("description")},
             )
         system_prompt = "You are the foreground LifeOS Chat Agent."
+        if planning and planning.get("decision") == "agent":
+            step_titles = [step.get("title", "") for step in planning.get("steps", [])]
+            system_prompt += (
+                "\nLong-term planning accepted an Agent execution turn. "
+                f"Reason: {planning.get('reason', '')}. "
+                f"Confirm-and-execute plan: {step_titles}."
+            )
         if skill:
             system_prompt += (
                 "\nThe user has an approved skill for this kind of task: "
                 f"'{skill.get('name')}' - {skill.get('description')}. "
                 "Follow it to keep results consistent."
             )
+        if memory:
+            memory_lines = []
+            for chunk in memory:
+                if isinstance(chunk, dict):
+                    content = chunk.get("content", chunk)
+                else:
+                    content = chunk
+                memory_lines.append(str(content))
+            if memory_lines:
+                system_prompt += "\nRelevant memory:\n" + "\n".join(memory_lines)
         messages = [
             {
                 "role": "system",
@@ -45,7 +62,6 @@ class Executor:
             {
                 "role": "user",
                 "content": user_input,
-                "memory": memory,
             },
         ]
         try:
@@ -86,6 +102,8 @@ class Executor:
             "response": response,
             "tool_calls": tool_calls,
             "tool_results": tool_results,
+            "provider": completion.get("provider"),
+            "model": completion.get("model"),
         }
 
     async def execute(self, plan):
