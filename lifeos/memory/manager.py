@@ -51,6 +51,38 @@ class MemoryManager:
         """Return a fresh, non-persisted profile view from the current store."""
         return build_memory_profile(self._read())
 
+    def active_memory_ids(self):
+        store = self._read()
+        return {
+            entry["id"]
+            for category in ("user", "project", "feedback", "reference")
+            for entry in store.get(category, [])
+            if entry.get("status", "active") == "active"
+        }
+
+    def memory_records(self):
+        store = self._read()
+        return [
+            entry
+            for category in ("user", "project", "feedback", "reference")
+            for entry in store.get(category, [])
+        ]
+
+    def set_provider_sync(self, memory_id, status, *, remote_id=None, error=None):
+        if status not in {"synced", "pending", "deleted"}:
+            raise ValueError("unsupported provider sync status")
+        store = self._read()
+        item = self._find_memory(store, memory_id)
+        item["provider_sync"] = {
+            "provider": "tencentdb",
+            "status": status,
+            "remote_id": remote_id,
+            "error": error,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        self._write(store)
+        return item
+
     async def propose_update(
         self,
         source,

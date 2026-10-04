@@ -57,6 +57,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[:2] == ["memory", "candidates"] and parts[3] in {"commit", "reject"}:
             self._handle_memory_candidate(unquote(parts[2]), parts[3])
             return
+        if parsed.path == "/memory/providers/tencentdb/sync-pending":
+            self._handle_tencentdb_sync_pending()
+            return
         if len(parts) == 3 and parts[0] == "memory" and parts[2] in {"correct", "retract"}:
             self._handle_memory_mutation(unquote(parts[1]), parts[2])
             return
@@ -189,6 +192,7 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         try:
             if action == "commit":
                 item = asyncio.run(self.agent.memory.commit_candidate(candidate_id))
+                item = self._sync_approved_memory(item)
             else:
                 item = asyncio.run(self.agent.memory.reject_candidate(candidate_id))
         except KeyError as exc:
@@ -199,8 +203,57 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_json({"status": "committed" if action == "commit" else "rejected", "item": item})
 
+    def _sync_approved_memory(self, item):
+        """Sync only after the existing LifeOS approval/commit gate."""
+        provider = getattr(self.agent, "external_memory", None)
+        if provider is None:
+            return item
+        try:
+            provider.write_approved_memory(item)
+            return self.agent.memory.set_provider_sync(
+                item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+            )
+        except Exception as exc:
+            # The local approval is durable; deterministic remote IDs make a
+            # repeated commit request a safe retry without resending raw source.
+            return self.agent.memory.set_provider_sync(
+                item["id"], "pending", error=type(exc).__name__
+            )
+
+    def _handle_tencentdb_sync_pending(self):
+        provider = getattr(self.agent, "external_memory", None)
+        if provider is None:
+            self._send_json({"error": {"code": "provider_disabled"}}, status=409)
+            return
+        outcomes = []
+        for item in self.agent.memory.memory_records():
+            sync = item.get("provider_sync") or {}
+            if sync.get("status") != "pending":
+                continue
+            try:
+                if item.get("status", "active") == "active":
+                    provider.write_approved_memory(item)
+                    updated = self.agent.memory.set_provider_sync(
+                        item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+                    )
+                else:
+                    provider.delete_approved_memory(item["id"])
+                    updated = self.agent.memory.set_provider_sync(item["id"], "deleted")
+                outcomes.append({"memory_id": item["id"], "status": updated["provider_sync"]["status"]})
+            except Exception as exc:
+                updated = self.agent.memory.set_provider_sync(
+                    item["id"], "pending", error=type(exc).__name__
+                )
+                outcomes.append({"memory_id": item["id"], "status": "pending", "error": type(exc).__name__})
+        self._send_json({"results": outcomes})
+
     def _handle_memory_mutation(self, memory_id, action):
         body = self._read_json()
+        previous = None
+        try:
+            previous = self.agent.memory._find_memory(self.agent.memory._read(), memory_id)
+        except KeyError:
+            pass
         try:
             if action == "correct":
                 item = asyncio.run(
@@ -218,6 +271,32 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
             return
+        provider = getattr(self.agent, "external_memory", None)
+        previous_sync = (previous or {}).get("provider_sync", {}).get("status")
+        if provider is not None and previous and previous_sync in {"synced", "pending"}:
+            remote_deleted = False
+            try:
+                provider.delete_approved_memory(memory_id)
+                self.agent.memory.set_provider_sync(memory_id, "deleted")
+                remote_deleted = True
+                if action == "correct":
+                    provider.write_approved_memory(item)
+                    item = self.agent.memory.set_provider_sync(
+                        item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+                    )
+                else:
+                    item = self.agent.memory.set_provider_sync(memory_id, "deleted")
+            except Exception as exc:
+                # Local lifecycle state remains authoritative for the read
+                # filter, so stale remote results are discarded on recall.
+                target_id = item["id"] if action == "correct" else memory_id
+                item = self.agent.memory.set_provider_sync(
+                    target_id, "pending", error=type(exc).__name__
+                )
+                if action == "correct" and not remote_deleted:
+                    self.agent.memory.set_provider_sync(
+                        memory_id, "pending", error=type(exc).__name__
+                    )
         self._send_json({"status": item.get("status"), "memory": item})
 
     def _handle_structured_entry_memory_candidate(self, entry_id):

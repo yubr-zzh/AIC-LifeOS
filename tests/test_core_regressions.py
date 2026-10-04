@@ -13,11 +13,12 @@ from lifeos.api.server import LifeOSRequestHandler
 from lifeos.event.bus import ReliableEventBus
 from lifeos.llm.client import LLMClient
 from lifeos.memory.manager import MemoryManager
+from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBError, TencentDBMemoryAdapter
 from lifeos.memory.retriever import MemoryRetriever
 from lifeos.security.permission import PermissionManager
 from lifeos.skills.registry import SkillRegistry
 from lifeos.storage.sqlite import StructuredStore
-from http.server import HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 def run(coro):
@@ -29,6 +30,240 @@ class CoreRegressionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name)
+
+    def test_tencentdb_adapter_requires_complete_loopback_identity_config(self):
+        with self.assertRaisesRegex(ValueError, "incomplete TencentDB configuration"):
+            TencentDBConfig.from_env({"LIFEOS_TDAI_ENDPOINT": "http://127.0.0.1:8420"})
+        self.assertIsNone(TencentDBConfig.from_env({}))
+        complete = {
+            "LIFEOS_TDAI_ENDPOINT": "http://127.0.0.1:8420",
+            "LIFEOS_TDAI_SERVICE_ID": "test-instance",
+            "LIFEOS_TDAI_TEAM_ID": "test-team",
+            "LIFEOS_TDAI_AGENT_ID": "test-agent",
+            "LIFEOS_TDAI_USER_ID": "test-user",
+        }
+        self.assertTrue(TencentDBConfig.from_env(complete).is_loopback)
+        complete["LIFEOS_TDAI_ENDPOINT"] = "https://memory.example.com"
+        with self.assertRaisesRegex(ValueError, "loopback Gateway"):
+            TencentDBConfig.from_env(complete)
+
+    def test_tencentdb_adapter_writes_approved_only_and_fail_closed_filters_scope(self):
+        calls = []
+
+        def fake_transport(path, payload):
+            calls.append((path, payload))
+            if path.endswith("/search"):
+                return {
+                    "items": [
+                        {
+                            "id": "global",
+                            "content": '{"claim":"global"}',
+                            "background": '{"lifeos_memory_id":"global-id","category":"user","scope":{"kind":"global"}}',
+                        },
+                        {
+                            "id": "same-project",
+                            "content": '{"claim":"project"}',
+                            "background": '{"lifeos_memory_id":"project-id","category":"project","scope":{"kind":"project","project_id":"lifeos"}}',
+                        },
+                        {
+                            "id": "other-project",
+                            "content": '{"claim":"secret"}',
+                            "background": '{"lifeos_memory_id":"other-id","category":"project","scope":{"kind":"project","project_id":"other"}}',
+                        },
+                        {"id": "untrusted", "content": '{"claim":"untrusted"}', "background": "{}"},
+                    ]
+                }
+            return {"id": payload.get("id")}
+
+        config = TencentDBConfig(
+            endpoint="http://127.0.0.1:8420",
+            service_id="test-instance",
+            team_id="test-team",
+            agent_id="test-agent",
+            user_id="test-user",
+        )
+        adapter = TencentDBMemoryAdapter(config, transport=fake_transport)
+        unapproved = {"id": "pending", "content": {"claim": "x"}, "status": "candidate"}
+        with self.assertRaisesRegex(ValueError, "user-approved"):
+            adapter.write_approved_memory(unapproved)
+        self.assertEqual(calls, [])
+
+        first_write = {
+            "id": "new-memory",
+            "status": "active",
+            "content": {"claim": "approved but not remotely bound"},
+        }
+        with self.assertRaisesRegex(TencentDBError, "cannot create"):
+            adapter.write_approved_memory(first_write)
+        self.assertEqual(calls, [], "unsupported first writes must fail before sending content")
+
+        approved = {
+            "id": "memory-1",
+            "status": "active",
+            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "category": "project",
+            "content": {"claim": "approved fact"},
+            "source": "structured_entry",
+            "source_ref": {"kind": "structured_entry", "record_id": "review-1"},
+            "scope": {"kind": "project", "project_id": "lifeos"},
+        }
+        adapter.write_approved_memory(approved)
+        self.assertEqual(calls[-1][0], "/v3/atomic/update")
+        self.assertEqual(calls[-1][1]["team_id"], "test-team")
+        self.assertEqual(calls[-1][1]["session_id"], "lifeos-approved-memory")
+        self.assertIn("review-1", calls[-1][1]["background"])
+
+        grouped = adapter.retrieve(
+            "approved fact",
+            scope={"kind": "project", "project_id": "lifeos"},
+            allowed_memory_ids={"global-id", "project-id", "other-id", "untrusted"},
+        )
+        self.assertEqual(
+            {entry["id"] for entry in grouped["project"]},
+            {"project-id"},
+        )
+        self.assertEqual({entry["id"] for entry in grouped["user"]}, {"global-id"})
+
+    def test_tencentdb_adapter_http_wire_matches_v3_contract(self):
+        received = []
+        hit = {
+            "id": "lifeos-memory-1",
+            "content": '{"claim":"wire test"}',
+            "background": '{"lifeos_memory_id":"memory-1","category":"user","scope":{"kind":"global"}}',
+        }
+
+        class GatewayStubHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def do_POST(self):
+                raw = self.rfile.read(int(self.headers.get("content-length", "0")))
+                headers = {name.lower(): value for name, value in self.headers.items()}
+                received.append((self.path, headers, json.loads(raw)))
+                data = {"items": [hit]} if self.path.endswith("/search") else {"id": "lifeos-memory-1"}
+                payload = json.dumps({"code": 0, "message": "ok", "data": data}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        server = HTTPServer(("127.0.0.1", 0), GatewayStubHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        config = TencentDBConfig(
+            endpoint=f"http://127.0.0.1:{server.server_address[1]}",
+            service_id="test-instance",
+            team_id="test-team",
+            agent_id="test-agent",
+            user_id="test-user",
+            api_key="test-key",
+        )
+        adapter = TencentDBMemoryAdapter(config)
+        memory = {
+            "id": "memory-1",
+            "source": "direct",
+            "category": "user",
+            "status": "active",
+            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "content": {"claim": "wire test"},
+            "scope": {"kind": "global"},
+        }
+        adapter.write_approved_memory(memory)
+        recalled = adapter.search_memories("wire test")
+        adapter.delete_approved_memory("memory-1")
+
+        self.assertEqual([item[0] for item in received], [
+            "/v3/atomic/update", "/v3/atomic/search", "/v3/atomic/delete"
+        ])
+        self.assertTrue(all(item[1]["x-tdai-service-id"] == "test-instance" for item in received))
+        self.assertTrue(all(item[1]["authorization"] == "Bearer test-key" for item in received))
+        self.assertEqual(received[0][2]["team_id"], "test-team")
+        self.assertEqual(received[0][2]["session_id"], "lifeos-approved-memory")
+        self.assertEqual(received[2][2]["ids"], ["lifeos-memory-1"])
+        self.assertEqual(recalled, [hit])
+
+    def test_tencentdb_atomic_update_404_is_not_misreported_as_create(self):
+        class MissingAtomicHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length", "0")))
+                payload = json.dumps({
+                    "code": 404,
+                    "message": "Atomic note not found",
+                    "request_id": "synthetic-request",
+                }).encode()
+                self.send_response(404)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        server = HTTPServer(("127.0.0.1", 0), MissingAtomicHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        adapter = TencentDBMemoryAdapter(TencentDBConfig(
+            endpoint=f"http://127.0.0.1:{server.server_address[1]}",
+            service_id="test-instance",
+            team_id="test-team",
+            agent_id="test-agent",
+            user_id="test-user",
+        ))
+        approved = {
+            "id": "new-memory",
+            "source": "direct",
+            "category": "user",
+            "status": "active",
+            "provider_sync": {"status": "synced", "remote_id": "lifeos-new-memory"},
+            "content": {"claim": "synthetic only"},
+            "scope": {"kind": "global"},
+        }
+        with self.assertRaises(TencentDBError):
+            adapter.write_approved_memory(approved)
+
+    def test_chat_runtime_uses_external_l1_with_local_active_id_allowlist(self):
+        agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        candidate = run(
+            agent.memory.propose_update(
+                "structured_entry",
+                {"claim": "not locally relevant"},
+                category="user",
+                scope={"kind": "global"},
+            )
+        )
+        run(agent.memory.commit_candidate(candidate["id"]))
+        observations = {}
+
+        class FakeExternalMemory:
+            def retrieve(self, query, scope=None, allowed_memory_ids=None):
+                observations.update(query=query, scope=scope, allowed=allowed_memory_ids)
+                return {
+                    "user": [{"id": candidate["id"], "content": {"claim": "remote hit"}}],
+                    "project": [{"id": "stale-id", "content": {"claim": "stale"}}],
+                }
+
+        class CaptureExecutor:
+            async def execute_chat_turn(self, user_input, memory, trace_id=None):
+                observations["memory"] = memory
+                return {"response": "ok", "tool_calls": [], "tool_results": []}
+
+        agent.external_memory = FakeExternalMemory()
+        agent.chat.external_memory = agent.external_memory
+        agent.chat.executor = CaptureExecutor()
+        run(agent.run("question", memory_scope={"kind": "global"}))
+
+        self.assertEqual(observations["allowed"], {candidate["id"]})
+        self.assertEqual(observations["scope"]["kind"], "global")
+        self.assertIn(candidate["id"], {entry["id"] for entry in observations["memory"]["user"]})
+        self.assertNotIn("stale-id", {entry["id"] for values in observations["memory"].values() for entry in values})
 
     def test_markdown_round_trip_preserves_runtime_state_and_ids(self):
         memory = MemoryManager(self.path)
@@ -528,6 +763,23 @@ class CoreRegressionTests(unittest.TestCase):
 
     def test_candidate_approval_endpoints_persist_to_backend(self):
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        class FakeMemoryProvider:
+            def __init__(self):
+                self.writes = []
+                self.deletes = []
+                self.fail_next_write = False
+
+            def write_approved_memory(self, item):
+                if self.fail_next_write:
+                    self.fail_next_write = False
+                    raise RuntimeError("simulated provider outage")
+                self.writes.append(item["id"])
+
+            def delete_approved_memory(self, memory_id):
+                self.deletes.append(memory_id)
+
+        provider = FakeMemoryProvider()
+        agent.external_memory = provider
         candidate = run(agent.memory.propose_update("direct", {"preference": "short"}))
         skill = {"id": "skill-1", "name": "test_skill", "description": "test", "risk": "low"}
         run(agent.skills.add_pending(skill))
@@ -553,7 +805,11 @@ class CoreRegressionTests(unittest.TestCase):
                 return json.load(response)
 
         self.assertEqual(fetch("/memory")["candidates"][0]["status"], "candidate")
-        self.assertEqual(fetch(f"/memory/candidates/{candidate['id']}/commit", "POST")["status"], "committed")
+        self.assertEqual(provider.writes, [])
+        approved = fetch(f"/memory/candidates/{candidate['id']}/commit", "POST")
+        self.assertEqual(approved["status"], "committed")
+        self.assertEqual(approved["item"]["provider_sync"]["status"], "synced")
+        self.assertEqual(provider.writes, [candidate["id"]])
         self.assertEqual(fetch("/memory")["user"][0]["id"], candidate["id"])
         profile = fetch("/memory/profile")
         self.assertEqual(profile["core_profiles"][0]["memories"][0]["id"], candidate["id"])
@@ -562,12 +818,15 @@ class CoreRegressionTests(unittest.TestCase):
             "POST",
             {"content": {"preference": "concise"}, "reason": "user correction"},
         )["memory"]
+        self.assertEqual(provider.deletes, [candidate["id"]])
+        self.assertEqual(provider.writes, [candidate["id"], corrected["id"]])
         self.assertEqual(corrected["version_of"], candidate["id"])
         self.assertEqual(fetch("/memory")["user"][0]["status"], "superseded")
         retracted = fetch(
             f"/memory/{corrected['id']}/retract", "POST", {"reason": "user request"}
         )["memory"]
         self.assertEqual(retracted["status"], "retracted")
+        self.assertEqual(provider.deletes, [candidate["id"], corrected["id"]])
         self.assertEqual(fetch("/memory/profile")["core_profiles"], [])
         with self.assertRaises(HTTPError) as superseded_error:
             fetch(f"/memory/{candidate['id']}/retract", "POST")
@@ -582,6 +841,15 @@ class CoreRegressionTests(unittest.TestCase):
         persisted = fetch("/memory")
         self.assertEqual(persisted["user"][0]["status"], "superseded")
         self.assertEqual(persisted["user"][1]["status"], "retracted")
+        pending = run(agent.memory.propose_update("direct", {"preference": "retryable"}))
+        provider.fail_next_write = True
+        failed_sync = fetch(f"/memory/candidates/{pending['id']}/commit", "POST")
+        self.assertEqual(failed_sync["item"]["provider_sync"]["status"], "pending")
+        retried_sync = fetch("/memory/providers/tencentdb/sync-pending", "POST")
+        self.assertEqual(
+            retried_sync["results"],
+            [{"memory_id": pending["id"], "status": "synced"}],
+        )
         self.assertEqual(fetch("/skills/pending/skill-1/approve", "POST")["status"], "approved")
         self.assertEqual(fetch("/skills")["approved"][0]["id"], "skill-1")
         chat = fetch(
@@ -601,6 +869,18 @@ class CoreRegressionTests(unittest.TestCase):
 
     def test_structured_entry_can_create_idempotent_memory_candidate_with_source_link(self):
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        class FakeMemoryProvider:
+            def __init__(self):
+                self.items = []
+
+            def write_approved_memory(self, item):
+                self.items.append(item)
+
+            def delete_approved_memory(self, _memory_id):
+                pass
+
+        provider = FakeMemoryProvider()
+        agent.external_memory = provider
         structured_store = StructuredStore(self.path / "lifeos.db")
 
         class Handler(LifeOSRequestHandler):
@@ -662,6 +942,9 @@ class CoreRegressionTests(unittest.TestCase):
         )
         self.assertEqual(replay_after_commit["status"], "committed")
         self.assertEqual(len(agent.memory._read()["candidates"]), 1)
+        self.assertEqual(len(provider.items), 1)
+        self.assertEqual(provider.items[0]["source_ref"]["record_id"], entry["id"])
+        self.assertEqual(provider.items[0]["scope"]["scenario_type"], "learning")
 
     def test_skill_usage_is_recorded_after_outcome(self):
         registry = SkillRegistry(self.path / "skills.json")

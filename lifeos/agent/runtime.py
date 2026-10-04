@@ -3,6 +3,7 @@ from lifeos.agent.executor.executor import Executor
 from lifeos.agent.planner.planner import Planner
 from lifeos.event.bus import ReliableEventBus
 from lifeos.memory.manager import MemoryManager
+from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBMemoryAdapter
 from lifeos.reflection.engine import ReflectionEngine
 from lifeos.security.permission import PermissionManager
 from lifeos.skills.detector import SkillDetector
@@ -13,9 +14,13 @@ from lifeos.trace.system import TraceSystem
 class LifeOSAgent:
     """Top-level composition root for foreground and background agents."""
 
-    def __init__(self, llm, storage_dir=".lifeos"):
+    def __init__(self, llm, storage_dir=".lifeos", external_memory=None):
         self.llm = llm
         self.memory = MemoryManager(storage_dir=storage_dir)
+        if external_memory is None:
+            config = TencentDBConfig.from_env()
+            external_memory = TencentDBMemoryAdapter(config) if config else None
+        self.external_memory = external_memory
         self.trace = TraceSystem()
         self.event_bus = ReliableEventBus(f"{storage_dir}/events.json")
         self.skills = SkillRegistry(f"{storage_dir}/skills.json")
@@ -33,6 +38,7 @@ class LifeOSAgent:
             executor=self.executor,
             event_bus=self.event_bus,
             trace=self.trace,
+            external_memory=self.external_memory,
         )
         self.global_agent = GlobalAgentRuntime(
             event_bus=self.event_bus,
