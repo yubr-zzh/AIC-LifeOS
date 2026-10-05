@@ -3,6 +3,7 @@ from lifeos.agent.executor.executor import Executor
 from lifeos.agent.planner.planner import Planner
 from lifeos.event.bus import ReliableEventBus
 from lifeos.memory.manager import MemoryManager
+from lifeos.memory.providers.ai_memory import AiMemoryProjectAdapter, AiMemoryProjectConfig
 from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBMemoryAdapter
 from lifeos.reflection.engine import ReflectionEngine
 from lifeos.security.permission import PermissionManager
@@ -21,6 +22,8 @@ class LifeOSAgent:
             config = TencentDBConfig.from_env()
             external_memory = TencentDBMemoryAdapter(config) if config else None
         self.external_memory = external_memory
+        ai_memory_config = AiMemoryProjectConfig.from_env()
+        self.project_memory = AiMemoryProjectAdapter(ai_memory_config) if ai_memory_config else None
         self.trace = TraceSystem()
         self.event_bus = ReliableEventBus(f"{storage_dir}/events.json")
         self.skills = SkillRegistry(f"{storage_dir}/skills.json")
@@ -39,6 +42,7 @@ class LifeOSAgent:
             event_bus=self.event_bus,
             trace=self.trace,
             external_memory=self.external_memory,
+            project_memory=self.project_memory,
         )
         self.global_agent = GlobalAgentRuntime(
             event_bus=self.event_bus,

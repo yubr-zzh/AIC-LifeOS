@@ -18,6 +18,10 @@ from lifeos.memory.updater import MemoryUpdater, category_for_source
 from lifeos.storage.atomic import write_json
 
 
+_PRESERVE_REMOTE_ID = object()
+_PRESERVE_REMOTE_SCOPE = object()
+
+
 class MemoryManager:
     def __init__(self, storage_dir=".lifeos"):
         self.storage_dir = Path(storage_dir)
@@ -68,15 +72,28 @@ class MemoryManager:
             for entry in store.get(category, [])
         ]
 
-    def set_provider_sync(self, memory_id, status, *, remote_id=None, error=None):
+    def set_provider_sync(
+        self,
+        memory_id,
+        status,
+        *,
+        remote_id=_PRESERVE_REMOTE_ID,
+        remote_scope_key=_PRESERVE_REMOTE_SCOPE,
+        error=None,
+    ):
         if status not in {"synced", "pending", "deleted"}:
             raise ValueError("unsupported provider sync status")
         store = self._read()
         item = self._find_memory(store, memory_id)
+        if remote_id is _PRESERVE_REMOTE_ID:
+            remote_id = (item.get("provider_sync") or {}).get("remote_id")
+        if remote_scope_key is _PRESERVE_REMOTE_SCOPE:
+            remote_scope_key = (item.get("provider_sync") or {}).get("remote_scope_key")
         item["provider_sync"] = {
             "provider": "tencentdb",
             "status": status,
             "remote_id": remote_id,
+            "remote_scope_key": remote_scope_key,
             "error": error,
             "updated_at": datetime.utcnow().isoformat(),
         }
@@ -203,6 +220,9 @@ class MemoryManager:
                 "created_at": datetime.utcnow().isoformat(),
             }
         )
+        # A corrected memory has a new deterministic provider ID. Never carry
+        # the superseded record's remote binding onto its replacement.
+        replacement.pop("provider_sync", None)
         if reason is not None:
             if not isinstance(reason, str):
                 raise ValueError("correction reason must be a string")

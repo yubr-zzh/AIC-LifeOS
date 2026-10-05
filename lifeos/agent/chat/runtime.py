@@ -6,13 +6,14 @@ from lifeos.memory.schema import normalize_scope
 class ChatRuntime:
     """Foreground path optimized for fast user responses."""
 
-    def __init__(self, llm, memory, executor, event_bus, trace, external_memory=None):
+    def __init__(self, llm, memory, executor, event_bus, trace, external_memory=None, project_memory=None):
         self.llm = llm
         self.memory = memory
         self.executor = executor
         self.event_bus = event_bus
         self.trace = trace
         self.external_memory = external_memory
+        self.project_memory = project_memory
 
     async def handle_message(
         self,
@@ -51,11 +52,40 @@ class ChatRuntime:
             {"chunks": chunks, "scope": resolved_scope},
         )
 
-        result = await self.executor.execute_chat_turn(
-            user_input=user_input,
-            memory=chunks,
-            trace_id=trace_id,
-        )
+        project_context = []
+        if self.project_memory is not None and resolved_scope and resolved_scope.get("kind") == "project":
+            try:
+                project_context = await asyncio.to_thread(
+                    self.project_memory.retrieve,
+                    user_input,
+                    scope=resolved_scope,
+                )
+                self.trace.event(
+                    trace_id,
+                    "memory.project_evidence_retrieved",
+                    {
+                        "provider": "ai-memory",
+                        "source_refs": [item.get("source_ref") for item in project_context],
+                        "count": len(project_context),
+                    },
+                )
+            except Exception as exc:
+                self.trace.event(
+                    trace_id,
+                    "memory.external_unavailable",
+                    {"provider": "ai-memory", "error": type(exc).__name__},
+                )
+
+        execution = {
+            "user_input": user_input,
+            "memory": chunks,
+            "trace_id": trace_id,
+        }
+        if project_context:
+            # Keep external wiki text transient: it is passed to the model but
+            # excluded from the persisted conversation event and trace body.
+            execution["project_context"] = project_context
+        result = await self.executor.execute_chat_turn(**execution)
 
         await self.event_bus.publish(
             "conversation.completed",

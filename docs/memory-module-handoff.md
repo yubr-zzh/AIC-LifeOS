@@ -30,7 +30,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 完成（LifeOS 本地结构化只读 MVP；目标接 TencentDB L2/L3） | `/memory/profile` 按 scope 动态重建；仅 active；稳定版本 hash；来源与置信度可追溯 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 完成 | 画像 UI、来源可追溯、从日/阶段规划复盘显式提炼候选；浏览器端手工复核待做 |
 | 8. 外部记忆职责与权威边界 | 明确 LifeOS 如何组合实际要使用的 ai-memory 与 TencentDB，避免相互替代或重复权威 | 完成（已按用户纠正修订） | 两个后端均是目标能力；ai-memory 管项目连续性，TencentDB 管 L1-L3，LifeOS 管来源/审核/编排；明确本地 store 为迁移期实现 |
-| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 待开始 | 先验证 TencentDB approval gate 与身份映射，再做两条隔离纵向切片、一次性迁移/回滚；禁止长期双写 |
+| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 本地 HTTP mock 纵向验收完成；真实后端验收未完成 | 两适配器及显式 scope/binding 已实现；37 项回归通过；真实后端、L2/L3、迁移/回滚仍待隔离环境验收 |
 | 10. 评估与效率 | 评估召回正确性、隔离性、可解释性；再量化成本与效率 | 待开始 | 小型评测集与基线；成本优化放在正确性之后 |
 
 ## 阶段 0 验收记录
@@ -244,6 +244,21 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 接口仍有明确待验收项：TencentDB v3 API 如何满足 LifeOS 用户审核后写入 L1；L0 原始内容复制/引用策略；LifeOS 用户/项目/场景到 TencentDB team/agent/user/session 的身份映射；跨系统纠正/撤回/删除与一次性迁移。
 - 阶段 8 现在只完成目标职责与权威边界设计，不代表任何外部后端已集成。阶段 9 改为实际适配与切换，阶段 10 才做评测、cost/efficiency。
 
+## 阶段 9 进度记录（TencentDB L1 首个代码切片）
+
+- 阶段 9 初版新增 `lifeos/memory/providers/tencentdb.py` 并确认旧上游 `/atomic/update` 是 update-only，未绑定首写当时 fail-closed。该初版状态已由下方 2026-10-05 记录更新：LifeOS 当前按本地 Draft PR #1604 的 `/v3/atomic/create` 契约走首次创建；仍未完成真实 Gateway 联调。
+- 只有 LifeOS 用户已批准并 commit 的 active Memory 才能写入 L1；候选状态直接调用 provider 会被拒绝。规划/复盘候选、对话反思候选和用户反馈候选都沿用同一个批准闸门；原始 LifeOS 对话事件仍留在本地，不复制到 TencentDB L0。
+- `POST /memory/candidates/{id}/commit` 在本地 commit 后尝试同步；错误会以不含正文的错误类型保存为 `provider_sync=pending`，可通过 `POST /memory/providers/tencentdb/sync-pending` 重试。纠正/撤回会尝试删除旧远端 L1 并写入新版本；召回时额外以本地 active ID 白名单拦截远端陈旧项。
+- ChatRuntime 已将 TencentDB L1 召回并入本轮上下文；远端结果必须带有效 LifeOS provenance、在本地仍 active，且 scope 可见，否则拒绝注入。provider 故障 fail-open：保留本地召回，并记录不含敏感内容的 trace 错误类型。
+- 适配器通过环境变量启用：`LIFEOS_TDAI_ENDPOINT`、`LIFEOS_TDAI_SERVICE_ID`、`LIFEOS_TDAI_TEAM_ID`、`LIFEOS_TDAI_AGENT_ID`、`LIFEOS_TDAI_USER_ID`，可选 `LIFEOS_TDAI_API_KEY`、`LIFEOS_TDAI_TIMEOUT_SECONDS`。必须提供完整身份；本阶段只允许 loopback Gateway，未配置时完全关闭。未运行 Gateway 联调，也未发送任何真实记录。
+- 官方 v3 SDK 契约核对：`updateAtomic` 使用身份、session、id、content、background；`searchAtomic` 使用身份、query、limit；`deleteAtomic` 按明确 ids 删除。服务端 handler 进一步证明 update 只更新既有 ID；本地 Draft PR #1604 补充 create-only API 契约，LifeOS 适配器已按该契约改造（见 2026-10-05 记录）。不能把 `/offload/ingest` 异步抽取误当直接写入替代。
+- scope 隔离约束：上游 `searchAtomic` 请求没有 `session_id` 字段，不能依赖服务端按项目/场景过滤。因此 LifeOS 将 scope 保存在 `background` provenance 并在本地 fail-closed 过滤；无合法 provenance 的远端结果不参与召回。该机制尚待真实 Gateway 契约测试验证。
+- 当前对话以“对话事件 → 反思候选 → 用户批准 → L1”接入，未做原始 L0 复制；multi-agent 轨迹尚无稳定协议，后续以含 `source_ref/scope/agent/task/time/event_type` 的事件适配，不要求等 executor 完工。
+- `ai-memory` 尚未接入：它继续负责 coding project wiki/lifecycle/handoff 的权威与召回；LifeOS 不复制其原始轨迹或 wiki。需要沉淀为通用用户认知时，再回到 LifeOS 候选/审批后进入 TencentDB。阶段 9 后续仍须显式绑定 workspace/project 并完成真实只读召回隔离测试。
+- 新增 [`docs/tencentdb-approved-atomic-create-proposal.md`](tencentdb-approved-atomic-create-proposal.md)：最初记录审核友好的 create API 契约建议；后续据此准备 Draft PR #1604，细节见 `docs/tencentdb-atomic-create-pr-handoff.md`。
+- 迁移/切换尚未发生。本地 `.lifeos/memory.json` 仍是现行权威；此切片用于接口/状态验证，不代表已有 active 数据已迁移或已进入长期双写。
+- 初版离线回归覆盖身份配置 fail-closed、loopback 限制、L1 provenance、HTTP 契约、scope 过滤和 active-ID 白名单；因 create-only API 当时尚不存在，首写被 fail-closed。该部分现由 2026-10-05 纵向切片更新：新建/更新分流和生命周期重试测试已加入，全部仍为合成数据，纠正/撤回实际行为仍需隔离 Gateway 验收。
+
 ## 风险与未决决策
 
 - 每日/阶段记录当前采用“用户手动撰写认知并提交候选”的显式触发方式；后续如增加 AI 辅助提炼，需单独设计授权、确认、错误更正和范围选择，不可静默自动写入。
@@ -251,7 +266,8 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 缺失 `project_id` 的候选必须使用 `unassigned` scope，且当前检索器排除该类记录。
 - 自动场景/项目识别尚未实现；在设计出可审计、可纠正的 resolver 与 fail-closed fallback 前，UI 未传 scope 时应保持 global-only。
 - `/memory` 当前返回整个内部 store；后续设计需要考虑 API 向用户暴露范围、候选和运行态存储的分离。
-- ai-memory 项目身份映射、TencentDB 业务身份映射和审批前置写入尚未实现；未通过隔离测试前不启用生产外部写入/召回。
+- ai-memory workspace/project 显式映射与只读适配仍未实现；TencentDB 仅完成首个 L1 代码切片，尚未通过真实 Gateway 契约联调和完整隔离测试；本阶段禁止生产/远程写入。
+- TencentDB L2/L3 生成、读取及 generation refs 尚未接入；当前 scope 过滤依赖 TencentDB 搜索结果稳定返回 `background`，必须用真实 Gateway 验证。
 - 成本和效率优化暂不作为当前实现阶段的目标；先建立召回正确性、隔离性和可追溯性基线。
 
 ## 本次最新验证记录（2026-10-03）
@@ -266,11 +282,57 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 本次应用户反馈修订阶段 8 架构方向：只改文档，`git diff --check` 通过；运行测试集无需重跑，因无代码变更。
 - 自动场景识别与自然语言画像总结未实现。
 - 阶段 8 只修改 `docs/memory-provider-boundaries.md`、整体架构和交接文档；工作区原有未跟踪的上游仓库、图稿和交接内容均保留。
+- 阶段 9 TencentDB L1 当前切片：`python -m unittest discover -s tests -v` **28 tests passed**；`python -m compileall -q lifeos tests` 和 `git diff --check` 通过。新增的 404 合成测试对应上游已读到的服务端行为；本机 TencentDB Gateway 尚未运行，因此无真实服务 E2E。
+- 2026-10-03 进一步核对 TencentDB 当前默认分支 `feat/server_team`：部署文档虽列 `/v2/atomic/add` 并声称有 Service E2E，实际路由只有 `/atomic/update/query/search/delete/count`；`handleAtomicUpdate` 对缺失 ID 返回 404；TS/Python SDK 均无 L1 create/add；当前 checkout 也没有文档所列的 MemoryCore E2E 脚本或 MemoryCore 测试文件。结论是“文档与代码不一致，实际创建路由缺失”。
+- 新发现的实现阻塞：`IMemoryStore` 仅提供 `upsertL1`。本仓库 TCVDB adapter 使用覆盖式 upsert，故不能以 read-then-upsert 实现“相同请求重试幂等、不同 payload 冲突且绝不覆写”的 atomic create。官方 VectorDB `/document/upsert` 文档称同 ID 会替换，但官方 FAQ 又称 insert 不覆盖已有 ID；FAQ 未说明对应 endpoint/SDK method、版本或并发保证。TCVDB 原语结论应保持“待确认”，不能断言服务端没有。
+- 已更新 [`docs/tencentdb-approved-atomic-create-proposal.md`](tencentdb-approved-atomic-create-proposal.md)，补入默认分支核验和存储层原子写阻塞；另准备 [`docs/tencentdb-atomic-create-issue-draft.md`](tencentdb-atomic-create-issue-draft.md) 作为待审 issue 草稿。下一步应先请 TencentDB 维护者确认 TCVDB 可用的条件插入/幂等语义、API 命名与文档/E2E discrepancy，再实施跨后端 handler、store、SDK 与测试；本机克隆位于 `upstream/TencentDB-Agent-Memory`，当前 `feat/server_team` 工作区未修改。
+- 用户已报告该 issue 已提交；源码公开，因此转为自行基于当前代码准备 PR，而非等待维护者回复。
+- 2026-10-04 上游分支 `feat/atomic-create-approved-memory` 已新增 `/v3/atomic/create` 路由（v3-only）、TS/Python v3 SDK、Gateway 合成测试、SQLite audit CHECK 迁移，并扩展 `metadata` 到 create→query/search 往返。用例覆盖 v2 不暴露 create、新建、相同 payload 重试、不同 payload 冲突、跨用户隐藏、缺少锁后端 fail-closed、provenance round-trip；部署文档中的虚构 `/v2/atomic/add` 已移除，缺失的 Service E2E 已标记为当前 checkout 不可复现。
+- 2026-10-04 再核验修正：不应只把 PR 承诺收窄成“Gateway 内由 lease 协调”，因为该方案仍调用覆盖式 `upsertL1`，不能阻止绕开 Gateway 的写入，也没有写入 fencing；租约到期后在途 upsert 不可撤销，故仍可能覆盖，不能作为 create-only API 保留。官方 `/document/update` 是已有文档的更新路径；VectorDB `/document/upsert` 文档称同 ID 替换，而官方 FAQ 又称 insert 不覆盖。FAQ 未指出具体 endpoint/SDK method、版本和并发保证，TCVDB 原语状态应视为未确认。详情和新的实现方案已写入 [`docs/tencentdb-approved-atomic-create-proposal.md`](tencentdb-approved-atomic-create-proposal.md)。
+- 2026-10-04 已按用户同意开始重做：`IMemoryStore` 增加可选 `createL1`；SQLite 用普通 INSERT（同主键冲突不会更新），Mongo standalone/replica set 用 `insertOne`（重复键返回冲突）；Gateway 现在用存储层插入结果裁决竞态，不再把分布式 lease 当原子性依据；同 payload 并发重试读回后幂等成功，异 payload 冲突。TCVDB 未实现能力，Mongo sharded topology 也因全局唯一键不确定而禁用；两者 Gateway 均返回 `501`，不调用覆盖式 upsert。新增 Gateway 并发同/异 payload 与 unsupported store 测试、SQLite store 测试、Mongo fake-driver 单测和 shared store contract 测试；API/deployment/SDK 文档及 changelog 已注明支持范围。
+- MongoDB 官方文档说明分片集合在 `_id` 非 shard key 时只按 shard 强制唯一；当前存储层利用既有 `hello` topology probe 对 sharded 部署禁用 create。若未来为 Mongo sharded 设计包含全局 ID 的唯一 shard/index 方案，再单独启用。证据：[MongoDB sharded unique index 限制](https://www.mongodb.com/docs/manual/core/sharding-shard-key-indexes/)。
+- 本轮新增真实 SQLite store 测试（重复 ID 不覆盖）与 Mongo insertOne fake-driver 单测（重复键不覆盖、其他错误继续抛出），以及 Gateway 同/异 payload 并发与 TCVDB unsupported 测试；这些测试尚未执行。
+- 本轮验证：Node 24 `--experimental-strip-types --check` 对 router、Gateway/store tests、SQLite/Mongo store、store types 通过；`git diff --check` 通过。`npm test -- --run src/gateway/v2-router.atomic-create.test.ts` 未能运行，因无 `node_modules`/Vitest；未安装依赖，尚无 TS typecheck 或真实 SQLite/Mongo Gateway 验收。工作分支仍 `feat/atomic-create-approved-memory`，未 commit/push/PR。
+- 2026-10-04 本轮复核：Node 24 `--experimental-strip-types --check` 对 Router、SQLite/Mongo store 和新增三个测试文件通过；nested `git diff --check` 通过。确认 shared store contract 目前只有定义、没有调用方，故新增 contract test 不会自动执行；已有具体 SQLite 测试及 Mongo fake-driver 测试补上覆盖。依赖目录不存在，Vitest 与 TypeScript typecheck 仍无法执行；按用户要求未安装。进一步检查确认本仓库 TCVDB client 只调 `/document/upsert`；腾讯官方 Go SDK API 模型公开 `UpsertReq`、`UpdateReq`，未发现独立 document insert request，但 FAQ 仍称 insert 不覆盖且未给出并发保证。结论仍是“现有 adapter 无原子 create”，不是“服务端确定没有原语”。方案与 issue 草稿已写清待维护者澄清的问题。未 commit/push/PR。
+- 当前明确的下一步 goal：获取 FAQ 所指 insert 操作的具体 endpoint/SDK method、版本、重复 ID 响应与并发保证；再决定是否能实现 TCVDB `createL1`。同时在依赖已提供的环境中运行本分支 Vitest 与 TS typecheck。在这两项未完成前，不把该分支视为可提 PR 的完整 TCVDB 能力实现。
+- 2026-10-04 按用户授权已创建 Draft PR [#1604](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1604)，base=`feat/server_team`，head=`yubr-zzh:feat/atomic-create-approved-memory`；commit `9979d4e` 带 DCO sign-off。PR 如实注明当前 partial support、TCVDB fail-closed、文档矛盾待维护者澄清，以及 Vitest/typecheck 未运行。当前 fork 原先没有该分支，已成功推送；上游没有被直接推送。尚未合并。
 
 ## 交接给下一位 Agent
 
+### 2026-10-05 阶段 9 LifeOS 腾讯云 L1 写入纵向切片（覆盖上方旧状态）
+
+- LifeOS `TencentDBMemoryAdapter` 现在按腾讯仓库本地 Draft PR #1604 的契约路由：未绑定时 `/v3/atomic/create`，绑定相同确定性远端 ID 时 `/v3/atomic/update`；binding 不一致 fail closed。
+- 对已批准 active memory 才构造外发 payload；显式映射类别 `user/project/feedback/reference` 到 TencentDB `persona/work_fact/episodic/work_artifact`，附 LifeOS source/scope/confidence provenance。请求身份仍必须来自完整显式配置，Gateway 仅允许 loopback。
+- 修复 provider-sync 重试状态会清空 remote ID 的问题；若更新请求成功但响应超时，重试仍会走 update。修正 memory 使用新 ID，移除从旧 memory 复制来的 provider binding，避免错误更新旧记录。
+- 验证：5 个聚焦测试通过；`python -m unittest discover -s tests -v` **30 tests passed**。测试使用 fake transport 和本机合成 HTTP stub；未安装依赖、未启动真实 TencentDB Gateway、未发送真实用户数据。
+- 上游依赖状态：`upstream/TencentDB-Agent-Memory` 本地分支 `feat/atomic-create-approved-memory`，Draft PR #1604 尚未合并；它的 atomic/create 未支持 TCVDB（unsupported backend 会 fail closed）。因此这只是按待审 API 契约准备 LifeOS adapter，不能算真实 Gateway / TCVDB 端到端适配完成。
+- 下一步 goal：在 PR #1604 API 契约稳定且有可运行的隔离 Gateway/backend 后，用合成租户验证首次 create、相同 payload 重试、不同 payload 冲突、更新、纠正、删除和 recall provenance/scope；之后再处理 L2/L3 和 ai-memory 项目 adapter。身份按 project/scenario 映射与后端物理隔离仍需设计/实测，当前本地过滤不等同物理隔离。
+- 本次只修改 LifeOS adapter、生命周期同步状态处理、回归测试和两份阶段文档；未修改 nested TencentDB 源码，未 commit/push/PR。保留所有原有未跟踪文件和用户工作。
+
+### 2026-10-05 阶段 9 ai-memory 项目只读与提示词传递切片
+
+- 新增 `lifeos/memory/providers/ai_memory.py`：Loopback-only `/api/v1/search` + page-read client；只接受精确的 `LIFEOS_AIMEMORY_PROJECT_MAP`，不 fallback 到全局/未映射项目；限制最多 3 页、单页 6,000 字符，只读，不创建或改写 ai-memory 内容。
+- ChatRuntime 仅在本轮显式 `memory_scope.kind=project` 且存在精确映射时查 ai-memory。页面文本只作为当前模型请求的临时证据；LifeOS event/trace 仅记录 provider/source refs/数量，不保存外部页面正文。
+- 发现并修复上下文协议缺陷：API 分支的 LLM adapter 会归一化消息，只发送标准 `role`/`content`，因此旧 Executor 的自定义 `memory` 字段会被静默丢弃。Executor 现将 approved memory 与 project evidence 以 JSON 数据块加入用户消息文本，并在 system 指令中标记为不可信引用材料；敏感正文不进入 trace/event。
+- TencentDB 身份隔离补齐：`LIFEOS_TDAI_SCOPE_MAP` 显式映射 `project:<id>` / `scenario:<type>` 到 team/agent/user/session；未映射 scope 不发送写入或搜索请求。provider sync 保存 scope+坐标指纹；重试、纠正和删除校验 binding，配置映射漂移 fail closed。
+- 环境配置入口：TencentDB 使用既有 `LIFEOS_TDAI_*` 基础变量及 `LIFEOS_TDAI_SCOPE_MAP` JSON；ai-memory 使用 `LIFEOS_AIMEMORY_ENDPOINT`、可选 `LIFEOS_AIMEMORY_API_TOKEN` 和 `LIFEOS_AIMEMORY_PROJECT_MAP` JSON。两者当前都要求 loopback 服务。
+- 验证（本记录初版）：`python -m unittest discover -s tests -v` **35 tests passed**；`python -m compileall -q lifeos tests`、`git diff --check` 通过。调用为 fake transport/loopback stub，没有真实 ai-memory daemon 或 TencentDB Gateway E2E，也未发送真实个人数据。
+- 阶段 9 未完成：缺 TencentDB create PR merge/可运行 backend；TCVDB atomic create unsupported；TencentDB L2/L3 + generation refs 和实际远端生命周期未接；ai-memory live token/project isolation 未接；迁移切换/回滚未做。不能用离线测试宣称真实适配完成。
+- 同步只读审查远程 `origin/api&nonAgent`（`0886317`）：它是当前 `zhang-memory` 基线的直接后代，但含 31 个文件、约 8.5k 行变更；改动与本地未提交的 `server.py`、Chat runtime、executor、测试文件重叠。当前不能在脏工作区直接合并，也不建议未验收就整支采纳。
+- 审查发现需先处理的风险：API 无认证但可配置非 loopback 监听；模型 API key 以明文保存在 `.lifeos/models.json`（Windows 上 `chmod(0600)` 不能作为 ACL 保障）；`ThreadingHTTPServer` 并发访问尚无锁的 JSON-backed Memory/Event 等状态，可能丢失更新；`/models/test` 可使用请求提供的自定义 URL，需纳入 SSRF/本地服务访问边界。远程分支测试本轮未运行，不能宣称已通过。
+- 后续建议先保护当前阶段 9 改动并完成可运行服务的端到端门槛；再按 API 分支功能切片验证、修正上述边界和补并发回归测试，最后才决定是否整合。当前未 commit/push，保留现有工作区改动。
+
+### 2026-10-05 阶段 9 本地 HTTP mock 验收
+
+- 新增两个仅含合成数据的 loopback HTTP mock 集成测试：ai-memory mock 验证真实 HTTP/JSON/Bearer 流程、显式 workspace/project 参数及拒绝隔壁项目命中；TencentDB mock 连接真实 LifeOS 审核 API 与真实 `urlopen` adapter，覆盖候选不外发、首次 create 返回 503、pending 重试 create、重复批准走 update、按允许 ID 召回、纠正时旧 ID 删除/新 ID 创建、撤回删除新 ID。
+- TencentDB mock 使用确定性 create-only 语义，冲突 payload 返回 409；这些用例验证的是 LifeOS client 与本地 mock 的集成行为，不等同于上游真实 Gateway / TCVDB 的兼容性证明。
+- 最新验证：`python -m unittest discover -s tests -v` **37 tests passed**；`python -m compileall -q lifeos tests` 与 `git diff --check` 通过。无真实 key、真实后端或个人记忆参与。
+- 阶段 9 仍未整体完成：真实上游 API E2E、TencentDB L2/L3 生成及 refs、ai-memory daemon 权限/邻接项目隔离、迁移/回滚尚未验收；当前不切换权威、不双写，不 commit/push。
+
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2 至阶段 8（修订后目标边界设计）已完成；下一步阶段 9 是实际集成两者：先验证 TencentDB v3 身份/审批门，再做 TencentDB L1-L3 与 ai-memory 项目 continuity 两条隔离切片，规划本地 store 一次性迁移。阶段 10 再建立召回/隔离/可解释评测及成本效率基线。当前两个后端都尚未接入；不得把目标架构描述为已实现。
+3. 阶段 2 至阶段 8（修订后目标边界设计）已完成；阶段 9 TencentDB contribution 尚未验收。当前分支已开始采用存储层 insert-only；SQLite/Mongo 已有初步实现，TCVDB 明确 unsupported。不能声称 LifeOS 已能经 TCVDB 首次写入，且测试/类型检查未跑完。
+4. 当前实现分支：`upstream/TencentDB-Agent-Memory` 的 `feat/atomic-create-approved-memory`（基于 `feat/server_team`）。变更含 Gateway schema/route、L1 audit 类型与 SQLite 旧表迁移、SQLite/Mongo 初步 `createL1`、TS/Python v3 SDK、中英文 README/API 文档、metadata query/search round-trip、并发与 unsupported-backend 测试。Node syntax checks 和 `git diff --check` 通过；Vitest 不可运行（无依赖且未安装）；尚无 TS typecheck/真实 store/Gateway E2E。尚未 commit/push/open PR。
+5. 下一步：先补真实 SQLite `createL1` 测试；检验 Mongo duplicate key 与 sharded ID 限制；审查 SQLite migration/audit failure 行为；然后在获准且环境可用后跑 Vitest/typecheck/Gateway tests。并行继续核实 TCVDB insert-only 原语；该能力未实现前，不能算解决 LifeOS 首写。不要将当前分支提为已完整支持 TCVDB 的 PR；用户自己提交 PR，未经明确授权不 commit/push/open PR。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。

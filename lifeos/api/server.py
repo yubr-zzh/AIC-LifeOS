@@ -209,9 +209,19 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if provider is None:
             return item
         try:
+            existing_binding = (item.get("provider_sync") or {}).get("remote_scope_key")
+            remote_scope_key = self._provider_scope_key(
+                provider, item.get("scope"), bound_key=existing_binding
+            )
+            item = self.agent.memory.set_provider_sync(
+                item["id"], "pending", remote_scope_key=remote_scope_key
+            )
             provider.write_approved_memory(item)
             return self.agent.memory.set_provider_sync(
-                item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+                item["id"],
+                "synced",
+                remote_id=f"lifeos-{item['id']}",
+                remote_scope_key=remote_scope_key,
             )
         except Exception as exc:
             # The local approval is durable; deterministic remote IDs make a
@@ -219,6 +229,23 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             return self.agent.memory.set_provider_sync(
                 item["id"], "pending", error=type(exc).__name__
             )
+
+    @staticmethod
+    def _provider_scope_key(provider, scope, *, bound_key=None):
+        resolver = getattr(provider, "scope_key_for", None)
+        current_key = resolver(scope) if callable(resolver) else None
+        if bound_key is not None and current_key is not None and bound_key != current_key:
+            raise RuntimeError("TencentDB scope identity changed since the memory was bound")
+        return bound_key if bound_key is not None else current_key
+
+    @staticmethod
+    def _delete_remote_memory(provider, item):
+        sync = item.get("provider_sync") or {}
+        return provider.delete_approved_memory(
+            item["id"],
+            scope=item.get("scope"),
+            remote_scope_key=sync.get("remote_scope_key"),
+        )
 
     def _handle_tencentdb_sync_pending(self):
         provider = getattr(self.agent, "external_memory", None)
@@ -232,12 +259,22 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                 continue
             try:
                 if item.get("status", "active") == "active":
+                    existing_binding = (item.get("provider_sync") or {}).get("remote_scope_key")
+                    remote_scope_key = self._provider_scope_key(
+                        provider, item.get("scope"), bound_key=existing_binding
+                    )
+                    item = self.agent.memory.set_provider_sync(
+                        item["id"], "pending", remote_scope_key=remote_scope_key
+                    )
                     provider.write_approved_memory(item)
                     updated = self.agent.memory.set_provider_sync(
-                        item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+                        item["id"],
+                        "synced",
+                        remote_id=f"lifeos-{item['id']}",
+                        remote_scope_key=remote_scope_key,
                     )
                 else:
-                    provider.delete_approved_memory(item["id"])
+                    self._delete_remote_memory(provider, item)
                     updated = self.agent.memory.set_provider_sync(item["id"], "deleted")
                 outcomes.append({"memory_id": item["id"], "status": updated["provider_sync"]["status"]})
             except Exception as exc:
@@ -276,13 +313,20 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if provider is not None and previous and previous_sync in {"synced", "pending"}:
             remote_deleted = False
             try:
-                provider.delete_approved_memory(memory_id)
+                self._delete_remote_memory(provider, previous)
                 self.agent.memory.set_provider_sync(memory_id, "deleted")
                 remote_deleted = True
                 if action == "correct":
+                    remote_scope_key = self._provider_scope_key(provider, item.get("scope"))
+                    item = self.agent.memory.set_provider_sync(
+                        item["id"], "pending", remote_scope_key=remote_scope_key
+                    )
                     provider.write_approved_memory(item)
                     item = self.agent.memory.set_provider_sync(
-                        item["id"], "synced", remote_id=f"lifeos-{item['id']}"
+                        item["id"],
+                        "synced",
+                        remote_id=f"lifeos-{item['id']}",
+                        remote_scope_key=remote_scope_key,
                     )
                 else:
                     item = self.agent.memory.set_provider_sync(memory_id, "deleted")

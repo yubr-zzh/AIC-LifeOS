@@ -5,6 +5,7 @@ import threading
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 from lifeos.agent.runtime import LifeOSAgent
@@ -13,6 +14,7 @@ from lifeos.api.server import LifeOSRequestHandler
 from lifeos.event.bus import ReliableEventBus
 from lifeos.llm.client import LLMClient
 from lifeos.memory.manager import MemoryManager
+from lifeos.memory.providers.ai_memory import AiMemoryProjectAdapter, AiMemoryProjectConfig
 from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBError, TencentDBMemoryAdapter
 from lifeos.memory.retriever import MemoryRetriever
 from lifeos.security.permission import PermissionManager
@@ -46,6 +48,307 @@ class CoreRegressionTests(unittest.TestCase):
         complete["LIFEOS_TDAI_ENDPOINT"] = "https://memory.example.com"
         with self.assertRaisesRegex(ValueError, "loopback Gateway"):
             TencentDBConfig.from_env(complete)
+
+    def test_tencentdb_scope_mappings_are_explicit_and_fail_closed(self):
+        env = {
+            "LIFEOS_TDAI_ENDPOINT": "http://127.0.0.1:8420",
+            "LIFEOS_TDAI_SERVICE_ID": "test-instance",
+            "LIFEOS_TDAI_TEAM_ID": "global-team",
+            "LIFEOS_TDAI_AGENT_ID": "global-agent",
+            "LIFEOS_TDAI_USER_ID": "global-user",
+            "LIFEOS_TDAI_SCOPE_MAP": json.dumps({
+                "project:lifeos": {
+                    "team_id": "team-1",
+                    "agent_id": "agent-lifeos",
+                    "user_id": "user-1",
+                    "session_id": "session-lifeos",
+                }
+            }),
+        }
+        config = TencentDBConfig.from_env(env)
+        adapter = TencentDBMemoryAdapter(config, transport=lambda _path, payload: payload)
+        self.assertEqual(
+            adapter.coordinates_for_scope({"kind": "project", "project_id": "lifeos"}),
+            {
+                "team_id": "team-1",
+                "agent_id": "agent-lifeos",
+                "user_id": "user-1",
+                "session_id": "session-lifeos",
+            },
+        )
+        with self.assertRaisesRegex(TencentDBError, "no explicit.*mapping"):
+            adapter.coordinates_for_scope({"kind": "project", "project_id": "unmapped"})
+        with self.assertRaisesRegex(ValueError, "requires team_id, agent_id, user_id, and session_id"):
+            TencentDBConfig.from_env({
+                **env,
+                "LIFEOS_TDAI_SCOPE_MAP": '{"project:lifeos":{"agent_id":"only-one"}}',
+            })
+
+    def test_ai_memory_project_adapter_requires_explicit_loopback_mapping(self):
+        self.assertIsNone(AiMemoryProjectConfig.from_env({}))
+        with self.assertRaisesRegex(ValueError, "endpoint and explicit project map"):
+            AiMemoryProjectConfig.from_env({"LIFEOS_AIMEMORY_ENDPOINT": "http://127.0.0.1:49374"})
+        with self.assertRaisesRegex(ValueError, "loopback server"):
+            AiMemoryProjectConfig.from_env({
+                "LIFEOS_AIMEMORY_ENDPOINT": "https://memory.example.com",
+                "LIFEOS_AIMEMORY_PROJECT_MAP": '{"lifeos":{"workspace":"default","project":"lifeos"}}',
+            })
+
+    def test_ai_memory_project_search_is_scoped_and_resolves_bounded_page_evidence(self):
+        calls = []
+
+        def fake_transport(url, headers):
+            calls.append((url, headers))
+            if "/api/v1/search?" in url:
+                return [
+                    {"workspace": "default", "project": "lifeos", "path": "decisions/plan.md", "title": "Plan"},
+                    {"workspace": "default", "project": "other", "path": "notes/private.md", "title": "Other"},
+                    {"workspace": "default", "project": "lifeos", "path": "../outside.md", "title": "Bad path"},
+                ]
+            return {
+                "workspace": "default",
+                "project": "lifeos",
+                "path": "decisions/plan.md",
+                "title": "Plan",
+                "kind": "decision",
+                "body_markdown": "approved project evidence",
+            }
+
+        config = AiMemoryProjectConfig(
+            endpoint="http://127.0.0.1:49374",
+            api_token="test-token",
+            project_map={"lifeos": {"workspace": "default", "project": "lifeos"}},
+        )
+        adapter = AiMemoryProjectAdapter(config, transport=fake_transport)
+        self.assertEqual(adapter.retrieve("plan", scope={"kind": "global"}), [])
+        self.assertEqual(adapter.retrieve("plan", scope={"kind": "project", "project_id": "unmapped"}), [])
+        self.assertEqual(calls, [])
+
+        evidence = adapter.retrieve("plan", scope={"kind": "project", "project_id": "lifeos"})
+
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["content"], "approved project evidence")
+        self.assertEqual(evidence[0]["source_ref"]["path"], "decisions/plan.md")
+        self.assertTrue(all(headers["Authorization"] == "Bearer test-token" for _, headers in calls))
+        self.assertIn("workspace=default", calls[0][0])
+        self.assertIn("project=lifeos", calls[0][0])
+        self.assertEqual(len(calls), 2, "only same-project, safe-path hits may be opened")
+
+    def test_ai_memory_adapter_isolated_http_mock_rejects_neighbor_project_hits(self):
+        requests = []
+        search_scopes = []
+
+        class AiMemoryStubHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def _send(self, value):
+                payload = json.dumps(value).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def do_GET(self):
+                requests.append((self.path, self.headers.get("Authorization")))
+                parsed = urlparse(self.path)
+                if parsed.path == "/api/v1/search":
+                    query = parse_qs(parsed.query)
+                    search_scopes.append(query)
+                    self._send([
+                        {
+                            "workspace": "synthetic-workspace",
+                            "project": "lifeos-sandbox",
+                            "path": "decisions/synthetic.md",
+                            "title": "Synthetic decision",
+                        },
+                        {
+                            "workspace": "synthetic-workspace",
+                            "project": "neighbor-project",
+                            "path": "private.md",
+                            "title": "Must be rejected",
+                        },
+                    ])
+                    return
+                if parsed.path.endswith("/decisions/synthetic.md"):
+                    self._send({
+                        "workspace": "synthetic-workspace",
+                        "project": "lifeos-sandbox",
+                        "path": "decisions/synthetic.md",
+                        "title": "Synthetic decision",
+                        "kind": "decision",
+                        "body_markdown": "Only synthetic test evidence.",
+                    })
+                    return
+                self.send_error(404)
+
+        server = HTTPServer(("127.0.0.1", 0), AiMemoryStubHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        adapter = AiMemoryProjectAdapter(AiMemoryProjectConfig(
+            endpoint=f"http://127.0.0.1:{server.server_address[1]}",
+            api_token="synthetic-token",
+            project_map={"lifeos-sandbox": {
+                "workspace": "synthetic-workspace",
+                "project": "lifeos-sandbox",
+            }},
+        ))
+        self.assertEqual(adapter.retrieve("synthetic", scope={"kind": "global"}), [])
+        evidence = adapter.retrieve(
+            "synthetic", scope={"kind": "project", "project_id": "lifeos-sandbox"}
+        )
+
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["content"], "Only synthetic test evidence.")
+        self.assertEqual(evidence[0]["source_ref"]["project"], "lifeos-sandbox")
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(all(token == "Bearer synthetic-token" for _, token in requests))
+        self.assertEqual(search_scopes[0].get("workspace"), ["synthetic-workspace"])
+        self.assertEqual(search_scopes[0].get("project"), ["lifeos-sandbox"])
+
+    def test_tencentdb_approval_retry_lifecycle_against_isolated_http_mock(self):
+        records = {}
+        calls = []
+        create_attempts = {"count": 0}
+
+        class TencentDBStubHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+            def _respond(self, status, data):
+                payload = json.dumps({"code": 0 if status == 200 else status, "data": data}).encode()
+                self.send_response(status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def do_POST(self):
+                payload = json.loads(self.rfile.read(int(self.headers.get("content-length", "0"))))
+                calls.append((self.path, payload, self.headers.get("Authorization")))
+                remote_id = payload.get("id")
+                if self.path == "/v3/atomic/create":
+                    create_attempts["count"] += 1
+                    if create_attempts["count"] == 1:
+                        self._respond(503, {"message": "synthetic temporary outage"})
+                        return
+                    existing = records.get(remote_id)
+                    if existing and existing != payload:
+                        self._respond(409, {"message": "synthetic create conflict"})
+                        return
+                    records[remote_id] = payload
+                    self._respond(200, {"id": remote_id})
+                    return
+                if self.path == "/v3/atomic/update":
+                    if remote_id not in records:
+                        self._respond(404, {"message": "not found"})
+                        return
+                    records[remote_id] = payload
+                    self._respond(200, {"id": remote_id})
+                    return
+                if self.path == "/v3/atomic/search":
+                    results = [
+                        {key: record[key] for key in ("id", "content", "background")}
+                        for record in records.values()
+                        if all(record.get(key) == payload.get(key) for key in ("team_id", "agent_id", "user_id"))
+                    ]
+                    self._respond(200, {"items": results})
+                    return
+                if self.path == "/v3/atomic/delete":
+                    for item_id in payload.get("ids", []):
+                        records.pop(item_id, None)
+                    self._respond(200, {"deleted": True})
+                    return
+                self._respond(404, {"message": "unknown synthetic route"})
+
+        gateway = HTTPServer(("127.0.0.1", 0), TencentDBStubHandler)
+        gateway_thread = threading.Thread(target=gateway.serve_forever, daemon=True)
+        gateway_thread.start()
+        self.addCleanup(gateway_thread.join, 2)
+        self.addCleanup(gateway.server_close)
+        self.addCleanup(gateway.shutdown)
+
+        adapter = TencentDBMemoryAdapter(TencentDBConfig(
+            endpoint=f"http://127.0.0.1:{gateway.server_address[1]}",
+            service_id="synthetic-lifeos-test",
+            team_id="synthetic-global-team",
+            agent_id="synthetic-global-agent",
+            user_id="synthetic-user",
+            api_key="synthetic-only-key",
+            scope_map={"project:lifeos-sandbox": {
+                "team_id": "synthetic-project-team",
+                "agent_id": "synthetic-project-agent",
+                "user_id": "synthetic-user",
+                "session_id": "synthetic-project-session",
+            }},
+        ))
+        agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        agent.external_memory = adapter
+        candidate = run(agent.memory.propose_update(
+            "direct",
+            {"claim": "synthetic project prefers focused milestones"},
+            category="project",
+            scope={"kind": "project", "project_id": "lifeos-sandbox", "user_id": "synthetic-user"},
+        ))
+        self.assertEqual(records, {}, "candidate creation must not send unapproved memory")
+
+        class LifeOSStubHandler(LifeOSRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+        LifeOSStubHandler.agent = agent
+        LifeOSStubHandler.structured_store = StructuredStore(self.path / "synthetic-lifeos.db")
+        lifeos_api = HTTPServer(("127.0.0.1", 0), LifeOSStubHandler)
+        api_thread = threading.Thread(target=lifeos_api.serve_forever, daemon=True)
+        api_thread.start()
+        self.addCleanup(api_thread.join, 2)
+        self.addCleanup(lifeos_api.server_close)
+        self.addCleanup(lifeos_api.shutdown)
+        api_base = f"http://127.0.0.1:{lifeos_api.server_address[1]}"
+
+        def post(path, body=None):
+            data = json.dumps(body or {}).encode()
+            request = Request(api_base + path, data=data, method="POST")
+            with urlopen(request) as response:
+                return json.load(response)
+
+        first_commit = post(f"/memory/candidates/{candidate['id']}/commit")
+        self.assertEqual(first_commit["item"]["provider_sync"]["status"], "pending")
+        self.assertEqual(records, {}, "failed first create must leave no remote memory")
+        retry = post("/memory/providers/tencentdb/sync-pending")
+        self.assertEqual(retry["results"][0]["status"], "synced")
+        self.assertEqual(list(records), [f"lifeos-{candidate['id']}"])
+        self.assertEqual(records[f"lifeos-{candidate['id']}"]["team_id"], "synthetic-project-team")
+
+        repeated_commit = post(f"/memory/candidates/{candidate['id']}/commit")
+        self.assertEqual(repeated_commit["item"]["provider_sync"]["status"], "synced")
+        self.assertEqual([path for path, _, _ in calls[:3]], [
+            "/v3/atomic/create", "/v3/atomic/create", "/v3/atomic/update"
+        ])
+        recalled = adapter.retrieve(
+            "focused milestones",
+            scope={"kind": "project", "project_id": "lifeos-sandbox", "user_id": "synthetic-user"},
+            allowed_memory_ids={candidate["id"]},
+        )
+        self.assertEqual(recalled["project"][0]["id"], candidate["id"])
+
+        corrected = post(
+            f"/memory/{candidate['id']}/correct",
+            {"content": {"claim": "synthetic project prefers small milestones"}, "reason": "synthetic correction"},
+        )["memory"]
+        self.assertEqual(corrected["provider_sync"]["status"], "synced")
+        self.assertNotIn(f"lifeos-{candidate['id']}", records)
+        self.assertIn(f"lifeos-{corrected['id']}", records)
+
+        retracted = post(f"/memory/{corrected['id']}/retract", {"reason": "synthetic cleanup"})["memory"]
+        self.assertEqual(retracted["status"], "retracted")
+        self.assertEqual(records, {}, "retraction must remove only the synthetic remote atom")
+        self.assertTrue(all(token == "Bearer synthetic-only-key" for _, _, token in calls))
 
     def test_tencentdb_adapter_writes_approved_only_and_fail_closed_filters_scope(self):
         calls = []
@@ -81,6 +384,14 @@ class CoreRegressionTests(unittest.TestCase):
             team_id="test-team",
             agent_id="test-agent",
             user_id="test-user",
+            scope_map={
+                "project:lifeos": {
+                    "team_id": "test-team",
+                    "agent_id": "lifeos-project-agent",
+                    "user_id": "test-user",
+                    "session_id": "lifeos-project-session",
+                }
+            },
         )
         adapter = TencentDBMemoryAdapter(config, transport=fake_transport)
         unapproved = {"id": "pending", "content": {"claim": "x"}, "status": "candidate"}
@@ -91,16 +402,23 @@ class CoreRegressionTests(unittest.TestCase):
         first_write = {
             "id": "new-memory",
             "status": "active",
+            "category": "user",
             "content": {"claim": "approved but not remotely bound"},
         }
-        with self.assertRaisesRegex(TencentDBError, "cannot create"):
-            adapter.write_approved_memory(first_write)
-        self.assertEqual(calls, [], "unsupported first writes must fail before sending content")
+        adapter.write_approved_memory(first_write)
+        self.assertEqual(calls[-1][0], "/v3/atomic/create")
+        self.assertEqual(calls[-1][1]["type"], "persona")
+        self.assertEqual(calls[-1][1]["metadata"]["lifeos_memory_id"], "new-memory")
+        self.assertNotIn("raw transcript", json.dumps(calls[-1][1]))
 
         approved = {
             "id": "memory-1",
             "status": "active",
-            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": adapter.scope_key_for({"kind": "project", "project_id": "lifeos"}),
+            },
             "category": "project",
             "content": {"claim": "approved fact"},
             "source": "structured_entry",
@@ -110,8 +428,52 @@ class CoreRegressionTests(unittest.TestCase):
         adapter.write_approved_memory(approved)
         self.assertEqual(calls[-1][0], "/v3/atomic/update")
         self.assertEqual(calls[-1][1]["team_id"], "test-team")
-        self.assertEqual(calls[-1][1]["session_id"], "lifeos-approved-memory")
+        self.assertEqual(calls[-1][1]["session_id"], "lifeos-project-session")
         self.assertIn("review-1", calls[-1][1]["background"])
+
+        retry_after_ambiguous_update = {
+            **approved,
+            "provider_sync": {
+                "status": "pending",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": adapter.scope_key_for({"kind": "project", "project_id": "lifeos"}),
+            },
+        }
+        adapter.write_approved_memory(retry_after_ambiguous_update)
+        self.assertEqual(calls[-1][0], "/v3/atomic/update")
+
+        mismatched_binding = {
+            **approved,
+            "provider_sync": {
+                "status": "pending",
+                "remote_id": "lifeos-someone-else",
+                "remote_scope_key": "project:lifeos",
+            },
+        }
+        with self.assertRaisesRegex(TencentDBError, "binding does not match"):
+            adapter.write_approved_memory(mismatched_binding)
+
+        mismatched_scope = {
+            **approved,
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": "project:another-project@changed-coordinates",
+            },
+        }
+        with self.assertRaisesRegex(TencentDBError, "scope binding does not match"):
+            adapter.write_approved_memory(mismatched_scope)
+
+        unmapped_project = {
+            **approved,
+            "id": "unmapped-memory",
+            "provider_sync": {},
+            "scope": {"kind": "project", "project_id": "unmapped"},
+        }
+        call_count = len(calls)
+        with self.assertRaisesRegex(TencentDBError, "no explicit.*mapping"):
+            adapter.write_approved_memory(unmapped_project)
+        self.assertEqual(len(calls), call_count, "unmapped scopes must fail before sending content")
 
         grouped = adapter.retrieve(
             "approved fact",
@@ -168,7 +530,11 @@ class CoreRegressionTests(unittest.TestCase):
             "source": "direct",
             "category": "user",
             "status": "active",
-            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": adapter.scope_key_for({"kind": "global"}),
+            },
             "content": {"claim": "wire test"},
             "scope": {"kind": "global"},
         }
@@ -182,7 +548,7 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertTrue(all(item[1]["x-tdai-service-id"] == "test-instance" for item in received))
         self.assertTrue(all(item[1]["authorization"] == "Bearer test-key" for item in received))
         self.assertEqual(received[0][2]["team_id"], "test-team")
-        self.assertEqual(received[0][2]["session_id"], "lifeos-approved-memory")
+        self.assertEqual(received[0][2]["session_id"], "lifeos-global-memory")
         self.assertEqual(received[2][2]["ids"], ["lifeos-memory-1"])
         self.assertEqual(recalled, [hit])
 
@@ -222,12 +588,44 @@ class CoreRegressionTests(unittest.TestCase):
             "source": "direct",
             "category": "user",
             "status": "active",
-            "provider_sync": {"status": "synced", "remote_id": "lifeos-new-memory"},
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-new-memory",
+                "remote_scope_key": adapter.scope_key_for({"kind": "global"}),
+            },
             "content": {"claim": "synthetic only"},
             "scope": {"kind": "global"},
         }
         with self.assertRaises(TencentDBError):
             adapter.write_approved_memory(approved)
+
+    def test_corrected_memory_does_not_inherit_superseded_remote_binding(self):
+        manager = MemoryManager(self.path / "lifeos")
+        candidate = run(manager.propose_update(
+            "direct", {"claim": "before"}, category="user", scope={"kind": "global"}
+        ))
+        original = run(manager.commit_candidate(candidate["id"]))
+        manager.set_provider_sync(original["id"], "synced", remote_id=f"lifeos-{original['id']}")
+
+        corrected = run(manager.correct_memory(original["id"], {"claim": "after"}))
+
+        self.assertNotIn("provider_sync", corrected)
+        persisted_old = next(item for item in manager.memory_records() if item["id"] == original["id"])
+        self.assertEqual(persisted_old["provider_sync"]["remote_id"], f"lifeos-{original['id']}")
+
+    def test_pending_provider_sync_preserves_remote_id_for_safe_retry(self):
+        manager = MemoryManager(self.path / "lifeos")
+        candidate = run(manager.propose_update(
+            "direct", {"claim": "approved"}, category="user", scope={"kind": "global"}
+        ))
+        memory = run(manager.commit_candidate(candidate["id"]))
+        remote_id = f"lifeos-{memory['id']}"
+        manager.set_provider_sync(
+            memory["id"], "synced", remote_id=remote_id, remote_scope_key="global"
+        )
+        pending = manager.set_provider_sync(memory["id"], "pending", error="TimeoutError")
+        self.assertEqual(pending["provider_sync"]["remote_id"], remote_id)
+        self.assertEqual(pending["provider_sync"]["remote_scope_key"], "global")
 
     def test_chat_runtime_uses_external_l1_with_local_active_id_allowlist(self):
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
@@ -264,6 +662,62 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(observations["scope"]["kind"], "global")
         self.assertIn(candidate["id"], {entry["id"] for entry in observations["memory"]["user"]})
         self.assertNotIn("stale-id", {entry["id"] for values in observations["memory"].values() for entry in values})
+
+    def test_project_evidence_is_transient_and_only_fetched_for_explicit_project_scope(self):
+        agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        marker = "TRANSIENT_PROJECT_WIKI_BODY"
+        observations = {"requests": 0}
+
+        class FakeProjectMemory:
+            def retrieve(self, query, scope=None):
+                observations["requests"] += 1
+                observations["scope"] = scope
+                return [{
+                    "provider": "ai-memory",
+                    "project_id": "lifeos",
+                    "title": "Project page",
+                    "content": marker,
+                    "source_ref": {"provider": "ai-memory", "path": "notes/design.md"},
+                }]
+
+        class CaptureExecutor:
+            async def execute_chat_turn(self, user_input, memory, trace_id=None, project_context=None):
+                observations["project_context"] = project_context
+                return {"response": "ok", "tool_calls": [], "tool_results": []}
+
+        agent.chat.project_memory = FakeProjectMemory()
+        agent.chat.executor = CaptureExecutor()
+        run(agent.run("question", memory_scope={"kind": "global"}))
+        self.assertEqual(observations["requests"], 0)
+
+        result = run(agent.run("question", memory_scope={"kind": "project", "project_id": "lifeos"}))
+        self.assertEqual(observations["requests"], 1)
+        self.assertEqual(observations["scope"]["project_id"], "lifeos")
+        self.assertIn(marker, json.dumps(observations["project_context"]))
+        persisted_event = json.dumps(agent.event_bus.all_events()[-1].payload)
+        persisted_trace = json.dumps(agent.trace.get(result["trace_id"]))
+        self.assertNotIn(marker, persisted_event)
+        self.assertNotIn(marker, persisted_trace)
+
+    def test_executor_serializes_memory_as_standard_message_content(self):
+        observed = {}
+
+        class CaptureLLM:
+            async def complete(self, messages):
+                observed["messages"] = messages
+                return {"content": "ok", "tool_calls": []}
+
+        memory = {"user": [{"id": "m1", "content": {"claim": "remember this"}}]}
+        project_context = [{"provider": "ai-memory", "content": "project evidence"}]
+        run(Executor(CaptureLLM()).execute_chat_turn(
+            "question", memory=memory, project_context=project_context
+        ))
+        serialized = json.dumps(observed["messages"], ensure_ascii=False)
+        self.assertIn("remember this", serialized)
+        self.assertIn("project evidence", serialized)
+        self.assertIn("untrusted reference data", serialized)
+        self.assertNotIn('"memory":', serialized)
+        self.assertNotIn('"project_context":', serialized)
 
     def test_markdown_round_trip_preserves_runtime_state_and_ids(self):
         memory = MemoryManager(self.path)
@@ -775,7 +1229,7 @@ class CoreRegressionTests(unittest.TestCase):
                     raise RuntimeError("simulated provider outage")
                 self.writes.append(item["id"])
 
-            def delete_approved_memory(self, memory_id):
+            def delete_approved_memory(self, memory_id, **_kwargs):
                 self.deletes.append(memory_id)
 
         provider = FakeMemoryProvider()
@@ -876,7 +1330,7 @@ class CoreRegressionTests(unittest.TestCase):
             def write_approved_memory(self, item):
                 self.items.append(item)
 
-            def delete_approved_memory(self, _memory_id):
+            def delete_approved_memory(self, _memory_id, **_kwargs):
                 pass
 
         provider = FakeMemoryProvider()
