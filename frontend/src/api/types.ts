@@ -1,4 +1,7 @@
 // Shared TypeScript types for the LifeOS Agent Console.
+import type { DelegationPlan } from "./agentTypes";
+
+export type { DelegationPlan };
 // These mirror the data shapes documented in docs/api-contract.md and the
 // Python runtime in lifeos/event/bus.py, lifeos/memory/, lifeos/skills/.
 
@@ -34,6 +37,7 @@ export interface ChatResponse {
   response: string;
   tool_calls: ToolCall[];
   tool_results?: ToolResult[];
+  delegation?: DelegationPlan;
 }
 
 export interface ChatRequest {

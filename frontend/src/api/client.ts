@@ -97,6 +97,7 @@ export async function sendChat(
     response: data.response,
     tool_calls: Array.isArray(data.tool_calls) ? data.tool_calls : [],
     tool_results: Array.isArray(data.tool_results) ? data.tool_results : [],
+    ...(data.delegation ? { delegation: data.delegation } : {}),
   };
 }
 
@@ -197,6 +198,34 @@ export async function proposeEntryMemoryCandidate(
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify({ content: { claim: input.claim.trim() }, scope: input.scope, category: input.category }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { status: string; candidate: MemoryCandidate };
+}
+
+export interface AgentEvidence {
+  id: string;
+  owner_id: string;
+  session_id: string;
+  agent_id: string;
+  summary: string;
+  occurred_at: string;
+}
+
+export async function listAgentEvidence(sessionId: string, opts?: ApiOptions): Promise<AgentEvidence[]> {
+  const res = await f(opts)(`${getBase(opts)}/agent/evidence?session_id=${encodeURIComponent(sessionId)}`);
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { items: AgentEvidence[] };
+  return data.items;
+}
+
+export async function proposeAgentMemoryCandidate(
+  evidenceId: string, claim: string, projectId: string, opts?: ApiOptions,
+): Promise<{ status: string; candidate: MemoryCandidate }> {
+  const res = await f(opts)(`${getBase(opts)}/agent/evidence/${encodeURIComponent(evidenceId)}/memory-candidates`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ claim, project_id: projectId }),
   });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { status: string; candidate: MemoryCandidate };

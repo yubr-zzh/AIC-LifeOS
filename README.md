@@ -1,5 +1,7 @@
 # LifeOS Agent
 
+Agent 执行结果进入记忆的本地使用流程见 [docs/agent-memory-integration.md](docs/agent-memory-integration.md)。
+
 LifeOS Agent 是一个个人智能体操作系统原型，采用前台 Chat Agent 与异步 Global Agent 协作的架构。
 
 当前仓库聚焦于核心运行时架构，而不是早期的演示产品外壳。核心是一条可靠的智能体数据流：

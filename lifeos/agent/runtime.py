@@ -1,8 +1,10 @@
 from lifeos.agent.chat.runtime import ChatRuntime
+from lifeos.agent.context import AgentContextStore
 from lifeos.agent.executor.executor import Executor
 from lifeos.agent.planner.planner import Planner
 from lifeos.event.bus import ReliableEventBus
 from lifeos.memory.manager import MemoryManager
+from lifeos.memory.agent_evidence import AgentEvidenceStore
 from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBMemoryAdapter
 from lifeos.reflection.engine import ReflectionEngine
 from lifeos.security.permission import PermissionManager
@@ -14,9 +16,10 @@ from lifeos.trace.system import TraceSystem
 class LifeOSAgent:
     """Top-level composition root for foreground and background agents."""
 
-    def __init__(self, llm, storage_dir=".lifeos", external_memory=None):
+    def __init__(self, llm, storage_dir=".lifeos", delegation_enabled=True, external_memory=None):
         self.llm = llm
         self.memory = MemoryManager(storage_dir=storage_dir)
+        self.agent_evidence = AgentEvidenceStore(storage_dir=storage_dir)
         if external_memory is None:
             config = TencentDBConfig.from_env()
             external_memory = TencentDBMemoryAdapter(config) if config else None
@@ -32,6 +35,9 @@ class LifeOSAgent:
             permission_manager=self.permission,
             trace=self.trace,
         )
+        # 7.7.1 决策回路的上下文存储。Bridge 回调 /api/agent-events 时往里追加，
+        # /chat 时取出来进大模型上下文。
+        self.agent_context = AgentContextStore()
         self.chat = ChatRuntime(
             llm=llm,
             memory=self.memory,
@@ -39,6 +45,10 @@ class LifeOSAgent:
             event_bus=self.event_bus,
             trace=self.trace,
             external_memory=self.external_memory,
+            agent_context=self.agent_context,
+            # 之前 planner 在这里被实例化却没人用。接上之后它才不是死代码。
+            planner=self.planner,
+            delegation_enabled=delegation_enabled,
         )
         self.global_agent = GlobalAgentRuntime(
             event_bus=self.event_bus,
@@ -54,8 +64,25 @@ class LifeOSAgent:
             trace=self.trace,
         )
 
-    async def run(self, user_input: str, memory_scope=None):
-        return await self.chat.handle_message(user_input, memory_scope=memory_scope)
+    async def run(self, user_input: str, session_id: str | None = None, memory_scope=None):
+        return await self.chat.handle_message(
+            user_input, session_id=session_id, memory_scope=memory_scope
+        )
+
+    def agent_event(self, kind: str, session_id: str | None, detail: dict,
+                    event_id: str | None = None, owner_id: str | None = None) -> str:
+        """接收 Bridge 回调的决策回路事件（7.7.1）。
+
+        **只往上下文里追加文本**，绝不产生指向 Bridge 的出站调用。
+        返回写进上下文的那句话，方便端点回给 Bridge 做日志。
+        """
+        summary = self.agent_context.tian_jia(session_id or "default", kind, detail or {})
+        if kind == "agent.result" and event_id and owner_id and session_id and summary:
+            self.agent_evidence.record(
+                event_id=event_id, owner_id=owner_id, session_id=session_id,
+                summary=summary,
+            )
+        return summary
 
     async def run_background_once(self, limit=10):
         return await self.global_agent.process_once(limit=limit)

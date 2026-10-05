@@ -2,16 +2,24 @@ import React, { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Store } from "../state/store";
 import { FEEDBACK_RATINGS } from "../api/types";
 import type { FeedbackRating } from "../api/types";
+import type { DelegationPlan } from "../api/agentTypes";
 import { IconSend, IconCopy } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
+import { DelegationCard } from "./DelegationCard";
+import type { AgentActions } from "../hooks/useAgentStream";
+import type { AgentStore } from "../state/agentStore";
 
 interface Props {
   store: Store;
+  /** 有连接才渲染委派卡；没连接时卡片会自己提示「先连接 Agent」。 */
+  agent?: AgentStore;
+  api?: AgentActions;
 }
 
-export function ChatPanel({ store }: Props) {
+export function ChatPanel({ store, agent, api }: Props) {
   const { state, sendMessage } = store;
   const [text, setText] = useState("");
+  const [projectId, setProjectId] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,11 +32,14 @@ export function ChatPanel({ store }: Props) {
     const t = text.trim();
     if (!t || state.loading.chat) return;
     setText("");
-    void sendMessage(t);
+    void sendMessage(t, projectId.trim()
+      ? { kind: "project", project_id: projectId.trim() }
+      : undefined);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // 中文输入法选词按 Enter 会误发送。isComposing 期间不当作提交。
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
     }
@@ -38,9 +49,14 @@ export function ChatPanel({ store }: Props) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div ref={scroller} className="scroll" style={{ flex: 1, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
         {state.messages.map((m) => (
-          <Bubble key={m.id} msg={m} store={store} />
+          <Bubble key={m.id} msg={m} store={store} agent={agent} api={api} />
         ))}
       </div>
+      <label style={{ padding: "6px 16px", fontSize: 12 }}>
+        当前项目 ID（填写后召回该项目已审核的记忆）
+        <input value={projectId} onChange={(event) => setProjectId(event.target.value)}
+          placeholder="例如 lifeos；留空只召回全局记忆" />
+      </label>
       <Composer
         value={text}
         onChange={setText}
@@ -52,7 +68,7 @@ export function ChatPanel({ store }: Props) {
   );
 }
 
-function Bubble({ msg, store }: { msg: ChatMessage; store: Store }) {
+function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; agent?: AgentStore; api?: AgentActions }) {
   if (msg.role === "user") {
     return (
       <div className="arrival" style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -134,9 +150,55 @@ function Bubble({ msg, store }: { msg: ChatMessage; store: Store }) {
             <CopyId value={msg.trace_id} />
           </div>
         ) : null}
+        {msg.delegation && agent && api ? (
+          <DelegationCardBox msg={msg} plan={msg.delegation} agent={agent} api={api} store={store} />
+        ) : null}
         {msg.trace_id && msg.execution === "succeeded" ? <FeedbackRow msg={msg} store={store} /> : null}
       </div>
     </div>
+  );
+}
+
+function DelegationCardBox({
+  msg,
+  plan,
+  agent,
+  api,
+  store,
+}: {
+  msg: ChatMessage;
+  plan: DelegationPlan;
+  agent: AgentStore;
+  api: AgentActions;
+  store: Store;
+}) {
+  const fa = async (zhi: string[]) => {
+    const sid = agent.active?.sessionId;
+    if (!sid) return;
+    agent.setLayout("split");
+    await api.act.send(sid, { instructions: zhi });
+    // 计划就地改成已下发，别让它看起来还能再发一次。
+    store.dispatch({
+      type: "PATCH_DELEGATION",
+      traceId: msg.trace_id ?? "",
+      plan: {
+        ...plan,
+        status: "inflight",
+        items: plan.items.map((i) => ({ ...i, status: i.enabled ? "inflight" : "skipped" })),
+      },
+    });
+  };
+
+  return (
+    <DelegationCard
+      plan={plan}
+      canSend={Boolean(agent.active?.sessionId)}
+      onChange={(p) =>
+        store.dispatch({ type: "PATCH_DELEGATION", traceId: msg.trace_id ?? "", plan: p })
+      }
+      onSend={(zhi) => void fa(zhi)}
+      onOpenPanel={() => agent.setLayout("split")}
+    />
   );
 }
 

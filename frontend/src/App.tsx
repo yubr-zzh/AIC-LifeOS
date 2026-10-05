@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "./state/store";
+import { useAgentStore } from "./state/agentStore";
+import { useAgentStream } from "./hooks/useAgentStream";
 import { listEntries, proposeEntryMemoryCandidate, saveEntry } from "./api/client";
 import type { MemoryScope, StructuredEntryKind } from "./api/types";
 import { ChatPanel } from "./panels/ChatPanel";
+import { AgentPanel } from "./panels/AgentPanel";
+import { AgentsSection } from "./panels/AgentsSection";
+import { AgentPeekBar } from "./panels/AgentPeekBar";
 import { RuntimeRail } from "./panels/RuntimeRail";
 import { EventsPanel } from "./panels/EventsPanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
@@ -19,18 +24,20 @@ type SectionId =
   | "phase-plan"
   | "phase-review"
   | "chat"
+  | "agents"
   | "feedback"
   | "diary"
   | "insight"
   | "admin";
 
-type NavIcon = "home" | "message" | "calendar" | "book" | "spark";
+type NavIcon = "home" | "message" | "calendar" | "book" | "spark" | "bolt";
 const navigation: { group: string; items: { id: SectionId; label: string; icon: NavIcon; hint?: string }[] }[] = [
   {
     group: "工作台",
     items: [
       { id: "home", label: "今日概览", icon: "home" },
       { id: "chat", label: "对话", icon: "message", hint: "与 LifeOS 对话" },
+      { id: "agents", label: "本地 Agent", icon: "bolt", hint: "发现、连接、运行本机 Agent" },
     ],
   },
   {
@@ -61,6 +68,7 @@ const sectionMeta: Record<SectionId, { eyebrow: string; title: string; descripti
   "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
   "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
   chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
+  agents: { eyebrow: "连接 · 本地 Agent", title: "把执行交给你机器上的 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
   diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
   insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
@@ -72,11 +80,14 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "message") return <IconMessage size={17} />;
   if (name === "calendar") return <IconCalendar size={17} />;
   if (name === "book") return <IconBook size={17} />;
+  if (name === "bolt") return <IconBolt size={17} />;
   return <IconSpark size={17} />;
 }
 
 export default function App() {
   const store = useStore();
+  const agent = useAgentStore();
+  const api = useAgentStream(agent);
   const [active, setActive] = useState<SectionId>("home");
   const [dark, setDark] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -84,6 +95,18 @@ export default function App() {
   const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
   const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
   const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
+
+  // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左栏。
+  // agentStore 不能反向 import 主 store，所以由同时持有两者的这一层搭桥。
+  // 用 ref 记住已领走的 seq —— 依赖里放 report 对象会让每次 result 帧都重跑，
+  // 而同一批里会有多条 result。
+  const yiLing = useRef(0);
+  const bao = agent.state.report;
+  useEffect(() => {
+    if (!bao || bao.seq <= yiLing.current) return;
+    yiLing.current = bao.seq;
+    store.dispatch({ type: "APPEND_AGENT_SUMMARY", text: bao.title, traceId: bao.traceId });
+  }, [bao, store]);
 
   const select = (id: SectionId) => {
     setActive(id);
@@ -116,6 +139,9 @@ export default function App() {
                 >
                   <span className="nav-icon" aria-hidden="true"><NavIconGlyph name={item.icon} /></span>
                   <span className="nav-label">{item.label}</span>
+                  {item.id === "agents" && agent.todo > 0 ? (
+                    <span className="nav-badge" title={`${agent.todo} 项等你决定`}>{agent.todo}</span>
+                  ) : null}
                   {item.id === "daily-review" ? <span className="nav-dot" /> : null}
                 </button>
               ))}
@@ -156,17 +182,58 @@ export default function App() {
             </div>
             <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
           </div>
-          <SectionContent active={active} store={store} onNavigate={select} />
+          <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} />
         </main>
       </div>
     </div>
   );
 }
 
-function SectionContent({ active, store, onNavigate }: { active: SectionId; store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void }) {
+function SectionContent({
+  active,
+  store,
+  agent,
+  api,
+  onNavigate,
+}: {
+  active: SectionId;
+  store: ReturnType<typeof useStore>;
+  agent: ReturnType<typeof useAgentStore>;
+  api: ReturnType<typeof useAgentStream>;
+  onNavigate: (id: SectionId) => void;
+}) {
   if (active === "chat") {
-    return <div className="chat-page-grid"><section className="content-card chat-card"><div className="card-heading"><div><span className="card-kicker">实时连接</span><h2>对话空间</h2></div><span className="live-chip"><span className="status-orb" />在线</span></div><ChatPanel store={store} /></section><RuntimeRail store={store} /></div>;
+    // 7:3 的开关点。collapsed 时 DOM 与改造前完全一致——F7 要求像素级一致，
+    // 所以 .chat-page-grid 这层不能动，只在外层按状态换容器。
+    const zuo = (
+      <div className="chat-page-grid">
+        <section className="content-card chat-card">
+          <div className="card-heading">
+            <div><span className="card-kicker">实时连接</span><h2>对话空间</h2></div>
+            <span className="live-chip"><span className="status-orb" />在线</span>
+          </div>
+          <ChatPanel store={store} agent={agent} api={api} />
+        </section>
+        <RuntimeRail store={store} />
+      </div>
+    );
+    return (
+      <>
+        <AgentPeekBar store={agent} api={api} onOpen={() => agent.setLayout("split")} />
+        {agent.state.layout === "split" ? (
+          <div className="chat-split-grid">
+            {zuo}
+            <AgentPanel store={agent} api={api}
+              onCandidateCreated={() => void store.refreshAll()}
+              onCollapse={() => agent.setLayout("collapsed")} />
+          </div>
+        ) : (
+          zuo
+        )}
+      </>
+    );
   }
+  if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
   if (active === "feedback") return <FeedbackPage />;
   if (active === "diary") return <DiaryPage />;
   if (active === "insight") return <InsightPage />;

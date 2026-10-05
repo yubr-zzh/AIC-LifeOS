@@ -251,7 +251,8 @@ class CoreRegressionTests(unittest.TestCase):
                 }
 
         class CaptureExecutor:
-            async def execute_chat_turn(self, user_input, memory, trace_id=None):
+            async def execute_chat_turn(self, user_input, memory, trace_id=None,
+                                        context=None, plan=None):
                 observations["memory"] = memory
                 return {"response": "ok", "tool_calls": [], "tool_results": []}
 

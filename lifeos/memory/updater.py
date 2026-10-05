@@ -25,6 +25,7 @@ SOURCE_CATEGORY = {
     "feedback_analysis": "feedback",  # 对反馈的聚合分析
     "reflection": "project",          # 对话反思 -> 项目上下文
     "external": "reference",          # 外部知识资源
+    "agent_execution": "project",  # 用户从 Agent 执行结果中确认的项目认知
 }
 
 

@@ -13,6 +13,7 @@ MEMORY_SOURCES = {
     "reflection",
     "external",
     "structured_entry",
+    "agent_execution",
 }
 SCOPE_KINDS = {"global", "scenario", "project", "unassigned"}
 CURRENT_SCHEMA_VERSION = 3
