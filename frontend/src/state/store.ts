@@ -373,7 +373,7 @@ export function useStore() {
   }, [refreshAll, setError]);
 
   const sendMessage = useCallback(
-    async (text: string, memoryScope?: MemoryScope) => {
+    async (text: string, memoryScope?: MemoryScope, sessionId?: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
@@ -416,7 +416,7 @@ export function useStore() {
 
       let chatRes: ChatResponse;
       try {
-        chatRes = await sendChat(trimmed, undefined, memoryScope);
+        chatRes = await sendChat(trimmed, undefined, memoryScope, sessionId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`chat failed: ${msg}`);

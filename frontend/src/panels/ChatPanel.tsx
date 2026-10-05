@@ -34,7 +34,7 @@ export function ChatPanel({ store, agent, api }: Props) {
     setText("");
     void sendMessage(t, projectId.trim()
       ? { kind: "project", project_id: projectId.trim() }
-      : undefined);
+      : undefined, agent?.active?.sessionId);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

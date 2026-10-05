@@ -80,12 +80,17 @@ export async function sendChat(
   message: string,
   opts?: ApiOptions,
   memoryScope?: MemoryScope,
+  sessionId?: string,
 ): Promise<ChatResponse> {
   const base = getBase(opts);
   const res = await f(opts)(`${base}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ message, ...(memoryScope ? { memory_scope: memoryScope } : {}) }),
+    body: JSON.stringify({
+      message,
+      ...(memoryScope ? { memory_scope: memoryScope } : {}),
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }),
   });
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as ChatResponse;

@@ -135,6 +135,45 @@ class JueCeHuiLuTests(unittest.TestCase):
         self.assertIn("echo: 算一下 7 乘 8", xi)
         self.assertIn(d["response"], d["response"])  # 结构没变
 
+    def test_echo_bridge_result_can_be_approved_and_recalled(self):
+        """真实 Echo 执行经 Bridge 回调后进入项目记忆，并出现在下一轮 Chat。"""
+        sid = self._xin_hui()
+        self._qiao(f"/sessions/{sid}/messages", {"instructions": ["记下回声执行结果"]})
+        rid = self._deng(lambda: [x for x in self.h.dai_jue()
+                                   if x["sessionId"] == sid])[0]["requestId"]
+        self._qiao(f"/permissions/{rid}", {"decision": "allow"})
+        evidence = self._deng(lambda: self.agent.agent_evidence.list(
+            owner_id="local", session_id=sid))[0]
+        self.assertIn("echo:", evidence["summary"])
+
+        project_id = f"bridge-{sid}"
+        claim = "Echo Bridge 已完成本项目的回声执行任务"
+        status, proposed = self._zhu_qiao(
+            f"/agent/evidence/{evidence['id']}/memory-candidates",
+            {"claim": claim, "project_id": project_id},
+        )
+        self.assertEqual(status, 201)
+        candidate = proposed["candidate"]
+        self.assertEqual(candidate["source_ref"]["record_id"], evidence["id"])
+        self.assertEqual(self._zhu_qiao(
+            f"/memory/candidates/{candidate['id']}/commit", {})[0], 200)
+
+        self.llm.kan.clear()
+        status, _ = self._zhu_qiao("/chat", {
+            "message": "回声执行任务进展如何？", "session_id": sid,
+            "memory_scope": {"kind": "project", "project_id": project_id},
+        })
+        self.assertEqual(status, 200)
+        self.assertIn(claim, self.llm.kan[-1][0]["content"])
+
+        self.llm.kan.clear()
+        status, _ = self._zhu_qiao("/chat", {
+            "message": "另一个项目有什么进展？", "session_id": sid,
+            "memory_scope": {"kind": "project", "project_id": "unrelated-project"},
+        })
+        self.assertEqual(status, 200)
+        self.assertNotIn(claim, self.llm.kan[-1][0]["content"])
+
     def test_zhu_fu_wu_bu_neng_zi_ji_xia_fa_tiao_mo_shi(self):
         """7.7.1 的关键约束：主服务收到结果后不得自己下发下一条指令。"""
         sid = self._xin_hui()
