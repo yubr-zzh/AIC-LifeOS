@@ -116,3 +116,34 @@ export const IconSun = (p: IconProps) =>
 
 export const IconSettings = (p: IconProps) =>
   wrap(<><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.5h-.2a1.7 1.7 0 0 0-1.6 1z" /></>, "0 0 24 24", p);
+
+export const IconPlus = (p: IconProps) =>
+  wrap(<><path d="M12 5v14" /><path d="M5 12h14" /></>, "0 0 24 24", p);
+
+export const IconKey = (p: IconProps) =>
+  wrap(<><circle cx="8.5" cy="15.5" r="3.5" /><path d="M11 13L20 4M16 8l2 2M14 10l2 2" /></>, "0 0 24 24", p);
+
+
+export const IconHistory = (p: IconProps) =>
+  wrap(<><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></>, "0 0 24 24", p);
+
+export const IconUser = (p: IconProps) =>
+  wrap(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>, "0 0 24 24", p);
+
+export const IconClose = (p: IconProps) =>
+  wrap(<><path d="M5 5l14 14" /><path d="M19 5L5 19" /></>, "0 0 24 24", p);
+
+export const IconBell = (p: IconProps) =>
+  wrap(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>, "0 0 24 24", p);
+
+export const IconDatabase = (p: IconProps) =>
+  wrap(<><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" /></>, "0 0 24 24", p);
+
+export const IconShield = (p: IconProps) =>
+  wrap(<><path d="M12 3 20 6v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>, "0 0 24 24", p);
+
+export const IconCpu = (p: IconProps) =>
+  wrap(<><rect x="7" y="7" width="10" height="10" rx="2" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" /></>, "0 0 24 24", p);
+
+export const IconPalette = (p: IconProps) =>
+  wrap(<><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18A3 3 0 0 0 21 11a8 8 0 0 0-9-8z" /><circle cx="7.5" cy="10" r="1" /><circle cx="10" cy="6.8" r="1" /><circle cx="14.5" cy="7" r="1" /></>, "0 0 24 24", p);

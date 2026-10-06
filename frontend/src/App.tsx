@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "./state/store";
-import { listEntries, proposeEntryMemoryCandidate, saveEntry } from "./api/client";
-import type { MemoryScope, StructuredEntryKind } from "./api/types";
 import { ChatPanel } from "./panels/ChatPanel";
 import { RuntimeRail } from "./panels/RuntimeRail";
 import { EventsPanel } from "./panels/EventsPanel";
@@ -10,7 +8,15 @@ import { TracePanel } from "./panels/TracePanel";
 import { SkillsPanel } from "./panels/SkillsPanel";
 import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
-import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
+import { ConversationHistory } from "./panels/ConversationHistory";
+import { LoginDialog } from "./panels/LoginDialog";
+import type { LocalUser } from "./panels/LoginDialog";
+import { SettingsPage } from "./panels/SettingsPage";
+import { listEntries, proposeEntryMemoryCandidate, saveEntry } from "./api/client";
+import type { MemoryScope, StructuredEntryKind } from "./api/types";
+import { DiaryPage, FeedbackPage, InsightPage } from "./panels/StructuredPages";
+import { IconBook, IconBolt, IconCalendar, IconHistory, IconHome, IconMessage, IconSettings, IconSpark, IconSun, IconUser } from "./components/Icons";
+import { WorkCalendar } from "./components/WorkCalendar";
 
 type SectionId =
   | "home"
@@ -22,6 +28,7 @@ type SectionId =
   | "feedback"
   | "diary"
   | "insight"
+  | "settings"
   | "admin";
 
 type NavIcon = "home" | "message" | "calendar" | "book" | "spark";
@@ -64,6 +71,7 @@ const sectionMeta: Record<SectionId, { eyebrow: string; title: string; descripti
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
   diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
   insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
+  settings: { eyebrow: "系统 · 设置", title: "把 LifeOS 调到适合你的状态", description: "管理外观、模型与 Agent、Memory、通知和数据边界。" },
   admin: { eyebrow: "后台 · 系统", title: "LifeOS 的运行后台", description: "这里放置事件、记忆、技能与运行状态等工程信息。" },
 };
 
@@ -75,11 +83,32 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   return <IconSpark size={17} />;
 }
 
+const SECTION_IDS = new Set<SectionId>([
+  "home", "daily-plan", "daily-review", "phase-plan", "phase-review", "chat",
+  "feedback", "diary", "insight", "settings", "admin",
+]);
+
+function sectionFromLocation(): SectionId {
+  const value = window.location.hash.replace(/^#/, "") as SectionId;
+  return SECTION_IDS.has(value) ? value : "home";
+}
+
+function loadLocalUser(): LocalUser | null {
+  try {
+    const raw = window.localStorage.getItem("lifeos-local-user");
+    return raw ? JSON.parse(raw) as LocalUser : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const store = useStore();
-  const [active, setActive] = useState<SectionId>("home");
+  const [active, setActive] = useState<SectionId>(() => sectionFromLocation());
   const [dark, setDark] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(() => window.location.hash === "#login");
+  const [user, setUser] = useState<LocalUser | null>(() => loadLocalUser());
+  const userInitial = user?.name?.slice(0, 1).toUpperCase() || "Z";
   const meta = sectionMeta[active];
   const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
   const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
@@ -87,18 +116,40 @@ export default function App() {
 
   const select = (id: SectionId) => {
     setActive(id);
-    setSettingsOpen(false);
+    if (window.location.hash !== `#${id}`) window.history.replaceState(null, "", `#${id}`);
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      if (window.location.hash === "#login") {
+        setLoginOpen(true);
+        return;
+      }
+      setActive(sectionFromLocation());
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const signedIn = (nextUser: LocalUser) => {
+    setUser(nextUser);
+    setLoginOpen(false);
+    try {
+      window.localStorage.setItem("lifeos-local-user", JSON.stringify(nextUser));
+    } catch {
+      // Login is still valid for the current session.
+    }
   };
 
   return (
-    <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
+    <div className={`lifeos-shell ${dark ? "theme-night" : ""}${active === "chat" ? " chat-active" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="side-nav">
         <div className="brand-block">
           <div className="brand-mark"><IconBolt size={17} /></div>
           <div>
             <div className="brand-name">LifeOS</div>
-            <div className="brand-caption">你的个人操作系统</div>
+            <div className="brand-caption">本地仓库 · 个人操作系统</div>
           </div>
         </div>
 
@@ -124,8 +175,16 @@ export default function App() {
         </nav>
 
         <div className="side-footer">
+          <button
+            type="button"
+            className={`side-settings-button ${active === "settings" ? "active" : ""}`}
+            onClick={() => select("settings")}
+          >
+            <IconSettings size={16} />
+            <span>设置</span>
+          </button>
           <div className="side-footer-line"><span className="status-orb" />系统运行良好</div>
-          <div className="side-footer-sub">本地工作区 · 数据已同步</div>
+          <div className="side-footer-sub">Markdown · 本地 SQLite · 已连接</div>
         </div>
       </aside>
 
@@ -133,21 +192,16 @@ export default function App() {
         <header className="workspace-header">
           <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.eyebrow.split(" · ")[0]}</strong></div>
           <div className="header-actions">
-            <span className="sync-label"><span className="status-orb" />刚刚同步</span>
+            <span className="sync-label"><span className="status-orb" />本地仓库 · 刚刚同步</span>
             <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
-            <button className="header-icon-button" onClick={() => setSettingsOpen(!settingsOpen)} title="设置" aria-label="设置" aria-expanded={settingsOpen}><IconSettings size={16} /></button>
-            <div className="avatar">Z</div>
+            <button className="header-icon-button" onClick={() => select("settings")} title="设置" aria-label="设置"><IconSettings size={16} /></button>
+            <button className="avatar avatar-button" onClick={() => setLoginOpen(true)} title={user ? `${user.name} · 账户` : "登录 LifeOS"} aria-label="打开账户与登录">
+              {userInitial}
+            </button>
           </div>
-          {settingsOpen ? (
-            <div className="settings-popover">
-              <strong>工作区设置</strong>
-              <span>主题：{dark ? "夜间" : "浅色薄荷"}</span>
-              <span>数据模式：{store.state.ui.dataMode === "backend" ? "实时后端" : "本地预览"}</span>
-            </div>
-          ) : null}
         </header>
 
-        <main id="main-content" className="workspace-main">
+        <main id="main-content" className={`workspace-main${active === "chat" ? " chat-workspace-main" : ""}`}>
           <div className="page-intro">
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
@@ -156,20 +210,36 @@ export default function App() {
             </div>
             <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
           </div>
-          <SectionContent active={active} store={store} onNavigate={select} />
+          <SectionContent active={active} store={store} onNavigate={select} dark={dark} onDarkChange={setDark} />
         </main>
       </div>
+      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSignedIn={signedIn} />
     </div>
   );
 }
 
-function SectionContent({ active, store, onNavigate }: { active: SectionId; store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void }) {
+function SectionContent({ active, store, onNavigate, dark, onDarkChange }: { active: SectionId; store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void; dark: boolean; onDarkChange: (value: boolean) => void }) {
   if (active === "chat") {
-    return <div className="chat-page-grid"><section className="content-card chat-card"><div className="card-heading"><div><span className="card-kicker">实时连接</span><h2>对话空间</h2></div><span className="live-chip"><span className="status-orb" />在线</span></div><ChatPanel store={store} /></section><RuntimeRail store={store} /></div>;
+    return (
+      <div className="chat-workspace">
+        <ConversationHistory store={store} />
+        <div className="chat-page-grid">
+          <section className="content-card chat-card">
+            <div className="card-heading">
+              <div><span className="card-kicker"><IconHistory size={12} /> 实时连接</span><h2>对话空间</h2></div>
+              <span className="live-chip"><span className="status-orb" />在线</span>
+            </div>
+            <ChatPanel store={store} onOpenPlanning={() => onNavigate("phase-plan")} />
+          </section>
+          <RuntimeRail store={store} />
+        </div>
+      </div>
+    );
   }
   if (active === "feedback") return <FeedbackPage />;
   if (active === "diary") return <DiaryPage />;
   if (active === "insight") return <InsightPage />;
+  if (active === "settings") return <SettingsPage store={store} dark={dark} onDarkChange={onDarkChange} />;
   if (active === "admin") return <AdminPage store={store} />;
   if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
   if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
@@ -192,6 +262,7 @@ function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; o
     <section className="content-card progress-card"><div className="card-heading"><div><span className="card-kicker">今日进度</span><h2>{progress}</h2></div><span className="progress-ring">{completed}/{total}</span></div><div className="progress-track"><span style={{ width: progress }} /></div><p>已完成 {completed} 项，还有 2 项等待你的注意。</p><button className="text-button" onClick={() => onNavigate("daily-plan")}>查看今日清单 →</button></section>
     <section className="content-card today-card"><div className="card-heading"><div><span className="card-kicker">接下来</span><h2>今日安排</h2></div><span className="soft-count">4 件</span></div><Task label="写下本周的阶段目标" done /><Task label="完成课程阅读 · 45 分钟" done /><Task label="整理项目反馈" /><Task label="晚间复盘" /></section>
     <section className="content-card rhythm-card"><div className="card-heading"><div><span className="card-kicker">生活节奏</span><h2>给自己留一点余地</h2></div><span className="soft-count">本周 · 4 / 7 天</span></div><p className="pulse-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p><div className="week-dots"><span className="filled" /><span className="filled" /><span className="filled" /><span className="filled" /><span /><span /><span /></div><div className="rhythm-footer"><span>本周已经记录了 4 个值得记住的瞬间</span><button className="text-button" onClick={() => onNavigate("diary")}>写一篇日记 →</button></div></section>
+    <WorkCalendar onNavigate={onNavigate} />
     <section className="content-card quote-card"><span className="quote-mark">“</span><p>真正重要的不是把每件事都做好，而是知道此刻什么值得被做好。</p><span className="quote-source">— 今日提醒</span></section>
     <section className="content-card recent-card"><div className="card-heading"><div><span className="card-kicker">最近记录</span><h2>工作台动态</h2></div><button className="text-button" onClick={() => onNavigate("feedback")}>查看全部</button></div><div className="recent-row"><span className="recent-icon">↗</span><div><strong>完成了一次对话</strong><small>刚刚 · 已写入事件队列</small></div><span className="recent-status">已记录</span></div><div className="recent-row"><span className="recent-icon">✦</span><div><strong>收到一个新的反馈</strong><small>昨天 · 关于复盘流程</small></div><span className="recent-status">待处理</span></div></section>
   </div>;
@@ -276,12 +347,6 @@ function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: 
     </div> : null}
   </div>;
 }
-
-function FeedbackPage() { const draft = useEntryDraft("feedback", {}); const [category, setCategory] = useState("使用感受"); return <div className="feedback-layout"><section className="content-card feedback-main"><span className="card-kicker">写给 LifeOS</span><h2>哪里让你觉得顺手？哪里还不够像你？</h2><textarea className="feedback-editor" placeholder="可以是一句话，也可以是一段具体的经历…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="feedback-tags">{["功能建议", "使用感受", "发现问题", "其他"].map((tag) => <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>)}</div><button className="green-button" onClick={() => void draft.save({ metadata: { category } })} disabled={draft.saving}>{draft.saving ? "提交中…" : "提交反馈"} <span>→</span></button></section><section className="content-card feedback-history"><div className="card-heading"><div><span className="card-kicker">你的声音</span><h2>最近反馈</h2></div><span className="soft-count">来自 SQLite</span></div>{draft.content ? <div className="feedback-note"><span>✓</span><div><strong>{draft.content.slice(0, 24)}{draft.content.length > 24 ? "…" : ""}</strong><small>刚刚 · 已保存</small></div></div> : <div className="state-empty">还没有新的反馈</div>}</section></div>; }
-
-function DiaryPage() { const draft = useEntryDraft("diary", {}); const moods = ["☀ 平静", "☁ 有点累", "✦ 充满能量", "♡ 说不清"]; return <div className="diary-layout"><section className="content-card diary-editor"><div className="card-heading"><div><span className="card-kicker">今天 · 私人记录</span><h2>今天的日记</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div><textarea className="big-editor diary-text" placeholder="今天有什么值得被写下来？" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="diary-mood"><span>今天的心情</span>{moods.map((mood) => <button className={draft.mood === mood ? "selected" : ""} key={mood} onClick={() => draft.setMood(mood)}>{mood}</button>)}</div><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存日记"} <span>→</span></button></div></section><aside className="content-card diary-aside"><span className="card-kicker">近日日记</span><h3>那些被你留住的时刻</h3><div className="diary-history"><div><strong>本地存储</strong><span>你的日记会按日期保存在 LifeOS SQLite 数据库中。</span></div><div><strong>私人空间</strong><span>这些内容不会进入 Git，也不会写入事件队列。</span></div></div></aside></div>; }
-
-function InsightPage() { const draft = useEntryDraft("insight", {}); return <div className="insight-layout"><section className="content-card insight-editor"><div className="card-heading"><div><span className="card-kicker">心得 / 体验</span><h2>记录一个正在发酵的想法</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div><input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} /><textarea className="big-editor insight-text" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存心得"} <span>→</span></button></div></section><aside className="content-card insight-aside"><span className="card-kicker">你的知识花园</span><h3>心得会在时间里长出新的连接。</h3><p>把体验留下来，未来的你会更容易看见自己走过的路。</p><div className="insight-count"><strong>SQLite</strong><span>结构化保存</span></div></aside></div>; }
 
 function AdminPage({ store }: { store: ReturnType<typeof useStore> }) { return <div className="admin-page"><div className="admin-banner"><div><span className="card-kicker">系统后台</span><h2>工程信息集中在这里</h2><p>普通使用页面保持安静。只有进入后台，才会看到 Agent、事件、记忆和 Trace 等运行细节。</p></div><span className="admin-badge">开发者视图</span></div><div className="admin-flow"><DataFlowView store={store} /></div><div className="admin-grid"><RuntimeRail store={store} /><EventsPanel store={store} /><MemoryPanel store={store} /><SkillsPanel store={store} /><PermissionsPanel store={store} /><TracePanel store={store} /></div></div>; }
 

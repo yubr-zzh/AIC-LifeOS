@@ -1,4 +1,5 @@
 import json
+import threading
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from lifeos.memory.schema import (
 )
 from lifeos.memory.updater import MemoryUpdater, category_for_source
 from lifeos.storage.atomic import write_json
+from lifeos.storage.synchronization import synchronized
 
 
 _PRESERVE_REMOTE_ID = object()
@@ -24,6 +26,7 @@ _PRESERVE_REMOTE_SCOPE = object()
 
 class MemoryManager:
     def __init__(self, storage_dir=".lifeos"):
+        self._lock = threading.RLock()
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.storage_path = self.storage_dir / "memory.json"
@@ -47,14 +50,17 @@ class MemoryManager:
             if migrated:
                 self._write(store)
 
+    @synchronized
     async def retrieve(self, query, scope=None):
         store = self._read()
         return await MemoryRetriever(store).retrieve(query, scope=scope)
 
+    @synchronized
     def profile_view(self):
         """Return a fresh, non-persisted profile view from the current store."""
         return build_memory_profile(self._read())
 
+    @synchronized
     def active_memory_ids(self):
         store = self._read()
         return {
@@ -64,6 +70,7 @@ class MemoryManager:
             if entry.get("status", "active") == "active"
         }
 
+    @synchronized
     def memory_records(self):
         store = self._read()
         return [
@@ -72,6 +79,7 @@ class MemoryManager:
             for entry in store.get(category, [])
         ]
 
+    @synchronized
     def set_provider_sync(
         self,
         memory_id,
@@ -100,6 +108,7 @@ class MemoryManager:
         self._write(store)
         return item
 
+    @synchronized
     async def propose_update(
         self,
         source,
@@ -158,6 +167,7 @@ class MemoryManager:
         self._write(store)
         return candidate
 
+    @synchronized
     async def commit_candidate(self, candidate_id):
         store = self._read()
         candidate = self._find_candidate(store, candidate_id)
@@ -179,6 +189,7 @@ class MemoryManager:
         self._sync_markdown(store)
         return entry
 
+    @synchronized
     async def reject_candidate(self, candidate_id):
         store = self._read()
         candidate = self._find_candidate(store, candidate_id)
@@ -190,6 +201,7 @@ class MemoryManager:
         self._write(store)
         return candidate
 
+    @synchronized
     async def correct_memory(self, memory_id, content, reason=None):
         """Create a user-confirmed replacement and retire the previous version."""
         if not isinstance(content, dict) or not content:
@@ -238,6 +250,7 @@ class MemoryManager:
         self._sync_markdown(store)
         return replacement
 
+    @synchronized
     async def retract_memory(self, memory_id, reason=None):
         """Explicitly make an accepted memory unavailable to recall."""
         if reason is not None and not isinstance(reason, str):
@@ -259,6 +272,7 @@ class MemoryManager:
         self._sync_markdown(store)
         return entry
 
+    @synchronized
     async def update(self, memory):
         candidate = await self.propose_update(
             source="direct",
@@ -267,6 +281,7 @@ class MemoryManager:
         )
         return await self.commit_candidate(candidate["id"])
 
+    @synchronized
     def export_markdown(self, path=None) -> str:
         """Render the store to Markdown. When ``path`` is given, also
         write the file there (used for the memory.md mirror)."""
@@ -276,6 +291,7 @@ class MemoryManager:
             Path(path).write_text(md, encoding="utf-8")
         return md
 
+    @synchronized
     def import_markdown(self, text: str) -> dict:
         """Apply edited categories while preserving runtime and audit state."""
         before = self._read()
@@ -344,8 +360,10 @@ class MemoryManager:
                     return entry
         raise KeyError(f"memory not found: {memory_id}")
 
+    @synchronized
     def _read(self):
         return json.loads(self.storage_path.read_text(encoding="utf-8"))
 
+    @synchronized
     def _write(self, data):
         write_json(self.storage_path, data)

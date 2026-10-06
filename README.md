@@ -43,6 +43,7 @@ lifeos/
     updater.py              # 候选创建与应用
     lifecycle.py            # 校验、备份、向量库与缓存生命周期
   llm/client.py             # 统一 LLM 接口，默认使用 mock provider
+  llm/profiles.py           # Persistent model profiles and per-request routing
   reflection/engine.py      # 后台反思
   security/permission.py   # 权限审查
   skills/
@@ -102,17 +103,22 @@ curl -X POST http://127.0.0.1:8765/background/run-once \
 
 ```json
 {
-  "message": "hello lifeos"
+  "message": "hello lifeos",
+  "profile_id": "deepseek-main"
 }
 ```
 
 响应：
 
+`profile_id` is optional; when omitted, the active workspace profile is used.
+
 ```json
 {
   "trace_id": "uuid",
-  "response": "LifeOS mock response: hello lifeos",
-  "tool_calls": []
+  "response": "hello from the selected model",
+  "tool_calls": [],
+  "provider": "deepseek",
+  "model": "deepseek-chat"
 }
 ```
 
@@ -139,6 +145,78 @@ curl -X POST http://127.0.0.1:8765/background/run-once \
 目前还提供以下检查接口：`GET /events`、`GET /memory`、`GET /skills`、`GET /traces/{trace_id}` 和 `GET /permissions`（当前返回空请求列表）。
 
 记忆候选可通过 `POST /memory/candidates/{id}/commit` 提交，或通过 `/reject` 拒绝；待处理 Skill 可通过 `POST /skills/pending/{id}/approve` 批准，或通过 `/reject` 拒绝。这些操作会持久化到后端。工具执行和权限确认目前仍为模拟或仅供审查的流程。`POST /chat` 响应包含 `tool_results`，便于 UI 展示被拦截的工具调用。
+
+### Model/API configuration
+
+The Chat composer exposes a CCswitch-style model picker. Open it, choose
+`连接新模型`, select a provider preset, and enter the API Key plus model ID.
+Supported presets include OpenAI, Anthropic Claude, Google Gemini, DeepSeek,
+Qwen, Kimi, GLM, MiniMax, xAI, OpenRouter, Ollama/vLLM, and a custom
+OpenAI-compatible endpoint.
+
+Configuration is stored locally in `.lifeos/models.json`. API Keys are never
+returned to the browser after they are saved; `GET /models` returns only a
+masked hint. Model calls are proxied by the local Python backend so the key is
+not embedded into frontend source code.
+
+Model endpoints:
+
+- `GET /models` returns profiles, the active profile, and built-in presets.
+- `POST /models/profiles` creates a profile.
+- `PUT /models/profiles/{id}` updates a profile.
+- `POST /models/profiles/{id}/activate` switches the active profile.
+- `POST /models/profiles/{id}/test` tests a saved profile.
+- `POST /models/test` tests an unsaved form payload.
+- `DELETE /models/profiles/{id}` deletes a custom profile.
+
+Inspection endpoints now available: `GET /events`, `GET /memory`, `GET /skills`,
+`GET /traces/{trace_id}`, and `GET /permissions` (currently an empty request list).
+Memory candidates can be committed or rejected with
+`POST /memory/candidates/{id}/commit` and `/reject`; pending skills can be
+approved or rejected with `POST /skills/pending/{id}/approve` and `/reject`.
+These actions persist to the backend. Tool execution and permission confirmation
+remain mock or review-only paths.
+`POST /chat` includes `tool_results` so blocked tool calls are visible to the UI.
+
+## Structured Entry History
+
+- Every manual save of planning, review, diary, insight, or feedback creates a
+  new structured version instead of overwriting the previous record.
+- The history rail loads all versions and can reopen any saved snapshot.
+- Vault export updates the current version in place so exporting does not create
+  an accidental duplicate history entry.
+
+## Obsidian Vault Bridge
+
+The local backend can connect to a user-owned Obsidian Vault without exposing
+arbitrary filesystem access.
+
+Configure a Vault from the frontend settings page, or call:
+
+```text
+POST /vault/configure
+{
+  "vault_path": "C:/Users/name/Documents/ObsidianVault",
+  "folder": "LifeOS"
+}
+```
+
+Available endpoints:
+
+- `GET /vault` returns the current connection state and Markdown count.
+- `GET /vault/files?query=&limit=` lists Markdown files under the Vault root.
+- `GET /vault/file?path=` reads one Markdown file.
+- `POST /vault/export` with `entry_id` writes a structured LifeOS entry to
+  `LifeOS/<category>/<year>/<type>/...md` with YAML frontmatter.
+- `POST /vault/import` with `path` and optional `kind` imports a Markdown file
+  back into the structured SQLite store.
+- `POST /vault/sync` with `entry_id` re-reads the linked Markdown file and
+  updates the same structured record, preserving the `lifeos_id`.
+
+All relative paths are resolved under the configured Vault root; traversal
+outside that root is rejected.
+
+## Frontend Direction
 
 ## 前端方向
 

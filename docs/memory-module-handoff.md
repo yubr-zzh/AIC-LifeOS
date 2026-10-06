@@ -30,7 +30,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 完成（LifeOS 本地结构化只读 MVP；目标接 TencentDB L2/L3） | `/memory/profile` 按 scope 动态重建；仅 active；稳定版本 hash；来源与置信度可追溯 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 完成 | 画像 UI、来源可追溯、从日/阶段规划复盘显式提炼候选；浏览器端手工复核待做 |
 | 8. 外部记忆职责与权威边界 | 明确 LifeOS 如何组合实际要使用的 ai-memory 与 TencentDB，避免相互替代或重复权威 | 完成（已按用户纠正修订） | 两个后端均是目标能力；ai-memory 管项目连续性，TencentDB 管 L1-L3，LifeOS 管来源/审核/编排；明确本地 store 为迁移期实现 |
-| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 本地 HTTP mock 纵向验收完成；真实后端验收未完成 | 两适配器及显式 scope/binding 已实现；37 项回归通过；真实后端、L2/L3、迁移/回滚仍待隔离环境验收 |
+| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 本地 HTTP mock 纵向验收完成；真实后端验收未完成 | 两适配器、显式 scope/binding 与 Planner 联通；53 项回归通过；真实后端、L2/L3、迁移/回滚仍待隔离环境验收 |
 | 10. 评估与效率 | 评估召回正确性、隔离性、可解释性；再量化成本与效率 | 待开始 | 小型评测集与基线；成本优化放在正确性之后 |
 
 ## 阶段 0 验收记录
@@ -328,6 +328,14 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - TencentDB mock 使用确定性 create-only 语义，冲突 payload 返回 409；这些用例验证的是 LifeOS client 与本地 mock 的集成行为，不等同于上游真实 Gateway / TCVDB 的兼容性证明。
 - 最新验证：`python -m unittest discover -s tests -v` **37 tests passed**；`python -m compileall -q lifeos tests` 与 `git diff --check` 通过。无真实 key、真实后端或个人记忆参与。
 - 阶段 9 仍未整体完成：真实上游 API E2E、TencentDB L2/L3 生成及 refs、ai-memory daemon 权限/邻接项目隔离、迁移/回滚尚未验收；当前不切换权威、不双写，不 commit/push。
+
+### 2026-10-06 `api&nonAgent` 分支集成记录
+
+- 已把队友的 API/console/routing 分支集成到 `zhang-memory` 工作区；ChatRuntime 保留 Planner 路由，并且只在 `force_agent`/Agent 决策及显式 project scope 下查询 ai-memory。项目正文仍只作为当前模型请求中的不可信引用，不写入 LifeOS event/trace。
+- 修复安全边界：非 loopback API listener 必须配置 `LIFEOS_API_TOKEN`，远程请求需 Bearer 校验；Windows 模型 API key 用当前用户 DPAPI 加密，并在下次读取时迁移旧明文 key。Loopback 仍按本机可信边界处理；其他平台依赖文件权限。
+- 为 `ThreadingHTTPServer` 下的 JSON-backed Memory、EventBus、SkillRegistry 读改写增加实例级锁；合成多线程测试确认并发候选与事件写入没有丢失。
+- 验证：`python -m unittest discover -s tests -v` **53 tests passed**；`python -m compileall -q lifeos tests`、`git diff --check`、`npm run typecheck`、`npm run build` 通过。Playwright 前端-only smoke 渲染了页面且无 JS page error；后端未启动以免读取本地 `.lifeos` 数据。
+- 此处尚未 commit/push；前端/模型 provider/Planner 新功能尚未做真实 provider API 联调。TencentDB/ai-memory 真实端到端与阶段 9 迁移验收仍未完成。
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。

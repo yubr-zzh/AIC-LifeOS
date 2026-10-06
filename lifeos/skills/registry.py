@@ -1,10 +1,12 @@
 """Skill registry with usage statistics and similarity search."""
 
 import json
+import threading
 from datetime import datetime
 from pathlib import Path
 
 from lifeos.skills.metrics import keyword_similarity
+from lifeos.storage.synchronization import synchronized
 
 
 def _now() -> str:
@@ -21,14 +23,17 @@ class SkillRegistry:
     """
 
     def __init__(self, storage_path=".lifeos/skills.json"):
+        self._lock = threading.RLock()
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.storage_path.exists():
             self._write({"approved": [], "pending": []})
 
+    @synchronized
     async def list_approved(self):
         return self._read()["approved"]
 
+    @synchronized
     async def add_pending(self, candidate, review=None):
         data = self._read()
         entry = dict(candidate)
@@ -42,6 +47,7 @@ class SkillRegistry:
         self._write(data)
         return entry
 
+    @synchronized
     async def approve(self, name):
         """Move a pending candidate into the approved registry."""
         data = self._read()
@@ -55,6 +61,7 @@ class SkillRegistry:
                 return skill
         return None
 
+    @synchronized
     async def approve_by_id(self, skill_id):
         data = self._read()
         for skill in data["approved"]:
@@ -70,6 +77,7 @@ class SkillRegistry:
                 return skill
         raise KeyError(f"skill not found: {skill_id}")
 
+    @synchronized
     async def reject_by_id(self, skill_id):
         data = self._read()
         for index, skill in enumerate(data["pending"]):
@@ -80,6 +88,7 @@ class SkillRegistry:
                 return skill
         raise KeyError(f"pending skill not found: {skill_id}")
 
+    @synchronized
     async def find(self, name):
         data = self._read()
         for skill in data["approved"]:
@@ -87,6 +96,7 @@ class SkillRegistry:
                 return skill
         return None
 
+    @synchronized
     async def find_any(self, name):
         """Find a skill by name in either pending or approved."""
         data = self._read()
@@ -96,6 +106,7 @@ class SkillRegistry:
                     return skill
         return None
 
+    @synchronized
     async def find_similar(self, query_text, threshold=0.15):
         """Return approved skills whose keywords match the query text.
 
@@ -115,6 +126,7 @@ class SkillRegistry:
         hits.sort(key=lambda pair: pair[0], reverse=True)
         return [skill for _, skill in hits]
 
+    @synchronized
     async def record_usage(self, name, success=True):
         """Increment usage stats for a skill (approved or pending)."""
         data = self._read()

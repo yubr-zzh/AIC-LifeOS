@@ -1,4 +1,5 @@
 import json
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 from lifeos.storage.atomic import write_json
+from lifeos.storage.synchronization import synchronized
 
 
 def _now() -> str:
@@ -29,6 +31,7 @@ class ReliableEventBus:
     """Small durable queue for the foreground/background LifeOS boundary."""
 
     def __init__(self, storage_path: str | Path = ".lifeos/events.json"):
+        self._lock = threading.RLock()
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.storage_path.exists():
@@ -45,6 +48,7 @@ class ReliableEventBus:
             if interrupted:
                 self._write_events(events)
 
+    @synchronized
     async def publish(
         self,
         event_type: str,
@@ -57,6 +61,7 @@ class ReliableEventBus:
         self._write_events(events)
         return event
 
+    @synchronized
     async def poll(self, limit: int = 10) -> list[Event]:
         events = self._read_events()
         pending = [
@@ -66,15 +71,19 @@ class ReliableEventBus:
         ]
         return pending[:limit]
 
+    @synchronized
     async def mark_processing(self, event_id: str) -> None:
         self._update_event(event_id, status="processing", attempts_increment=1)
 
+    @synchronized
     async def mark_done(self, event_id: str) -> None:
         self._update_event(event_id, status="done", error=None)
 
+    @synchronized
     async def mark_failed(self, event_id: str, error: str) -> None:
         self._update_event(event_id, status="failed", error=error)
 
+    @synchronized
     def all_events(self) -> Iterable[Event]:
         return [Event(**event) for event in self._read_events()]
 
@@ -84,6 +93,7 @@ class ReliableEventBus:
     def _write_events(self, events: list[Dict[str, Any]]) -> None:
         write_json(self.storage_path, events)
 
+    @synchronized
     def _update_event(
         self,
         event_id: str,
