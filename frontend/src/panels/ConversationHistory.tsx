@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Store } from "../state/store";
-import { IconHistory, IconMessage, IconPlus, IconSpark } from "../components/Icons";
+import { IconClose, IconHistory, IconMessage, IconPlus } from "../components/Icons";
 
 interface Props {
   store: Store;
+  mobileOpen?: boolean;
+  onClose?: () => void;
 }
 
 type GroupId = "today" | "yesterday" | "week" | "older";
@@ -45,16 +47,25 @@ function timeLabel(iso: string): string {
 }
 
 function latestLine(conversation: Conversation): string {
-  const latest = [...conversation.messages].reverse().find((message) => message.content.trim());
+  const latest = [...conversation.messages].reverse().find((message) => message.content.trim() && !(message.role === "assistant" && message.content.startsWith("LifeOS 已连接。")));
   if (!latest) return "还没有消息";
-  if (latest.decision === "self_plan") return "无需 Agent · 已反馈自规划";
-  if (latest.decision === "agent") return "需要 Agent · 等待执行";
+  if (latest.execution === "pending") return "LifeOS 正在整理回复…";
+  if (latest.execution === "error") return "回复暂时没有完成";
   return latest.content.trim().replace(/\s+/g, " ").slice(0, 38);
 }
 
-export function ConversationHistory({ store }: Props) {
+export function ConversationHistory({ store, mobileOpen = false, onClose }: Props) {
   const { state, createConversation, selectConversation } = store;
   const [query, setQuery] = useState("");
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (mobileOpen) closeButton.current?.focus();
+  }, [mobileOpen]);
+  const startConversation = () => {
+    setQuery("");
+    createConversation();
+    onClose?.();
+  };
 
   const grouped = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -80,27 +91,29 @@ export function ConversationHistory({ store }: Props) {
   }, [query, state.conversations]);
 
   return (
-    <aside className="conversation-history content-card" aria-label="对话历史">
+    <aside id="conversation-history" className={`conversation-history content-card${mobileOpen ? " mobile-open" : ""}`} aria-label="对话历史" role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen || undefined}>
       <div className="conversation-history-head">
         <div>
-          <span className="card-kicker"><IconHistory size={12} /> 历史记录</span>
-          <h3>你的对话</h3>
+          <span className="card-kicker"><IconHistory size={12} /> 回到之前的交流</span>
+          <h3>最近对话</h3>
         </div>
         <button
           type="button"
           className="conversation-new-button"
-          onClick={() => createConversation()}
+          onClick={startConversation}
           title="新建对话"
-          aria-label="新建对话"
         >
           <IconPlus size={14} />
+          <span>新对话</span>
         </button>
+        <button ref={closeButton} type="button" className="conversation-close-button" onClick={onClose} aria-label="关闭历史记录"><IconClose size={16} /></button>
       </div>
 
       <label className="conversation-search">
         <IconMessage size={13} />
-        <input
-          value={query}
+          <input
+            type="search"
+            value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索历史记录"
           aria-label="搜索历史记录"
@@ -120,17 +133,16 @@ export function ConversationHistory({ store }: Props) {
               <div className="conversation-group-list">
                 {items.map((conversation) => {
                   const active = conversation.id === state.activeConversationId;
-                  const selfPlan = conversation.messages.some((message) => message.decision === "self_plan");
                   return (
                     <button
                       type="button"
                       key={conversation.id}
                       className={`conversation-item ${active ? "active" : ""}`}
                       aria-current={active ? "page" : undefined}
-                      onClick={() => selectConversation(conversation.id)}
+                      onClick={() => { setQuery(""); selectConversation(conversation.id); onClose?.(); }}
                     >
-                      <span className={`conversation-state ${selfPlan ? "self-plan" : ""}`}>
-                        <IconSpark size={13} />
+                      <span className="conversation-state">
+                        <IconMessage size={14} />
                       </span>
                       <span className="conversation-item-copy">
                         <strong>{conversation.title}</strong>
@@ -145,14 +157,11 @@ export function ConversationHistory({ store }: Props) {
           );
         })}
         {Object.values(grouped).every((items) => items.length === 0) ? (
-          <div className="conversation-history-empty">没有匹配的历史记录</div>
+          <div className="conversation-history-empty">没有找到相关对话。试试其他关键词，或开始一段新对话。</div>
         ) : null}
       </div>
 
-      <div className="conversation-history-foot">
-        <span>按时间自动分组</span>
-        <span>{state.conversations.length} 个对话</span>
-      </div>
+      <div className="conversation-history-foot">按最近交流时间排列</div>
     </aside>
   );
 }

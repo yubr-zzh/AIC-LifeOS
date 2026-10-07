@@ -177,16 +177,6 @@ function isoNow(): string {
 
 const INITIAL_CONVERSATION_ID = "conversation-main";
 
-function welcomeMessage(): ChatMessage {
-  return {
-    id: rid("msg"),
-    role: "assistant",
-    content:
-      "LifeOS 已连接。描述你想推进的事情，长期规划会先判断是否需要 Agent；不需要 Agent 时，会直接把步骤反馈给你自规划。",
-    created_at: isoNow(),
-  };
-}
-
 function newConversation(id = rid("conv")): Conversation {
   const now = isoNow();
   return {
@@ -194,7 +184,7 @@ function newConversation(id = rid("conv")): Conversation {
     title: "新的对话",
     created_at: now,
     updated_at: now,
-    messages: [welcomeMessage()],
+    messages: [],
   };
 }
 

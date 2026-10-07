@@ -18,14 +18,15 @@ interface Props {
   store: Store;
   dark: boolean;
   onDarkChange: (value: boolean) => void;
+  onOpenDiagnostics: () => void;
 }
 
 type SettingsSection = "general" | "agent" | "memory" | "vault" | "notifications" | "data";
 
 const settingsNav: { id: SettingsSection; label: string; icon: ReactNode }[] = [
   { id: "general", label: "一般", icon: <IconPalette size={16} /> },
-  { id: "agent", label: "模型与 Agent", icon: <IconCpu size={16} /> },
-  { id: "memory", label: "Memory", icon: <IconDatabase size={16} /> },
+  { id: "agent", label: "AI 模型与偏好", icon: <IconCpu size={16} /> },
+  { id: "memory", label: "记忆", icon: <IconDatabase size={16} /> },
   { id: "vault", label: "Obsidian Vault", icon: <IconBook size={16} /> },
   { id: "notifications", label: "通知", icon: <IconBell size={16} /> },
   { id: "data", label: "数据与隐私", icon: <IconShield size={16} /> },
@@ -62,7 +63,7 @@ function Toggle({
   );
 }
 
-export function SettingsPage({ store, dark, onDarkChange }: Props) {
+export function SettingsPage({ store, dark, onDarkChange, onOpenDiagnostics }: Props) {
   const [section, setSection] = useState<SettingsSection>(() => {
     const requested = new URLSearchParams(window.location.search).get("settings");
     return settingsNav.some((item) => item.id === requested) ? requested as SettingsSection : "general";
@@ -227,9 +228,9 @@ export function SettingsPage({ store, dark, onDarkChange }: Props) {
         {section === "agent" ? (
           <>
             <div className="settings-section-heading">
-              <span className="card-kicker">模型与 Agent</span>
-              <h2>决定何时直接自规划，何时调用 Agent</h2>
-              <p>长期规划会先判断任务复杂度，再选择执行路径。</p>
+              <span className="card-kicker">AI 模型与偏好</span>
+              <h2>选择 LifeOS 如何帮助你</h2>
+              <p>连接常用模型，并选择 LifeOS 回应简单问题或整理多步计划的方式。</p>
             </div>
             <div className="settings-model-card">
               <div>
@@ -241,35 +242,35 @@ export function SettingsPage({ store, dark, onDarkChange }: Props) {
             <div className="settings-row-card">
               <div>
                 <strong>默认路由策略</strong>
-                <small>自动判定会结合规则、插件和模型；也可强制选择执行方式。</small>
+                <small>LifeOS 会结合你的请求，选择直接回复或整理成步骤。</small>
               </div>
               <select
                 value={defaultRoutingPolicy}
                 onChange={(event) => setDefaultRoutingPolicy(event.target.value as AgentRoutingPolicy)}
-                aria-label="默认 Agent 路由策略"
+                aria-label="默认处理方式"
               >
-                <option value="auto">自动判定</option>
-                <option value="force_self_plan">始终自规划</option>
-                <option value="force_agent">始终 Agent</option>
+                <option value="auto">自动决定</option>
+                <option value="force_self_plan">优先直接给建议</option>
+                <option value="force_agent">优先整理步骤</option>
               </select>
             </div>
             <div className="settings-row-card">
               <div>
-                <strong>无需 Agent 时自动进入自规划</strong>
-                <small>关闭后仍会显示判定结果，但等待用户确认下一步。</small>
+                <strong>简单的事直接给建议</strong>
+                <small>较复杂的请求会先整理出计划，供你确认。</small>
               </div>
-              <Toggle checked={autoSelfPlan} onChange={setAutoSelfPlan} label="无需 Agent 时自动进入自规划" />
+              <Toggle checked={autoSelfPlan} onChange={setAutoSelfPlan} label="简单的事直接给建议" />
             </div>
             <div className="settings-row-card">
               <div>
-                <strong>执行前要求确认</strong>
-                <small>判定需要 Agent 时，先展示计划，不直接产生副作用。</small>
+                <strong>开始操作前先询问我</strong>
+                <small>可能改变内容或影响其他应用的操作，需要你确认。</small>
               </div>
-              <Toggle checked={confirmAgent} onChange={setConfirmAgent} label="执行前要求确认" />
+              <Toggle checked={confirmAgent} onChange={setConfirmAgent} label="开始操作前先询问我" />
             </div>
             <div className="settings-policy-note">
               <IconSpark size={15} />
-              <p><strong>当前策略：</strong>规划、拆解、总结、写作和分析任务优先反馈用户自规划；代码、文件、终端和自动化任务才进入 Agent。</p>
+              <p><strong>当前方式：</strong>简单问题直接回复；需要多步处理时，LifeOS 会先展示计划，等待你确认。</p>
             </div>
           </>
         ) : null}
@@ -416,6 +417,10 @@ export function SettingsPage({ store, dark, onDarkChange }: Props) {
             <div className="settings-policy-note">
               <IconShield size={15} />
               <p><strong>隐私边界：</strong>后端地址和模型 Key 不会显示在对话历史里；API Key 继续只保存在本机后端配置中。</p>
+            </div>
+            <div className="settings-row-card">
+              <div><strong>运行信息与排障</strong><small>查看处理记录和内部状态，通常不需要进入这里。</small></div>
+              <button type="button" className="ghost" onClick={onOpenDiagnostics}>查看详情</button>
             </div>
           </>
         ) : null}

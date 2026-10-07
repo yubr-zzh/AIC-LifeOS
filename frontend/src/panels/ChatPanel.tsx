@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { AgentRoutingPolicy, ChatMessage, PlanStep, Store } from "../state/store";
 import { FEEDBACK_RATINGS } from "../api/types";
 import type { FeedbackRating } from "../api/types";
-import { IconSend, IconCopy } from "../components/Icons";
-import { CopyId } from "../components/CopyId";
+import { IconBolt, IconSend } from "../components/Icons";
 import { ModelSwitcher } from "./ModelSwitcher";
 
 interface Props {
@@ -15,18 +14,22 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
   const { state, sendMessage } = store;
   const conversation = store.activeConversation;
   const messages = conversation?.messages ?? [];
+  const visibleMessages = messages.filter((message, index) => !(index === 0 && message.role === "assistant" && message.content.startsWith("LifeOS 已连接。")));
   const [text, setText] = useState("");
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(() => {
     const saved = window.localStorage.getItem("lifeos-agent-routing-policy");
     return saved === "force_self_plan" || saved === "force_agent" ? saved : "auto";
   });
   const scroller = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scroller.current) {
       scroller.current.scrollTop = scroller.current.scrollHeight;
     }
-  }, [conversation?.id, messages.length]);
+  }, [conversation?.id, visibleMessages.length]);
+
+  useEffect(() => setText(""), [conversation?.id]);
 
   useEffect(() => {
     try {
@@ -44,79 +47,65 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
     }
   };
 
-  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.decision);
+  const chooseStarter = (value: string) => {
+    setText(value);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <RoutingAwareness policy={routingPolicy} latest={latestAssistant} />
-      <div ref={scroller} className="scroll chat-thread" style={{ flex: 1, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {messages.map((m) => (
-          <Bubble key={m.id} msg={m} store={store} onOpenPlanning={onOpenPlanning} />
-        ))}
+      <div ref={scroller} className="scroll chat-thread">
+        {visibleMessages.length === 0 ? <ChatWelcome onChoose={chooseStarter} /> : (
+          <div className="chat-message-stack">
+            {visibleMessages.map((m) => (
+              <Bubble key={m.id} msg={m} store={store} onOpenPlanning={onOpenPlanning} />
+            ))}
+          </div>
+        )}
       </div>
       <Composer
         value={text}
         onChange={setText}
         onSubmit={submit}
         onKey={onKey}
+        inputRef={composerRef}
         disabled={state.loading.chat}
         store={store}
-        routingPolicy={routingPolicy}
-        onRoutingPolicyChange={setRoutingPolicy}
       />
     </div>
   );
 }
 
-function RoutingAwareness({ policy, latest }: { policy: AgentRoutingPolicy; latest?: ChatMessage }) {
-  const forced = policy !== "auto";
-  const enabled = policy === "force_agent" || (!forced && latest?.decision === "agent");
-  const pending = policy === "auto" && !latest;
-  const stateLabel = forced ? "用户强制" : pending ? "等待判定" : enabled ? "已启用 Agent" : "未启用 Agent";
-  const stateClass = enabled ? "enabled" : pending ? "pending" : "disabled";
-  const policyLabel = policy === "force_agent" ? "强制 Agent" : policy === "force_self_plan" ? "强制自规划" : "自动判定";
-  const sourceLabel = latest?.route_source === "rules" ? "规则护栏" : latest?.route_source === "external_plugin" ? "外部插件" : latest?.route_source === "model" ? "模型判断" : latest?.route_source === "user_override" ? "用户指定" : latest?.route_source === "fallback" ? "保守兜底" : "尚无结果";
-
-  return (
-    <div className={`routing-awareness ${stateClass}`} role="status" aria-live="polite">
-      <span className="routing-orb" />
-      <div className="routing-awareness-main">
-        <strong>{stateLabel}</strong>
-        <small>
-          当前策略：{policyLabel}
-          {latest?.decision ? ` · 来源：${sourceLabel} · 置信度 ${Math.round((latest.decision_confidence ?? 0) * 100)}%` : ""}
-        </small>
-      </div>
-      {latest?.decision_reason ? <span className="routing-awareness-reason">{latest.decision_reason}</span> : null}
+function ChatWelcome({ onChoose }: { onChoose: (value: string) => void }) {
+  const suggestions = ["帮我梳理今天的计划", "我想记录一件刚发生的事", "继续推进一个项目"];
+  return <div className="chat-welcome">
+    <div className="chat-welcome-mark"><IconBolt size={20} /></div>
+    <span className="card-kicker">一个可以慢慢展开的空间</span>
+    <h2>今天想聊些什么？</h2>
+    <p>计划、学习、项目进展，或任何想记下来的念头。LifeOS 会陪你一起整理。</p>
+    <div className="chat-starters" aria-label="对话建议">
+      {suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => onChoose(suggestion)}>{suggestion}<span aria-hidden="true">→</span></button>)}
     </div>
-  );
+  </div>;
 }
 
 function AgentRouteResult({ message }: { message: ChatMessage }) {
-  const confidence = Math.round((message.decision_confidence ?? 0) * 100);
-  const source = message.route_source === "rules" ? "规则护栏" : message.route_source === "external_plugin" ? "外部插件" : message.route_source === "user_override" ? "用户指定" : "模型判断";
   return (
-    <section className="agent-route-result" aria-label="Agent 已启用">
+    <section className="agent-route-result" aria-label="分步骤建议">
       <div>
-        <span className="agent-route-mark">A</span>
+        <span className="agent-route-mark">✦</span>
         <div>
-          <strong>Agent 已启用</strong>
-          <small>{source}{confidence ? ` · 置信度 ${confidence}%` : ""}</small>
+          <strong>这件事可以分几步来做</strong>
+          <small>先看看计划，再决定下一步</small>
         </div>
-        <span className="agent-route-badge">执行层</span>
       </div>
-      <p>{message.decision_reason || "请求包含执行型操作，将进入 Agent 流程。"}</p>
-      {message.route_signals?.length ? (
-        <div className="route-signal-list">
-          {message.route_signals.slice(0, 5).map((signal) => <span key={signal}>{signal}</span>)}
-        </div>
-      ) : null}
+      <p>你可以先看看步骤，再决定是否继续。</p>
     </section>
   );
 }
@@ -124,24 +113,9 @@ function AgentRouteResult({ message }: { message: ChatMessage }) {
 function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store; onOpenPlanning?: () => void }) {
   if (msg.role === "user") {
     return (
-      <div className="arrival" style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div style={{ maxWidth: "78%" }}>
-          <div
-            style={{
-              background: "var(--bg-2)",
-              border: "1px solid var(--bd-2)",
-              borderRadius: "var(--r-2)",
-              padding: "9px 12px",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              boxShadow: "var(--shadow-1)",
-            }}
-          >
-            {msg.content}
-          </div>
-          <div className="row mono" style={{ justifyContent: "flex-end", marginTop: 4, color: "var(--fg-3)", fontSize: 11 }}>
-            user · {new Date(msg.created_at).toLocaleTimeString()}
-          </div>
+      <div className="arrival message-row user-message">
+        <div className="message-bubble">
+          {msg.content}
         </div>
       </div>
     );
@@ -149,19 +123,14 @@ function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store
   const pending = msg.execution === "pending";
   const errored = msg.execution === "error";
   return (
-    <div className="arrival">
-      <div style={{ maxWidth: "82%" }}>
-        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-          <span className="mono" style={{ color: "var(--accent)", fontSize: 11 }}>
-            assistant
-          </span>
-          <span className="mono dim" style={{ fontSize: 11 }}>
-            {new Date(msg.created_at).toLocaleTimeString()}
-          </span>
-          {pending ? <span className="pill processing sm"><span className="dot" />thinking</span> : null}
-          {errored ? <span className="pill failed sm"><span className="dot" />error</span> : null}
-          {msg.decision === "self_plan" ? <span className="pill done sm"><span className="dot" />无需 Agent</span> : null}
-          {msg.decision === "agent" ? <span className="pill processing sm"><span className="dot" />需要 Agent</span> : null}
+    <div className="arrival message-row assistant-message">
+      <div className="assistant-avatar"><IconBolt size={15} /></div>
+      <div className="assistant-message-content">
+        <div className="assistant-message-meta">
+          <strong>LifeOS</strong>
+          <time>{new Date(msg.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>
+          {pending ? <span className="pill processing sm"><span className="dot" />正在整理</span> : null}
+          {errored ? <span className="pill failed sm"><span className="dot" />暂时没完成</span> : null}
         </div>
         {msg.decision === "self_plan" && !pending ? (
           <SelfPlanResult message={msg} onOpenPlanning={onOpenPlanning} />
@@ -169,19 +138,9 @@ function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store
           <>
             {msg.decision === "agent" && !pending ? <AgentRouteResult message={msg} /> : null}
             <div
-              style={{
-                background: "var(--bg-2)",
-                border: "1px solid var(--bd-2)",
-                borderLeft: msg.decision === "agent" ? "2px solid #d97706" : "2px solid var(--accent)",
-                borderRadius: "var(--r-2)",
-                padding: "10px 12px",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                color: errored ? "var(--st-failed)" : "var(--fg-1)",
-                boxShadow: "var(--shadow-1)",
-              }}
+              className={`message-bubble assistant-bubble${errored ? " has-error" : ""}`}
             >
-              {pending ? <span className="muted">awaiting /chat…</span> : msg.content || <span className="muted">(empty response)</span>}
+              {pending ? <span className="muted">正在整理你的问题…</span> : msg.content || <span className="muted">还没有回复内容</span>}
             </div>
           </>
         )}
@@ -190,32 +149,18 @@ function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store
             {msg.tool_calls.map((tc, i) => (
               <div key={i} className="card-flat">
                 <div className="row between">
-                  <span className="mono" style={{ color: "var(--accent)" }}>
-                    tool_call · {tc.name ?? tc.action ?? "(unnamed)"}
+                  <span className="tool-request-title">
+                    请求使用：{tc.name ?? tc.action ?? "工具"}
                   </span>
                   <span className={`pill sm ${msg.tool_results?.[i]?.status === "blocked" ? "failed" : msg.tool_results?.[i]?.status === "executed" ? "done" : "idle"}`}>
-                    <span className="dot" />{msg.tool_results?.[i]?.status ?? "requested"}
+                    <span className="dot" />{msg.tool_results?.[i]?.status === "blocked" ? "未执行" : msg.tool_results?.[i]?.status === "executed" ? "已完成" : "等待确认"}
                   </span>
                 </div>
                 {tc.arguments ? (
-                  <pre className="mono" style={{ margin: 0, color: "var(--fg-2)", fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {JSON.stringify(tc.arguments, null, 2)}
-                  </pre>
+                  <details className="tool-request-details"><summary>查看操作内容</summary><pre>{JSON.stringify(tc.arguments, null, 2)}</pre></details>
                 ) : null}
               </div>
             ))}
-          </div>
-        ) : null}
-        {msg.provider || msg.model ? (
-          <div className="row" style={{ marginTop: 5, color: "var(--fg-3)", flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 10 }}>model</span>
-            <span className="model-response-chip">{msg.provider ?? "api"}{msg.model ? ` · ${msg.model}` : ""}</span>
-          </div>
-        ) : null}
-        {msg.trace_id ? (
-          <div className="row" style={{ marginTop: 4, color: "var(--fg-3)" }}>
-            <span className="mono" style={{ fontSize: 11 }}>trace</span>
-            <CopyId value={msg.trace_id} />
           </div>
         ) : null}
         {msg.trace_id && msg.execution === "succeeded" ? <FeedbackRow msg={msg} store={store} /> : null}
@@ -225,29 +170,22 @@ function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store
 }
 
 function SelfPlanResult({ message, onOpenPlanning }: { message: ChatMessage; onOpenPlanning?: () => void }) {
-  const confidence = Math.round((message.decision_confidence ?? 0) * 100);
   return (
-    <section className="self-plan-result" aria-label="无需 Agent 的自规划建议">
+    <section className="self-plan-result" aria-label="LifeOS 的步骤建议">
       <div className="self-plan-result-head">
         <span className="self-plan-result-mark">✦</span>
         <div>
-          <strong>无需 Agent，直接反馈给你自规划</strong>
-          <small>长期规划已经完成任务复杂度判断</small>
+          <strong>先给你一个可调整的建议</strong>
+          <small>你可以按自己的节奏取舍</small>
         </div>
-        <span className="self-plan-result-badge">自规划{confidence ? ` · ${confidence}%` : ""}</span>
       </div>
-      <p className="self-plan-reason">{message.decision_reason || "这件事更适合由你掌握判断节奏。"}</p>
-      {message.route_signals?.length ? (
-        <div className="route-signal-list self-plan-signals">
-          {message.route_signals.slice(0, 5).map((signal) => <span key={signal}>{signal}</span>)}
-        </div>
-      ) : null}
+      <p className="self-plan-reason">我先根据你刚才说的内容整理了一个建议，你可以随时调整。</p>
       {message.plan_steps?.length ? <SelfPlanSteps steps={message.plan_steps} /> : (
         <p className="self-plan-reason">{message.content}</p>
       )}
       <div className="self-plan-actions">
-        <button type="button" className="green-button" onClick={onOpenPlanning}>加入阶段规划 <span>→</span></button>
-        <span>不会调用工具，也不会产生外部操作。</span>
+        <button type="button" className="green-button" onClick={onOpenPlanning}>打开阶段计划 <span>→</span></button>
+        <span>内容会先展示给你，由你决定是否保存。</span>
       </div>
     </section>
   );
@@ -276,7 +214,7 @@ function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
   return (
     <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
       <span className="mono dim" style={{ fontSize: 10, marginRight: 2 }}>
-        feedback
+        这条回复有帮助吗？
       </span>
       {FEEDBACK_RATINGS.map((r) => {
         const active = msg.feedback === r.value;
@@ -301,7 +239,7 @@ function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
       })}
       {msg.feedback ? (
         <span className="mono dim" style={{ fontSize: 10 }}>
-          rated
+          已收到
         </span>
       ) : null}
     </div>
@@ -315,41 +253,20 @@ interface ComposerProps {
   onKey: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   disabled?: boolean;
   store: Store;
-  routingPolicy: AgentRoutingPolicy;
-  onRoutingPolicyChange: (policy: AgentRoutingPolicy) => void;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
 }
 
-const ROUTING_POLICY_LABELS: { value: AgentRoutingPolicy; label: string; hint: string }[] = [
-  { value: "auto", label: "自动判定", hint: "由长期规划判断是否需要 Agent" },
-  { value: "force_self_plan", label: "强制自规划", hint: "本次请求不会进入 Agent" },
-  { value: "force_agent", label: "强制 Agent", hint: "本次请求直接进入 Agent" },
-];
-
-function Composer({ value, onChange, onSubmit, onKey, disabled, store, routingPolicy, onRoutingPolicyChange }: ComposerProps) {
+function Composer({ value, onChange, onSubmit, onKey, disabled, store, inputRef }: ComposerProps) {
   return (
     <div className="composer">
       <div className="composer-toolbar">
         <ModelSwitcher store={store} disabled={disabled} />
-        <div className="routing-policy-control" role="group" aria-label="Agent 调用策略">
-          {ROUTING_POLICY_LABELS.map((option) => (
-            <button
-              type="button"
-              key={option.value}
-              className={routingPolicy === option.value ? "active" : ""}
-              aria-pressed={routingPolicy === option.value}
-              title={option.hint}
-              onClick={() => onRoutingPolicyChange(option.value)}
-              disabled={disabled}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <span className="composer-hint">Shift + Enter 换行</span>
+        <span className="composer-hint">Enter 发送 · Shift + Enter 换行</span>
       </div>
       <div className="composer-row">
         <textarea
           rows={2}
+          ref={inputRef}
           aria-label="发送给 LifeOS 的消息"
           placeholder="和 LifeOS 聊聊你正在推进的事情…"
           value={value}
