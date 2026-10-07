@@ -190,7 +190,7 @@ export function SettingsPage({ store, dark, onDarkChange, onOpenDiagnostics }: P
             <div className="settings-section-heading">
               <span className="card-kicker">一般</span>
               <h2>显示与默认行为</h2>
-              <p>设置只保存在当前浏览器，不改变后端里的对话与 Memory。</p>
+              <p>这些偏好只保存在当前浏览器，不影响已保存的对话和记忆。</p>
             </div>
             <div className="settings-row-card">
               <div>
@@ -278,22 +278,22 @@ export function SettingsPage({ store, dark, onDarkChange, onOpenDiagnostics }: P
         {section === "memory" ? (
           <>
             <div className="settings-section-heading">
-              <span className="card-kicker">Memory</span>
-              <h2>长期规划可以引用的本地上下文</h2>
-              <p>对话时检索到的 Memory 会作为判定与规划的补充信息。</p>
+              <span className="card-kicker">我的记忆</span>
+              <h2>LifeOS 会怎样参考你的记忆</h2>
+              <p>在对话和规划中，LifeOS 会优先参考与你当前任务相关的偏好、项目和过往记录。</p>
             </div>
             <div className="settings-metrics">
-              <div><strong>{memoryCount}</strong><span>已保存条目</span></div>
-              <div><strong>{store.state.memory.candidates.length}</strong><span>待确认候选</span></div>
-              <div><strong>{store.state.memory.backups.length}</strong><span>本地备份</span></div>
+              <div><strong>{memoryCount}</strong><span>已保存的记忆</span></div>
+              <div><strong>{store.state.memory.candidates.length}</strong><span>待确认</span></div>
+              <div><strong>{store.state.memory.backups.length}</strong><span>备份记录</span></div>
             </div>
             <div className="settings-row-card">
-              <div><strong>本地 Memory</strong><small>Memory 数据由后端项目内的 .lifeos 目录管理。</small></div>
+              <div><strong>记忆保存位置</strong><small>你的记忆保存在 LifeOS 的本地数据目录中。</small></div>
               <span className="settings-state-pill">已启用</span>
             </div>
             <div className="settings-row-card">
               <div><strong>默认引用范围</strong><small>自动带入任务相关的偏好、项目和历史记录。</small></div>
-              <select defaultValue="relevant" aria-label="Memory 引用范围">
+              <select defaultValue="relevant" aria-label="记忆引用范围">
                 <option value="relevant">相关项目 + 偏好</option>
                 <option value="all">全部记录</option>
                 <option value="project">仅当前项目</option>

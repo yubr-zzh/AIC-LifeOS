@@ -58,6 +58,17 @@
 
 调研参考：[ChatGPT 历史搜索](https://help.openai.com/en/articles/10056348-how-do-i-search-my-chat-history-in-chatgpt)、[ChatGPT 新建对话](https://help.openai.com/en/articles/9125172-the-chatgpt-home-page)、[Gemini 最近对话管理](https://support.google.com/gemini/answer/13666746?hl=en-IE)、[Claude 项目与独立对话空间](https://support.anthropic.com/en/articles/9517075-what-are-projects)。
 
-### 下一步 Goal：桌面与窄屏浏览器验收
+### 阶段 6：浏览器验收与交互可访问性（已完成）
 
-在可正常控制的本地浏览器中检查首页、计划、记录、对话和记忆页的桌面/窄屏布局、主要按钮、空数据和错误状态。当前 Playwright 在导航 `127.0.0.1:5173` 时超时，尚未完成本项；之后再按真实呈现微调。
+- 使用 Playwright Chromium 验收首页（1440、1024、390、375 px）和计划、记录、我的记忆、设置、对话等页面入口；窄屏下的页面主体没有横向溢出。
+- 验收窄屏对话历史抽屉：可打开，初始焦点进入抽屉；Shift+Tab 不会把焦点移到抽屉外；Escape 关闭后焦点回到“历史”按钮；从抽屉创建新对话后抽屉关闭、历史数量更新。
+- 浏览器运行期未发现 JavaScript 异常。5173 的 Playwright 导航仍有间歇超时；改用独立的 5174 本地 Vite 预览完成验收，`networkidle` 最终成功。
+- 修正记忆候选提交后的用户路径：提示改为「我的记忆」语言，并提供直达查看入口；不再要求用户进入隐藏的系统后台找候选。
+- 精简设置里的记忆说明，移除面向普通用户不必要的 SQLite、`.lifeos`、英文 Memory 等内部术语。
+- 补齐窄屏历史抽屉的键盘焦点管理：Tab 焦点限制在模态抽屉内，Escape 后恢复焦点。
+
+验收命令：`frontend/npm run typecheck`、`frontend/npm run build` 均通过；Playwright 浏览器验收通过。
+
+### 后续非本轮范围
+
+- 前端新建/选择会话目前仍是本地状态；现有 `/chat` API 尚未携带 conversation/session id，因此不能把它描述成后端已实现真正独立的多会话上下文。后续需要在 Agent runtime 支持会话 ID 后单独接通并验收跨轮上下文隔离。
