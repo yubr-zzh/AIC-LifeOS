@@ -337,6 +337,15 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 验证：`python -m unittest discover -s tests -v` **53 tests passed**；`python -m compileall -q lifeos tests`、`git diff --check`、`npm run typecheck`、`npm run build` 通过。Playwright 前端-only smoke 渲染了页面且无 JS page error；后端未启动以免读取本地 `.lifeos` 数据。
 - 此处尚未 commit/push；前端/模型 provider/Planner 新功能尚未做真实 provider API 联调。TencentDB/ai-memory 真实端到端与阶段 9 迁移验收仍未完成。
 
+### 2026-10-07 合成用户的全局 + 项目记忆纵向验收
+
+- 扩展 `test_tencentdb_approval_retry_lifecycle_against_isolated_http_mock`：在临时目录中创建合成用户 `synthetic-user` 的每日复盘来源（全局记忆）和阶段规划来源（`lifeos-sandbox` 项目记忆），经 LifeOS HTTP API 提交候选；断言来源记录 ID/revision 可追溯、原始记录正文不会复制进候选/远端 atom，且候选在用户批准前不发送到远端。
+- 合成 TencentDB Gateway 首次对全局 create 返回 503；项目候选按显式项目坐标成功写入；重试只同步待处理的全局 atom。断言全局与项目使用不同的 team/agent/session 绑定，重复批准使用 update，画像视图能分别列出全局/项目记忆并保留来源与置信度，按范围召回可命中相应记忆。
+- 继续验证项目记忆纠正会以新 ID 替换旧 atom、撤回只删除项目 atom 且保留该用户的全局记忆。其他既有用例另行验证混合结果中的隔壁项目、无效 provenance 和未映射范围 fail-closed。
+- 验证：定向合成 Gateway 用例通过；完整 `python -m unittest discover -s tests -v` **53 tests passed**；`python -m compileall -q lifeos tests` 与 `git diff --check` 通过。所有数据均在测试临时目录，未读取或改写真实 `.lifeos` 数据。
+- 结论边界：这证明 LifeOS API、生命周期、画像和 TencentDB adapter 在本地 stub 下的全局/项目行为贯通；它不证明真实 Gateway/TCVDB 兼容性，也没有调用 LLM 自动提炼。TencentDB L2/L3 生成及 generation refs、真实 ai-memory 服务/权限、迁移与回滚仍未验收；阶段 9 仍未整体完成，暂不需要提供 API key。
+- 下一步 Goal：等具备包含 atomic-create 契约的隔离 TencentDB Gateway 后，用同一组脱敏合成场景做真实协议 E2E；随后连接隔离 ai-memory 服务验证两个相邻项目。真实用户数据接入前继续使用临时目录与显式授权。
+
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
 3. 阶段 2 至阶段 8（修订后目标边界设计）已完成；阶段 9 TencentDB contribution 尚未验收。当前分支已开始采用存储层 insert-only；SQLite/Mongo 已有初步实现，TCVDB 明确 unsupported。不能声称 LifeOS 已能经 TCVDB 首次写入，且测试/类型检查未跑完。

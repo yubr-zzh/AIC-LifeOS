@@ -334,20 +334,13 @@ class CoreRegressionTests(unittest.TestCase):
         ))
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
         agent.external_memory = adapter
-        candidate = run(agent.memory.propose_update(
-            "direct",
-            {"claim": "synthetic project prefers focused milestones"},
-            category="project",
-            scope={"kind": "project", "project_id": "lifeos-sandbox", "user_id": "synthetic-user"},
-        ))
-        self.assertEqual(records, {}, "candidate creation must not send unapproved memory")
-
         class LifeOSStubHandler(LifeOSRequestHandler):
             def log_message(self, _format, *_args):
                 pass
 
         LifeOSStubHandler.agent = agent
-        LifeOSStubHandler.structured_store = StructuredStore(self.path / "synthetic-lifeos.db")
+        structured_store = StructuredStore(self.path / "synthetic-lifeos.db")
+        LifeOSStubHandler.structured_store = structured_store
         lifeos_api = HTTPServer(("127.0.0.1", 0), LifeOSStubHandler)
         api_thread = threading.Thread(target=lifeos_api.serve_forever, daemon=True)
         api_thread.start()
@@ -362,23 +355,93 @@ class CoreRegressionTests(unittest.TestCase):
             with urlopen(request) as response:
                 return json.load(response)
 
-        first_commit = post(f"/memory/candidates/{candidate['id']}/commit")
+        global_source = structured_store.upsert({
+            "kind": "daily_review",
+            "entry_date": "2026-10-07",
+            "title": "合成用户的每日复盘",
+            "content": "合成原文：晚上安排太多事情后，第二天注意力会下降。",
+        })
+        project_source = structured_store.upsert({
+            "kind": "phase_plan",
+            "entry_date": "2026-10-07",
+            "title": "合成 LifeOS 项目计划",
+            "content": "合成原文：把记忆链路拆成小里程碑逐步验证。",
+        })
+        global_candidate = post(
+            f"/entries/{global_source['id']}/memory-candidates",
+            {
+                "content": {"claim": "synthetic user prefers concise answers"},
+                "category": "user",
+                "scope": {"kind": "global", "user_id": "synthetic-user"},
+                "confidence": 0.9,
+                "confidence_method": "user_confirmed",
+            },
+        )["candidate"]
+        candidate = post(
+            f"/entries/{project_source['id']}/memory-candidates",
+            {
+                "content": {"claim": "synthetic project prefers focused milestones"},
+                "category": "project",
+                "scope": {"kind": "project", "project_id": "lifeos-sandbox", "user_id": "synthetic-user"},
+                "confidence": 0.8,
+                "confidence_method": "user_confirmed",
+            },
+        )["candidate"]
+        self.assertEqual(global_candidate["source_ref"]["record_id"], global_source["id"])
+        self.assertEqual(global_candidate["source_ref"]["revision"], global_source["updated_at"])
+        self.assertEqual(candidate["source_ref"]["record_id"], project_source["id"])
+        self.assertEqual(candidate["source_ref"]["revision"], project_source["updated_at"])
+        self.assertNotIn("合成原文", json.dumps([global_candidate, candidate], ensure_ascii=False))
+        self.assertEqual(records, {}, "global and project candidates must not sync before approval")
+
+        first_commit = post(f"/memory/candidates/{global_candidate['id']}/commit")
         self.assertEqual(first_commit["item"]["provider_sync"]["status"], "pending")
-        self.assertEqual(records, {}, "failed first create must leave no remote memory")
+        self.assertEqual(records, {}, "failed first create must leave the global memory local and pending")
+        project_commit = post(f"/memory/candidates/{candidate['id']}/commit")
+        self.assertEqual(project_commit["item"]["provider_sync"]["status"], "synced")
+        self.assertEqual(records[f"lifeos-{candidate['id']}"]["team_id"], "synthetic-project-team")
         retry = post("/memory/providers/tencentdb/sync-pending")
         self.assertEqual(retry["results"][0]["status"], "synced")
-        self.assertEqual(list(records), [f"lifeos-{candidate['id']}"])
+        self.assertEqual(set(records), {f"lifeos-{global_candidate['id']}", f"lifeos-{candidate['id']}"})
+        global_remote = records[f"lifeos-{global_candidate['id']}"]
+        self.assertEqual(global_remote["team_id"], "synthetic-global-team")
+        self.assertEqual(global_remote["agent_id"], "synthetic-global-agent")
+        self.assertEqual(global_remote["session_id"], "lifeos-global-memory")
+        self.assertIn(global_source["id"], global_remote["background"])
         self.assertEqual(records[f"lifeos-{candidate['id']}"]["team_id"], "synthetic-project-team")
+        project_remote = records[f"lifeos-{candidate['id']}"]
+        self.assertEqual(project_remote["session_id"], "synthetic-project-session")
+        self.assertIn(project_source["id"], project_remote["background"])
+        self.assertNotIn("合成原文", json.dumps(records, ensure_ascii=False))
+
+        profile = agent.memory.profile_view()
+        self.assertEqual(profile["core_profiles"][0]["memories"][0]["id"], global_candidate["id"])
+        self.assertEqual(
+            profile["core_profiles"][0]["memories"][0]["source_ref"]["record_id"],
+            global_source["id"],
+        )
+        self.assertEqual(profile["project_profiles"][0]["memories"][0]["id"], candidate["id"])
+        self.assertEqual(
+            profile["project_profiles"][0]["memories"][0]["source_ref"]["record_id"],
+            project_source["id"],
+        )
+        self.assertEqual(profile["core_profiles"][0]["memories"][0]["confidence"], 0.9)
 
         repeated_commit = post(f"/memory/candidates/{candidate['id']}/commit")
         self.assertEqual(repeated_commit["item"]["provider_sync"]["status"], "synced")
-        self.assertEqual([path for path, _, _ in calls[:3]], [
-            "/v3/atomic/create", "/v3/atomic/create", "/v3/atomic/update"
+        self.assertEqual([path for path, _, _ in calls[:4]], [
+            "/v3/atomic/create", "/v3/atomic/create", "/v3/atomic/create", "/v3/atomic/update"
         ])
+        recalled_global = adapter.retrieve(
+            "concise answers",
+            scope={"kind": "global", "user_id": "synthetic-user"},
+            allowed_memory_ids={global_candidate["id"], candidate["id"]},
+        )
+        self.assertEqual(recalled_global["user"][0]["id"], global_candidate["id"])
         recalled = adapter.retrieve(
             "focused milestones",
             scope={"kind": "project", "project_id": "lifeos-sandbox", "user_id": "synthetic-user"},
-            allowed_memory_ids={candidate["id"]},
+            allowed_memory_ids={global_candidate["id"], candidate["id"]},
         )
         self.assertEqual(recalled["project"][0]["id"], candidate["id"])
 
@@ -392,7 +455,7 @@ class CoreRegressionTests(unittest.TestCase):
 
         retracted = post(f"/memory/{corrected['id']}/retract", {"reason": "synthetic cleanup"})["memory"]
         self.assertEqual(retracted["status"], "retracted")
-        self.assertEqual(records, {}, "retraction must remove only the synthetic remote atom")
+        self.assertEqual(set(records), {f"lifeos-{global_candidate['id']}"}, "retraction must leave unrelated global memory untouched")
         self.assertTrue(all(token == "Bearer synthetic-only-key" for _, _, token in calls))
 
     def test_tencentdb_adapter_writes_approved_only_and_fail_closed_filters_scope(self):
