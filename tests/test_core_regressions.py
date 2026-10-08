@@ -1331,6 +1331,22 @@ class CoreRegressionTests(unittest.TestCase):
         ]
         self.assertEqual(len(reflections), 1)
 
+    def test_conversation_reflection_candidate_does_not_copy_raw_turn_text(self):
+        agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        private_marker = "SYNTHETIC_PRIVATE_CONVERSATION_MARKER"
+        run(agent.run(f"请记住这个只用于测试的内容：{private_marker}"))
+        run(agent.run_background_once())
+
+        reflection = next(
+            candidate for candidate in agent.memory._read()["candidates"]
+            if candidate["source"] == "reflection"
+        )
+        serialized = json.dumps(reflection["content"], ensure_ascii=False)
+        self.assertNotIn(private_marker, serialized)
+        self.assertNotIn("User asked:", serialized)
+        self.assertNotIn("response", reflection["content"])
+        self.assertEqual(reflection["scope"]["kind"], "unassigned")
+
     def test_candidate_approval_endpoints_persist_to_backend(self):
         agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
         class FakeMemoryProvider:
@@ -1583,6 +1599,65 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(len(provider.items), 1)
         self.assertEqual(provider.items[0]["source_ref"]["record_id"], entry["id"])
         self.assertEqual(provider.items[0]["scope"]["scenario_type"], "learning")
+
+    def test_conversation_trace_can_create_distilled_approval_gated_memory_candidate(self):
+        agent = LifeOSAgent(LLMClient(), storage_dir=self.path)
+        raw_marker = "SYNTHETIC_RAW_CHAT_MUST_STAY_LOCAL"
+        trace_id = agent.trace.start(f"conversation input {raw_marker}")
+        agent.trace.event(trace_id, "conversation.completed", {"response": f"response {raw_marker}"})
+
+        class FakeMemoryProvider:
+            def __init__(self):
+                self.writes = []
+
+            def write_approved_memory(self, item):
+                self.writes.append(item)
+
+        provider = FakeMemoryProvider()
+        agent.external_memory = provider
+
+        class Handler(LifeOSRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+        Handler.agent = agent
+        Handler.structured_store = StructuredStore(self.path / "conversation-source.db")
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+
+        def post(path, payload):
+            request = Request(base + path, data=json.dumps(payload).encode(), method="POST")
+            with urlopen(request) as response:
+                return json.load(response)
+
+        claim = "synthetic user prefers a short summary before detailed steps"
+        result = post(
+            f"/traces/{trace_id}/memory-candidates",
+            {
+                "content": {"claim": claim},
+                "category": "user",
+                "scope": {"kind": "global"},
+            },
+        )
+        candidate = result["candidate"]
+        self.assertEqual(candidate["source"], "direct")
+        self.assertEqual(candidate["source_ref"]["kind"], "conversation")
+        self.assertEqual(candidate["source_ref"]["record_id"], trace_id)
+        self.assertEqual(candidate["scope"]["kind"], "global")
+        self.assertEqual(candidate["confidence_method"], "user_confirmed")
+        self.assertNotIn(raw_marker, json.dumps(candidate, ensure_ascii=False))
+        self.assertEqual(provider.writes, [], "candidate must not sync before explicit approval")
+
+        committed = post(f"/memory/candidates/{candidate['id']}/commit", {})["item"]
+        self.assertEqual(committed["provider_sync"]["status"], "synced")
+        self.assertEqual(len(provider.writes), 1)
+        self.assertEqual(provider.writes[0]["content"]["claim"], claim)
+        self.assertNotIn(raw_marker, json.dumps(provider.writes[0], ensure_ascii=False))
 
     def test_skill_usage_is_recorded_after_outcome(self):
         registry = SkillRegistry(self.path / "skills.json")

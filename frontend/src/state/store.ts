@@ -8,6 +8,7 @@ import type {
   GlobalAgentStatus,
   MemoryCandidate,
   MemoryStore,
+  MemoryScope,
   ModelCatalog,
   ModelProfile,
   ModelProfileInput,
@@ -509,7 +510,11 @@ export function useStore() {
   );
 
   const sendMessage = useCallback(
-    async (text: string, routingPolicy: AgentRoutingPolicy = "auto") => {
+    async (
+      text: string,
+      routingPolicy: AgentRoutingPolicy = "auto",
+      memoryScope?: MemoryScope,
+    ) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
@@ -561,6 +566,8 @@ export function useStore() {
           trimmed,
           stateRef.current.modelCatalog.active_profile_id,
           routingPolicy,
+          undefined,
+          memoryScope,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

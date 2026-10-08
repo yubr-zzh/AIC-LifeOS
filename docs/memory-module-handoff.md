@@ -253,7 +253,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 适配器通过环境变量启用：`LIFEOS_TDAI_ENDPOINT`、`LIFEOS_TDAI_SERVICE_ID`、`LIFEOS_TDAI_TEAM_ID`、`LIFEOS_TDAI_AGENT_ID`、`LIFEOS_TDAI_USER_ID`，可选 `LIFEOS_TDAI_API_KEY`、`LIFEOS_TDAI_TIMEOUT_SECONDS`。必须提供完整身份；本阶段只允许 loopback Gateway，未配置时完全关闭。未运行 Gateway 联调，也未发送任何真实记录。
 - 官方 v3 SDK 契约核对：`updateAtomic` 使用身份、session、id、content、background；`searchAtomic` 使用身份、query、limit；`deleteAtomic` 按明确 ids 删除。服务端 handler 进一步证明 update 只更新既有 ID；本地 Draft PR #1604 补充 create-only API 契约，LifeOS 适配器已按该契约改造（见 2026-10-05 记录）。不能把 `/offload/ingest` 异步抽取误当直接写入替代。
 - scope 隔离约束：上游 `searchAtomic` 请求没有 `session_id` 字段，不能依赖服务端按项目/场景过滤。因此 LifeOS 将 scope 保存在 `background` provenance 并在本地 fail-closed 过滤；无合法 provenance 的远端结果不参与召回。该机制尚待真实 Gateway 契约测试验证。
-- 当前对话以“对话事件 → 反思候选 → 用户批准 → L1”接入，未做原始 L0 复制；multi-agent 轨迹尚无稳定协议，后续以含 `source_ref/scope/agent/task/time/event_type` 的事件适配，不要求等 executor 完工。
+- 当前对话以“对话事件 → 本地反思候选 → 用户审核 → L1”接入，未做原始 L0 复制。2026-10-08 起，自动反思候选仅保留 intent bucket、响应状态和阻断类诊断，不再复制用户原话或助手完整回答；该候选标记为需用户再提炼，默认 scope 为 `unassigned`，不能直接跨域召回或同步到 TencentDB。multi-agent 轨迹尚无稳定协议，后续以含 `source_ref/scope/agent/task/time/event_type` 的最小事件适配，不要求等 executor 完工；原始工具输入/输出默认留在 LifeOS 本地轨迹，不自动外发。
 - `ai-memory` 尚未接入：它继续负责 coding project wiki/lifecycle/handoff 的权威与召回；LifeOS 不复制其原始轨迹或 wiki。需要沉淀为通用用户认知时，再回到 LifeOS 候选/审批后进入 TencentDB。阶段 9 后续仍须显式绑定 workspace/project 并完成真实只读召回隔离测试。
 - 新增 [`docs/tencentdb-approved-atomic-create-proposal.md`](tencentdb-approved-atomic-create-proposal.md)：最初记录审核友好的 create API 契约建议；后续据此准备 Draft PR #1604，细节见 `docs/tencentdb-atomic-create-pr-handoff.md`。
 - 迁移/切换尚未发生。本地 `.lifeos/memory.json` 仍是现行权威；此切片用于接口/状态验证，不代表已有 active 数据已迁移或已进入长期双写。
@@ -345,6 +345,29 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 验证：定向合成 Gateway 用例通过；完整 `python -m unittest discover -s tests -v` **53 tests passed**；`python -m compileall -q lifeos tests` 与 `git diff --check` 通过。所有数据均在测试临时目录，未读取或改写真实 `.lifeos` 数据。
 - 结论边界：这证明 LifeOS API、生命周期、画像和 TencentDB adapter 在本地 stub 下的全局/项目行为贯通；它不证明真实 Gateway/TCVDB 兼容性，也没有调用 LLM 自动提炼。TencentDB L2/L3 生成及 generation refs、真实 ai-memory 服务/权限、迁移与回滚仍未验收；阶段 9 仍未整体完成，暂不需要提供 API key。
 - 下一步 Goal：等具备包含 atomic-create 契约的隔离 TencentDB Gateway 后，用同一组脱敏合成场景做真实协议 E2E；随后连接隔离 ai-memory 服务验证两个相邻项目。真实用户数据接入前继续使用临时目录与显式授权。
+
+### 2026-10-08 阶段 9 本地 Gateway 可运行性核对
+
+- 检查 `upstream/TencentDB-Agent-Memory/MemoryCore`：本地分支包含 `/v3/atomic/create` 路由和 `feat/atomic-create-approved-memory` 实现；Gateway standalone 配置绑定 `127.0.0.1`、SQLite、BM25，`atomic/create` 路径本身不调用 LLM，因而该纵向验收不需要真实模型 API key。
+- 经用户许可后，在该目录运行 `npm install --no-save --package-lock=false --ignore-scripts`；依赖仅落在被忽略的 `node_modules/`，未生成 lockfile、未修改上游源码。启动真实 Gateway 于 loopback + 临时 SQLite `TDAI_DATA_DIR`，使用合成 Bearer key 与身份，不调用模型 Provider。Gateway 启动日志有 `D:\data\log` 写入 EPERM，但服务可正常响应；测试结束后已停止服务并删除精确的临时 SQLite 数据目录。
+- 真实 LifeOS HTTP → approval → adapter → Gateway SQLite → recall：单条全局记忆通过；批准前远端搜索为空，批准后 `/v3/atomic/create` 写入并可召回，重复批准走 update 且成功；远端结果没有原始复盘文本。该结果只证明单条写入链路。
+- 真实多记忆测试暴露阻断缺陷：首条记忆写入后，再用同一 `service_id` 创建不同新 ID 时，上游 `/v3/atomic/create` 返回 409；若换不同 team/agent，则错误返回 404。源码证据：`handleAtomicCreate()` 调 `queryL1Records({recordIds:[input.id]})`，但当前 SQLite `queryL1Records()` 实现忽略 `recordIds` 并返回所有记录，继而把别的 atom 当成目标 ID 冲突。LifeOS adapter 正确保留 `pending`，没有误标 synced。当前无法靠 LifeOS adapter 安全绕过此行为，需先修上游查重实现/契约。
+- 上游 focused Vitest `node_modules/.bin/vitest.cmd run src/gateway/v2-router.atomic-create.test.ts` 结果 **7 passed, 1 failed**：atomic-create fixture 的首条创建与幂等重试断言通过，但随后 query 断言返回 500；fixture 的 `queryL1Records` 假函数要求必传参数，而被测 `/atomic/query` 合法地无参调用它。该失败表明现有 focused test fixture 还不完整；未修改上游文件。
+- 本仓库 `python -m unittest discover -s tests -v` **54 tests passed**，`python -m compileall -q lifeos tests`、`git diff --check` 通过。真实 Gateway E2E 暴露的问题不在 LifeOS stub suite 中。
+- 下一步 Goal：用户确认后，在上游本地 `feat/atomic-create-approved-memory` 上补 `queryL1Records` 的 exact-ID 过滤及 regression test（多个不同 ID、相同 payload 重试、跨租户 ID 碰撞），修复 atomic-create fixture 的无参调用，再重跑 SQLite/Gateway focused tests；随后重跑本 LifeOS 真实 Gateway 多项目隔离、纠正/撤回、重启持久化 E2E。ai-memory 真实只读隔离已用 2.4.1 binary 验收，待当前源码版本可运行时再回归。Agent/tool 原始轨迹不自动外发，只允许用户审批后的提炼候选进入记忆。
+
+### 2026-10-08 ai-memory 真实 HTTP 只读隔离验收
+
+- 使用工作区已有 `upstream/ai-memory/target/debug/ai-memory.exe`（版本 2.4.1），在专用临时 data-dir 启动 loopback HTTP 服务；禁用 watcher / embedding / LLM，不请求外部模型。通过服务管理接口写入两份合成项目页，再从 LifeOS `AiMemoryProjectAdapter` 调真实 `/api/v1/search` 与 page-read。
+- 两个明确映射项目各自能搜索并读取自己的页面；用项目 A 独有 token 搜索项目 B 返回 0；unmapped project 与 global scope 不发起外部查询。验收通过；服务已停止，临时 wiki/index 数据已删除。
+- 该结果证明当前只读 API 契约和相邻项目隔离能在真实服务上工作；二进制版本为 2.4.1，早于工作区当前源码，未来应以实际部署/更新版本再回归一次。原 `upstream/ai-memory` 工作区已有 `crates/ai-memory-hooks/src/payload.rs` 修改，未触碰、未清理、未提交。
+
+### 2026-10-08 对话反思候选隐私收敛
+
+- 发现旧 `ReflectionEngine.reflect()` 将原始 `user_input` 与完整助手 `response` 复制到 `reflection` memory candidate；虽然候选默认 `unassigned` 且远端仍要用户批准，但这偏离“原始记录留在来源库、长期记忆只存提炼认知”的原则。
+- 现改为仅保存 intent bucket、响应是否存在、阻断类问题计数等结构化诊断，并标记 `requires_user_distillation=true`；不得把这类诊断当作用户画像事实。新增隐私回归测试先确认旧实现泄漏、再确认修复后不含合成敏感标记。
+- 验证：全量 `python -m unittest discover -s tests -v` **54 tests passed**；`python -m compileall -q lifeos tests`、`git diff --check` 通过。真实 Gateway 单条全局写入/召回已另行通过，但多记忆 E2E 被上游 SQLite 查重缺陷阻断；ai-memory 服务验收未做。LifeOS 源码和测试变更未 commit/push。
+- 后续仍需决定反思诊断候选在 UI 中是否应显示为“待用户提炼”而非普通待批准项；未确认前，保持不分配 scope、不自动远端同步。
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。

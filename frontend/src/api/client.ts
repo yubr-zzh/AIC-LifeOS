@@ -322,6 +322,21 @@ export async function proposeEntryMemoryCandidate(
   return (await res.json()) as { status: string; candidate: MemoryCandidate };
 }
 
+export async function proposeTraceMemoryCandidate(
+  traceId: string,
+  input: { claim: string; scope: MemoryScope; category: "user" | "project" },
+  opts?: ApiOptions,
+): Promise<{ status: string; candidate: MemoryCandidate }> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/traces/${encodeURIComponent(traceId)}/memory-candidates`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ content: { claim: input.claim.trim() }, scope: input.scope, category: input.category }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { status: string; candidate: MemoryCandidate };
+}
+
 export async function getMemoryMarkdown(
   opts?: ApiOptions,
 ): Promise<MemoryMarkdownResponse> {

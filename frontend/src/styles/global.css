@@ -823,6 +823,41 @@ textarea { resize: vertical; }
   gap: 10px;
   padding: 8px 10px 0;
 }
+.composer-memory-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 8px 12px 2px;
+}
+.composer-memory-scope label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg-3);
+  font-size: 10px;
+}
+.composer-memory-scope select,
+.composer-memory-scope input {
+  min-height: 30px;
+  max-width: 190px;
+  padding: 4px 8px;
+  border: 1px solid var(--bd-1);
+  border-radius: 9px;
+  background: var(--bg-1);
+  color: var(--fg-1);
+  font-size: 11px;
+}
+.composer-memory-hint {
+  color: var(--fg-3);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.composer-scope-error {
+  padding: 2px 12px 4px;
+  color: var(--danger, #b5473c);
+  font-size: 10px;
+}
 .composer-row {
   display: flex;
   align-items: flex-end;

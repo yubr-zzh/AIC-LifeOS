@@ -154,7 +154,7 @@ function scenarioLabel(value?: string | null) {
 }
 
 function sourceLabel(value: string) {
-  const labels: Record<string, string> = { chat: "对话", daily_plan: "每日计划", daily_review: "每日回顾", phase_plan: "阶段计划", phase_review: "阶段回顾", diary: "日记", insight: "心得", feedback: "反馈", agent_trace: "执行记录" };
+  const labels: Record<string, string> = { chat: "对话", conversation: "对话提炼", daily_plan: "每日计划", daily_review: "每日回顾", phase_plan: "阶段计划", phase_review: "阶段回顾", diary: "日记", insight: "心得", feedback: "反馈", agent_trace: "执行记录" };
   return labels[value] ?? value;
 }
 

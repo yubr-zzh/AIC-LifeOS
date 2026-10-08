@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { AgentRoutingPolicy, ChatMessage, PlanStep, Store } from "../state/store";
 import { FEEDBACK_RATINGS } from "../api/types";
-import type { FeedbackRating } from "../api/types";
+import type { FeedbackRating, MemoryScope } from "../api/types";
+import { proposeTraceMemoryCandidate } from "../api/client";
 import { IconBolt, IconSend } from "../components/Icons";
 import { ModelSwitcher } from "./ModelSwitcher";
 
@@ -20,6 +21,10 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
     const saved = window.localStorage.getItem("lifeos-agent-routing-policy");
     return saved === "force_self_plan" || saved === "force_agent" ? saved : "auto";
   });
+  const [memoryScopeKind, setMemoryScopeKind] = useState<"global" | "scenario" | "project">("global");
+  const [memoryScenario, setMemoryScenario] = useState("learning");
+  const [memoryProjectId, setMemoryProjectId] = useState("");
+  const [scopeError, setScopeError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
@@ -29,7 +34,13 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
     }
   }, [conversation?.id, visibleMessages.length]);
 
-  useEffect(() => setText(""), [conversation?.id]);
+  useEffect(() => {
+    setText("");
+    setMemoryScopeKind("global");
+    setMemoryScenario("learning");
+    setMemoryProjectId("");
+    setScopeError("");
+  }, [conversation?.id]);
 
   useEffect(() => {
     try {
@@ -42,8 +53,18 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
   const submit = () => {
     const t = text.trim();
     if (!t || state.loading.chat) return;
+    if (memoryScopeKind === "project" && !memoryProjectId.trim()) {
+      setScopeError("请填写项目 ID，避免跨项目读取。");
+      return;
+    }
+    const memoryScope: MemoryScope = memoryScopeKind === "global"
+      ? { kind: "global" }
+      : memoryScopeKind === "scenario"
+        ? { kind: "scenario", scenario_type: memoryScenario }
+        : { kind: "project", project_id: memoryProjectId.trim() };
+    setScopeError("");
     setText("");
-    void sendMessage(t, routingPolicy);
+    void sendMessage(t, routingPolicy, memoryScope);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -77,6 +98,13 @@ export function ChatPanel({ store, onOpenPlanning }: Props) {
         inputRef={composerRef}
         disabled={state.loading.chat}
         store={store}
+        scopeKind={memoryScopeKind}
+        onScopeKindChange={setMemoryScopeKind}
+        scenario={memoryScenario}
+        onScenarioChange={setMemoryScenario}
+        projectId={memoryProjectId}
+        onProjectIdChange={setMemoryProjectId}
+        scopeError={scopeError}
       />
     </div>
   );
@@ -163,7 +191,12 @@ function Bubble({ msg, store, onOpenPlanning }: { msg: ChatMessage; store: Store
             ))}
           </div>
         ) : null}
-        {msg.trace_id && msg.execution === "succeeded" ? <FeedbackRow msg={msg} store={store} /> : null}
+        {msg.trace_id && msg.execution === "succeeded" ? (
+          <>
+            <FeedbackRow msg={msg} store={store} />
+            <ConversationMemoryCapture msg={msg} store={store} />
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -246,6 +279,95 @@ function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
   );
 }
 
+function ConversationMemoryCapture({ msg, store }: { msg: ChatMessage; store: Store }) {
+  const [open, setOpen] = useState(false);
+  const [claim, setClaim] = useState("");
+  const [scopeKind, setScopeKind] = useState<"global" | "scenario" | "project">("global");
+  const [scenario, setScenario] = useState("learning");
+  const [projectId, setProjectId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const submit = async () => {
+    const distilledClaim = claim.trim();
+    if (!distilledClaim) { setMessage("先写下你希望 LifeOS 记住的结论。"); return; }
+    if (scopeKind === "project" && !projectId.trim()) { setMessage("请填写具体项目 ID，避免项目记忆串用。"); return; }
+    const scope: MemoryScope = scopeKind === "global"
+      ? { kind: "global" }
+      : scopeKind === "scenario"
+        ? { kind: "scenario", scenario_type: scenario }
+        : { kind: "project", project_id: projectId.trim() };
+    setBusy(true); setMessage("");
+    try {
+      await proposeTraceMemoryCandidate(msg.trace_id!, {
+        claim: distilledClaim,
+        scope,
+        category: scopeKind === "project" ? "project" : "user",
+      });
+      await store.refreshAll();
+      setSubmitted(true);
+      setMessage("已提交到记忆候选，请到「我的记忆」审核；批准前不会同步到 TencentDB。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button type="button" className="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "收起记忆提炼" : "从这段对话提炼一条记忆"}
+      </button>
+      {open ? (
+        <div className="col" style={{ gap: 8, marginTop: 8, padding: 12, border: "1px solid var(--bd-1)", borderRadius: "var(--r-2)" }}>
+          <p className="mono muted" style={{ margin: 0, fontSize: 10 }}>
+            只提交你在下方写出的提炼结论和对话来源编号，不复制聊天原文。提交后仍需你在记忆页审核。
+          </p>
+          <label className="col" style={{ gap: 4, fontSize: 12 }}>
+            希望 LifeOS 记住什么？
+            <textarea value={claim} onChange={(event) => setClaim(event.target.value)} rows={2} maxLength={2000} placeholder="例如：我更容易通过先看具体例子来理解新概念。" />
+          </label>
+          <label className="row" style={{ gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+            记忆范围
+            <select value={scopeKind} onChange={(event) => setScopeKind(event.target.value as typeof scopeKind)}>
+              <option value="global">全局核心</option>
+              <option value="scenario">场景</option>
+              <option value="project">具体项目</option>
+            </select>
+          </label>
+          {scopeKind === "scenario" ? (
+            <label className="row" style={{ gap: 8, fontSize: 12 }}>
+              场景
+              <select value={scenario} onChange={(event) => setScenario(event.target.value)}>
+                <option value="learning">学习型</option>
+                <option value="project">项目型</option>
+                <option value="document">文档型</option>
+                <option value="information_execution">信息型执行</option>
+                <option value="external_operation">外部操作型</option>
+              </select>
+            </label>
+          ) : null}
+          {scopeKind === "project" ? (
+            <label className="col" style={{ gap: 4, fontSize: 12 }}>
+              项目 ID
+              <input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="填写稳定的项目标识" />
+            </label>
+          ) : null}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" className="green-button" onClick={() => void submit()} disabled={busy || submitted || store.state.ui.dataMode !== "backend"}>
+              {busy ? "提交中…" : submitted ? "已提交候选" : "提交待审核候选"}
+            </button>
+            {store.state.ui.dataMode !== "backend" ? <span className="mono muted" style={{ fontSize: 10 }}>预览模式不可写入。</span> : null}
+          </div>
+          {message ? <div role="status" className="mono muted" style={{ fontSize: 10 }}>{message}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 interface ComposerProps {
   value: string;
   onChange: (v: string) => void;
@@ -254,15 +376,48 @@ interface ComposerProps {
   disabled?: boolean;
   store: Store;
   inputRef: React.RefObject<HTMLTextAreaElement>;
+  scopeKind: "global" | "scenario" | "project";
+  onScopeKindChange: (value: "global" | "scenario" | "project") => void;
+  scenario: string;
+  onScenarioChange: (value: string) => void;
+  projectId: string;
+  onProjectIdChange: (value: string) => void;
+  scopeError: string;
 }
 
-function Composer({ value, onChange, onSubmit, onKey, disabled, store, inputRef }: ComposerProps) {
+function Composer({ value, onChange, onSubmit, onKey, disabled, store, inputRef, scopeKind, onScopeKindChange, scenario, onScenarioChange, projectId, onProjectIdChange, scopeError }: ComposerProps) {
   return (
     <div className="composer">
       <div className="composer-toolbar">
         <ModelSwitcher store={store} disabled={disabled} />
         <span className="composer-hint">Enter 发送 · Shift + Enter 换行</span>
       </div>
+      <div className="composer-memory-scope">
+        <label>
+          <span>本轮记忆范围</span>
+          <select value={scopeKind} onChange={(event) => onScopeKindChange(event.target.value as ComposerProps["scopeKind"])} disabled={disabled}>
+            <option value="global">全局记忆</option>
+            <option value="scenario">场景记忆</option>
+            <option value="project">项目记忆</option>
+          </select>
+        </label>
+        {scopeKind === "scenario" ? (
+          <select aria-label="选择记忆场景" value={scenario} onChange={(event) => onScenarioChange(event.target.value)} disabled={disabled}>
+            <option value="learning">学习</option>
+            <option value="project">项目</option>
+            <option value="document">文档</option>
+            <option value="information_execution">信息执行</option>
+            <option value="external_operation">外部操作</option>
+          </select>
+        ) : null}
+        {scopeKind === "project" ? (
+          <input aria-label="项目 ID" value={projectId} onChange={(event) => onProjectIdChange(event.target.value)} placeholder="填写已映射的项目 ID" disabled={disabled} />
+        ) : null}
+        <span className="composer-memory-hint">
+          {scopeKind === "global" ? "只检索全局已采纳记忆" : scopeKind === "scenario" ? "只检索所选场景；未配置映射时不会扩大范围" : "仅检索此项目；Agent 任务可读取精确映射的 ai-memory 项目资料"}
+        </span>
+      </div>
+      {scopeError ? <div className="composer-scope-error" role="alert">{scopeError}</div> : null}
       <div className="composer-row">
         <textarea
           rows={2}

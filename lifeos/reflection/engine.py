@@ -66,11 +66,15 @@ class ReflectionEngine:
             issues.append(f"blocked_tool_calls:{len(blocked)}")
 
         return {
-            "summary": f"User asked: {user_input}",
+            # This is an interaction diagnostic, not a user-profile claim.
+            # Keep the raw turn and assistant response in their source stores;
+            # memory candidates must not duplicate transcript text by default.
+            "summary": f"Conversation intent classified as {bucket}.",
             "intent_bucket": bucket,
-            "response": response,
+            "response_status": "present" if response else "empty",
             "issues": issues,
             "memory_type": f"conversation_reflection:{bucket}",
+            "requires_user_distillation": True,
             "reflected_at": datetime.utcnow().isoformat(),
         }
 
