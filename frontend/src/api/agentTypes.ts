@@ -350,6 +350,10 @@ export interface AgentDescriptor {
   error: string | null;
   canUseTool: boolean;
   canAskQuestion: boolean;
+  moshi?: PermissionMode[];
+  yi_ci_xing?: boolean;
+  xu_pei_zhuang?: boolean;
+  ce_shi?: { ok: boolean; probeMs: number; shuoming: string };
 }
 
 export interface VersionGate {
@@ -390,6 +394,7 @@ export interface CreateSessionRequest {
   planId?: string;
   traceId?: string;
   clientIdempotencyKey?: string;
+  acknowledgeNoApproval?: boolean;
 }
 
 /** 8.2.3：「总是允许」走 updatedPermissions，落点被服务端强制约束。 */

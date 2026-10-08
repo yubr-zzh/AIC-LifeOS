@@ -1,0 +1,296 @@
+{
+  "_shuo_ming": "opencode 适配器的 L-B golden 样本。**wire 逐行来自 opencode.py 文件头的「wire」段**（那是本机 1.18.34 的真实 stdout），所以这份样本不是抄 cc-connect 源码——那三个坑（`--dangerously-skip-permissions` 已删、回合边界、error 不收口）照抄会直接踩雷。期望值（expect / _shi_bian_jie）是统一事件的期望形状。**这份文件的正确性取决于抄得对不对，所以它只是回归护栏，不是「已验证」**——真验收是 L-C（`tests/test_liu_xing_lc_ji_cheng.py::Opencode_LC`，真 spawn `opencode run --format json` 打真回合）。标了「防御性」的那几条不是真机抓的，是 `fan_yi` 里真实存在的分支，坏行不许吞掉整轮那条纪律要求它们有护栏。",
+  "_lai_yuan": "opencode 1.18.34 / Windows 11 / 2026-10-05。opencode.py 文件头「wire（真机抓的原始行）」段逐字抄，id 补成完整 uuid 形态。回合边界判据见约束 2 与约束 3：`step_finish` 只有 `part.reason==\"stop\"` 才是边界（`tool-calls` 每次工具调用都出现），`type==\"error\"` 本身就是边界（它后面没有 step_finish）。",
+  "cases": [
+    {
+      "_ming": "step_start：**第一行就报 session 帧**（约束 5：sessionID 每行都有）",
+      "_lai_yuan_dan": "opencode.py 文件头 wire 第 1 行。分岔：把报 session 拖到回合末尾的实现（kimi 的形态）这里一条事件都不发",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "step_start",
+        "timestamp": 1760000000000,
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "id": "prt_1",
+          "messageID": "msg_1",
+          "type": "step-start"
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "text：正文在 part.text，进累加器",
+      "_lai_yuan_dan": "opencode.py 文件头 wire 第 4 行 {\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"收到\"}}",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "text",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "type": "text",
+          "text": "收到"
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        },
+        {
+          "kind": "text",
+          "match": {
+            "text": "收到"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "text 正文是空串：**不动累加器、不发 text**（防御性）",
+      "_lai_yuan_dan": "防御性：opencode.py `_wen_zi` 对空 text 直接 return。分岔：发了空的 text 帧，界面上多一条空白消息",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "text",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "type": "text",
+          "text": ""
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "tool_use 且 state.status=completed：**一条 wire 发两条统一事件**（约束 4：工具与结果合并在同一事件里）",
+      "_lai_yuan_dan": "opencode.py 文件头 wire 第 2 行。分岔：只发 tool_use 不发 tool_result ⇒ 工具卡永远收不了口；两条并成一条 ⇒ 界面上工具卡有去无回",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "tool_use",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "7b1cfa04-1111-4222-8333-444455556666",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo ox"
+            },
+            "output": "ox\n",
+            "metadata": {
+              "exit": 0
+            }
+          }
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        },
+        {
+          "kind": "tool_use",
+          "match": {
+            "toolUseId": "7b1cfa04-1111-4222-8333-444455556666",
+            "toolName": "bash",
+            "toolInput": {
+              "command": "echo ox"
+            }
+          }
+        },
+        {
+          "kind": "tool_result",
+          "match": {
+            "toolUseId": "7b1cfa04-1111-4222-8333-444455556666",
+            "toolName": "bash",
+            "text": "ox\n",
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "tool_use 且 state.status=running：**只发 tool_use 不发 tool_result**（约束 4：running 时只有 input 没有 output）",
+      "_lai_yuan_dan": "opencode.py `_gong_ju` 的 running 早退分支。分岔：照发 tool_result ⇒ 一条空的工具结果，工具卡收一个空口",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "tool_use",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "8b1cfa04-1111-4222-8333-444455556666",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "sleep 1"
+            }
+          }
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        },
+        {
+          "kind": "tool_use",
+          "match": {
+            "toolUseId": "8b1cfa04-1111-4222-8333-444455556666",
+            "toolName": "bash"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "step_finish 且 reason=tool-calls：**只报 session 帧，**绝不收口****（约束 2，最容易抄错的边界）",
+      "_lai_yuan_dan": "opencode.py 文件头 wire 第 3 行。分岔：拿 step_finish 本身当边界 ⇒ 第一次工具调用后就把回合收走，后面的正文全丢",
+      "_fei_bian_jie": true,
+      "wire": {
+        "type": "step_finish",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "reason": "tool-calls",
+          "tokens": {
+            "input": 100,
+            "output": 10
+          },
+          "cost": 0.01
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "step_finish 且 reason=stop：回合边界，正文与 cost 落进 result",
+      "_lai_yuan_dan": "opencode.py 文件头 wire 第 5 行。判据同时落在 `totalCostUsd` 上：cost 在 step 的 part 上，不取就是 0",
+      "_zhan_dian": [
+        {
+          "type": "step_start",
+          "sessionID": "ses_abc123def456",
+          "part": {
+            "id": "prt_1",
+            "messageID": "msg_1",
+            "type": "step-start"
+          }
+        },
+        {
+          "type": "text",
+          "sessionID": "ses_abc123def456",
+          "part": {
+            "type": "text",
+            "text": "收到"
+          }
+        }
+      ],
+      "_shi_bian_jie": true,
+      "wire": {
+        "type": "step_finish",
+        "sessionID": "ses_abc123def456",
+        "part": {
+          "reason": "stop",
+          "tokens": {
+            "input": 120,
+            "output": 8
+          },
+          "cost": 0.0123
+        }
+      },
+      "expect": [
+        {
+          "kind": "result",
+          "match": {
+            "resultText": "收到",
+            "isError": false,
+            "subtype": "completed",
+            "totalCostUsd": 0.0123
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "type=error：**先发 error 帧再立刻收口**（约束 3：它后面没有 step_finish，等就挂死到看门狗）",
+      "_lai_yuan_dan": "真机 provider 偶发样本：{\"type\":\"error\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"…empty response…\"}}}。分岔一：等 step_finish ⇒ `fasong()` 挂死 15 分钟；分岔二：先收口后发 error ⇒ 界面上「跑完了」出现在「出错了」之前",
+      "_shi_bian_jie": true,
+      "wire": {
+        "type": "error",
+        "sessionID": "ses_abc123def456",
+        "error": {
+          "name": "UnknownError",
+          "data": {
+            "message": "Provider returned an empty response"
+          }
+        }
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "ses_abc123def456",
+            "claudeSessionId": "ses_abc123def456"
+          }
+        },
+        {
+          "kind": "error",
+          "match": {
+            "code": "opencode_error",
+            "message": "Provider returned an empty response",
+            "recoverable": true
+          }
+        },
+        {
+          "kind": "result",
+          "match": {
+            "resultText": "",
+            "isError": true,
+            "subtype": "error",
+            "errorMessage": "Provider returned an empty response"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "一行非 JSON：发一条 opencode_bad_line 的 error，**不许抛异常**（坏行不许吞掉整轮）",
+      "_lai_yuan_dan": "防御性：`fan_yi` 的 `json.loads` 兜底分支。分岔：抛出去 ⇒ 基类只发 translate_failed、不调收口，`fasong()` 挂到 15 分钟看门狗",
+      "wire": "opencode: not a json line at all",
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "opencode_bad_line",
+            "recoverable": true
+          }
+        }
+      ]
+    }
+  ]
+}

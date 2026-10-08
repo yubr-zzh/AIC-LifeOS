@@ -1,0 +1,273 @@
+{
+  "_shuo_ming": "L-B golden：审批与提问的 Server→Client 请求。**wire 的字段形状来自本机 0.157.1 导出的 schema**（CommandExecutionRequestApprovalParams / ToolRequestUserInputParams），不是抄文档。",
+  "_lai_yuan": "codex 0.157.1 generate-json-schema 导出 + cc-connect appserver_session.go 的处理分支",
+  "_hui_ying": "响应形状。**枚举以本机 schema 为准**：方案第 4.2 节写的 approved/abort 不存在。",
+  "cases": [
+    {
+      "_ming": "命令审批：挂起 permission，回 decision=accept/decline",
+      "wire": {
+        "jsonrpc": "2.0",
+        "id": "7",
+        "method": "item/commandExecution/requestApproval",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "cmd1",
+          "startedAtMs": 1791119048000,
+          "command": "git push origin main",
+          "cwd": "D:/x",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "git"
+            }
+          ],
+          "reason": "需要执行 git push",
+          "kind": "command"
+        }
+      },
+      "hui_ying": {
+        "decision": "accept"
+      },
+      "hui_ying_bie": {
+        "decision": "decline"
+      }
+    },
+    {
+      "_ming": "文件变更审批：toolName=Edit",
+      "wire": {
+        "jsonrpc": "2.0",
+        "id": "8",
+        "method": "item/fileChange/requestApproval",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "fc1",
+          "startedAtMs": 1791119048000,
+          "grantRoot": "D:/x",
+          "reason": "要改 README.md",
+          "fileChanges": {
+            "README.md": {
+              "type": "update"
+            }
+          }
+        }
+      },
+      "hui_ying": {
+        "decision": "accept"
+      }
+    },
+    {
+      "_ming": "权限升级审批：allow 时回 permissions + scope=turn；deny 时 permissions 为空",
+      "wire": {
+        "jsonrpc": "2.0",
+        "id": "9",
+        "method": "item/permissions/requestApproval",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "pm1",
+          "startedAtMs": 1791119048000,
+          "cwd": "D:/x",
+          "reason": "需要联网",
+          "permissions": {
+            "networkAccess": {
+              "enabled": true
+            }
+          }
+        }
+      },
+      "hui_ying": {
+        "permissions": {
+          "networkAccess": {
+            "enabled": true
+          }
+        },
+        "scope": "turn"
+      },
+      "hui_ying_bie": {
+        "permissions": {}
+      }
+    },
+    {
+      "_ming": "提问：挂起 question，答案按 label 闭集匹配回填",
+      "wire": {
+        "jsonrpc": "2.0",
+        "id": "10",
+        "method": "item/tool/requestUserInput",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "q1",
+          "isBlocking": true,
+          "questions": [
+            {
+              "id": "q-1",
+              "header": "用哪个",
+              "question": "用哪个分支？",
+              "options": [
+                {
+                  "label": "main",
+                  "description": "主干"
+                },
+                {
+                  "label": "dev",
+                  "description": "开发"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hui_ying": {
+        "answers": {
+          "q-1": {
+            "answers": [
+              "main"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "_ming": "不认识的 Server 请求：必须回 method not found（否则 codex 一直等）",
+      "wire": {
+        "jsonrpc": "2.0",
+        "id": "11",
+        "method": "item/tool/call",
+        "params": {
+          "threadId": "t1",
+          "tool": "nope",
+          "arguments": {}
+        }
+      },
+      "hui_ying": null,
+      "hui_ying_error_code": -32601
+    }
+  ],
+  "jie_xi_ce_shi": [
+    {
+      "_ming": "从 arbiter 的自然语言答案里解析回 codex 形状",
+      "hui_yi": "用户对问题的回答：\n- main",
+      "questions": [
+        {
+          "id": "q-1",
+          "header": "用哪个",
+          "question": "用哪个分支？",
+          "options": [
+            {
+              "label": "main"
+            },
+            {
+              "label": "dev"
+            }
+          ]
+        }
+      ],
+      "jie_xi": {
+        "q-1": {
+          "answers": [
+            "main"
+          ]
+        }
+      }
+    },
+    {
+      "_ming": "选了第二个选项",
+      "hui_yi": "用户对问题的回答：\n- dev",
+      "questions": [
+        {
+          "id": "q-1",
+          "options": [
+            {
+              "label": "main"
+            },
+            {
+              "label": "dev"
+            }
+          ]
+        }
+      ],
+      "jie_xi": {
+        "q-1": {
+          "answers": [
+            "dev"
+          ]
+        }
+      }
+    },
+    {
+      "_ming": "用户没作答 / 文本对不上：交空 answers（codex 当没回答，方向对）",
+      "hui_yi": "用户未能在时限内回答",
+      "questions": [
+        {
+          "id": "q-1",
+          "options": [
+            {
+              "label": "main"
+            }
+          ]
+        }
+      ],
+      "jie_xi": {}
+    },
+    {
+      "_ming": "空 message（deny 但没带消息）",
+      "hui_yi": null,
+      "questions": [
+        {
+          "id": "q-1",
+          "options": [
+            {
+              "label": "main"
+            }
+          ]
+        }
+      ],
+      "jie_xi": {}
+    }
+  ],
+  "jue_ding_ce_shi": [
+    {
+      "_ming": "PermissionResultAllow → accept",
+      "yong": {
+        "behavior": "allow"
+      },
+      "jie_xi": {
+        "decision": "accept"
+      }
+    },
+    {
+      "_ming": "PermissionResultDeny → decline",
+      "yong": {
+        "behavior": "deny"
+      },
+      "jie_xi": {
+        "decision": "decline"
+      }
+    },
+    {
+      "_ming": "None（挂起通道没接）→ decline，安全侧默认",
+      "yong": null,
+      "jie_xi": {
+        "decision": "decline"
+      }
+    },
+    {
+      "_ming": "behavior 大小写混杂（真机 SDK 两种都有）→ accept",
+      "yong": {
+        "behavior": "Accept"
+      },
+      "jie_xi": {
+        "decision": "accept"
+      }
+    },
+    {
+      "_ming": "没有 behavior 的对象（既不明确允许也不明确拒绝）→ decline",
+      "yong": {},
+      "jie_xi": {
+        "decision": "decline"
+      }
+    }
+  ]
+}

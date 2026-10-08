@@ -40,6 +40,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   const [cwd, setCwd] = useState("");
   const [mode, setMode] = useState<PermissionMode>("manual");
   const [cai, setCai] = useState(true);
+  const [acknowledgeNoApproval, setAcknowledgeNoApproval] = useState(false);
 
   // ---- 配对（spec 8.1 四步里的第 1 步，剩下三步在用户本机的 Bridge 上做）----
   const [sheBei, setSheBei] = useState<DeviceRow[]>([]);
@@ -100,6 +101,11 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   const agents = state.catalog?.agents ?? [];
   const keYong = agents.filter((a) => a.available);
   const buKeYong = agents.filter((a) => !a.available);
+  const selectedAgent = agents.find((a) => a.agentId === agentId);
+  const modeOptions = (selectedAgent?.moshi?.length
+    ? PERMISSION_MODES.filter((m) => selectedAgent.moshi?.includes(m.value))
+    : PERMISSION_MODES);
+  const requiresApprovalAcknowledgement = Boolean(selectedAgent && !selectedAgent.canUseTool);
   const active = store.active;
   // 判据是 `=== false` 而不是 `!`：新前端连旧 Bridge 时这个键是 `undefined`，
   // `!undefined` 会凭空造出一次「凭据坏了」的假警报（`AgentsResponse` 的注释里
@@ -278,7 +284,13 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         <div className="ags-form">
           <label className="ags-field">
             <span>Agent</span>
-            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            <select value={agentId} onChange={(e) => {
+              const nextId = e.target.value;
+              const next = agents.find((a) => a.agentId === nextId);
+              setAgentId(nextId);
+              setAcknowledgeNoApproval(false);
+              if (next?.moshi?.length && !next.moshi.includes(mode)) setMode(next.moshi[0]);
+            }}>
               {agents.length === 0 ? <option value="claude-code">Claude Code</option> : null}
               {keYong.map((a) => (
                 <option key={a.agentId} value={a.agentId}>
@@ -309,7 +321,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           <label className="ags-field">
             <span>权限模式</span>
             <select value={mode} onChange={(e) => setMode(e.target.value as PermissionMode)}>
-              {PERMISSION_MODES.map((m) => (
+              {modeOptions.map((m) => (
                 <option key={m.value} value={m.value} title={m.hint}>
                   {m.label}
                 </option>
@@ -318,6 +330,17 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
             <small>{PERMISSION_MODES.find((m) => m.value === mode)?.hint}</small>
           </label>
         </div>
+
+        {requiresApprovalAcknowledgement ? (
+          <label className="ags-toggle">
+            <input
+              type="checkbox"
+              checked={acknowledgeNoApproval}
+              onChange={(e) => setAcknowledgeNoApproval(e.target.checked)}
+            />
+            <span>{selectedAgent?.label} 没有 LifeOS 可接管的审批回路；我知道它可能直接执行工具操作</span>
+          </label>
+        ) : null}
 
         <label className="ags-toggle">
           <input type="checkbox" checked={cai} onChange={(e) => setCai(e.target.checked)} />
@@ -329,7 +352,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         <div className="ags-btns">
           <button
             className="btn-allow"
-            disabled={busy || !info?.running || !cwd.trim() || keYong.length === 0}
+            disabled={busy || !info?.running || !cwd.trim() || keYong.length === 0 || (requiresApprovalAcknowledgement && !acknowledgeNoApproval)}
             onClick={() =>
               void tiao(async () => {
                 await setDelegation(cai);
@@ -337,6 +360,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
                   agentId,
                   cwd: cwd.trim(),
                   permissionMode: mode,
+                  ...(acknowledgeNoApproval ? { acknowledgeNoApproval: true } : {}),
                 });
                 setLayout("split");
                 if (sid !== "preview") onGoChat();
@@ -371,7 +395,9 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
               value={active.permissionMode}
               onChange={(e) => void api.act.setMode(active.sessionId, e.target.value as PermissionMode).catch(() => undefined)}
             >
-              {PERMISSION_MODES.map((m) => (
+              {(agents.find((a) => a.agentId === active.agentId)?.moshi?.length
+                ? PERMISSION_MODES.filter((m) => agents.find((a) => a.agentId === active.agentId)?.moshi?.includes(m.value))
+                : PERMISSION_MODES).map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
                 </option>

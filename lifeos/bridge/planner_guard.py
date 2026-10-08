@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from lifeos.bridge.models import MOSHI
 
@@ -57,18 +58,25 @@ class ShenKa:
 
     # ---- 闸门 1 ----
     @staticmethod
-    def fang(a1: str | None) -> str:
+    def fang(a1: str | None, a2: Any = None) -> str:
         """校验 permissionMode。非法 → 400 mode_forbidden。
 
         绝不降级成 manual：降级会让用户以为开了宽松模式而实际没有（或反过来），
         两种误解都会导致用户对风险做出错误判断。
         """
+        supported = getattr(a2, "MOSHI_ZI", frozenset()) if a2 is not None else frozenset()
         if a1 is None:
-            return "manual"
-        if a1 not in MOSHI:
+            a1 = "manual"
+        elif a1 not in MOSHI:
             raise JuDuan(
                 "mode_forbidden",
                 f"permissionMode={a1!r} 不被允许，可用值：{sorted(MOSHI)}",
+            )
+        if supported and a1 not in supported:
+            raise JuDuan(
+                "mode_forbidden",
+                f"Agent {getattr(a2, 'agentId', '?')!r} 不支持 permissionMode={a1!r}，"
+                f"它支持：{sorted(supported)}",
             )
         return a1
 

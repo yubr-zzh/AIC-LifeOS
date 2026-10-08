@@ -194,9 +194,10 @@ class BanBenMenTests(unittest.TestCase):
         self.assertEqual(d["session"]["effectiveMode"], "acceptEdits")
         self.assertFalse(self.fu.ren_men()["mismatch"])
 
-    def test_fou_ren_men_jiang_shou_qiang_zhi_plan(self):
+    def test_fou_ren_men_zhi_ying_xiang_claude_code(self):
+        """Claude 的 CLI/SDK 基线不匹配时，仍收紧为 plan。"""
         self.fu.cli_ban_ben = "0.0.1-fake"
-        s, d = self._jian({"agentId": "echo", "cwd": self.root,
+        s, d = self._jian({"agentId": "claude-code", "cwd": self.root,
                            "permissionMode": "acceptEdits"})
         self.assertEqual(s, 201)
         self.assertEqual(d["session"]["permissionMode"], "plan")
@@ -204,6 +205,15 @@ class BanBenMenTests(unittest.TestCase):
         men = self.fu.ren_men()
         self.assertTrue(men["mismatch"])
         self.assertEqual(men["baseline"], self.fu.ji_zun_ban_ben)
+
+    def test_fou_ren_men_bu_ying_xiang_codex(self):
+        """Claude 的基线不能把其他后端错误地降到 plan。"""
+        self.fu.cli_ban_ben = "0.0.1-fake"
+        s, d = self._jian({"agentId": "codex", "cwd": self.root,
+                           "permissionMode": "acceptEdits"})
+        self.assertEqual(s, 201)
+        self.assertEqual(d["session"]["permissionMode"], "acceptEdits")
+        self.assertEqual(d["session"]["effectiveMode"], "acceptEdits")
 
     def test_qie_huan_mo_shi_ye_yao_guo_men_jian(self):
         """闸门 1 对切模式同样生效——非法模式不能借切换接口绕进去。"""

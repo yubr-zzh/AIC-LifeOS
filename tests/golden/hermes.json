@@ -1,0 +1,209 @@
+{
+  "_shuo_ming": "L-B golden 样本。wire 全部来自 hermes v0.21.5 本机真机 stdout（`hermes chat -q <q> --format stream-json`），逐字抄在 hermes.py 文件头的「wire」段里；**不是抄 cc-connect/clawd**（那两份仓库都没有 hermes 的 CLI 协议实现，方案 §8.2 据此把它移出范围，那条理由已被真机推翻）。expect 是统一事件的期望形状。**这份文件的正确性取决于抄得对不对，所以它只是回归护栏，不是「已验证」**——真验收是 L-C / L-D（真 spawn hermes 打真回合）。",
+  "_lai_yuan": "hermes 0.21.5 / Windows 11 / 2026-10-05。文件头约束对应：约束 2（stderr 纯文本）、约束 3（tool_use 无 id ⇒ 自造）、约束 4（output 双层 JSON）、约束 5（text 分片）、约束 6（失败判据是外层 is_error）。⚠ 时间戳字段一律省略——断言里不含它们，真机上它们的值每次都不同。",
+  "_fan_yi_cha": {
+    "_zhao_lie": "喂给 fan_yi 的行序列（每行一个 JSON 对象，按序）。",
+    "expect": "期望发出的统一事件序列，逐条比对 kind 列表**与长度**（长度相等是承重的一半：不该发的事件靠长度不等分岔）。`match` 里的键逐个断言相等。"
+  },
+  "cases": [
+    {
+      "_ming": "system/init：**发一条 session 帧**，必须带 `claudeSessionId`",
+      "_lai_yuan_dan": "真机首行 `{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"20261005_123701_ebc414\",…}`。`http._hui_zhuan` 的 session 分支只认 `claudeSessionId`，`run.hui_fu` 恢复时靠它把续接 id 传回 `_zi_ling` 的 `--resume`",
+      "_zhao_lie": [
+        {"type": "system", "subtype": "init", "session_id": "20261005_123701_ebc414"}
+      ],
+      "expect": [
+        {"kind": "session", "match": {"sessionId": "20261005_123701_ebc414", "claudeSessionId": "20261005_123701_ebc414"}}
+      ]
+    },
+    {
+      "_ming": "system/init 重复两次：**只发一条 session 帧**。分岔：每帧都发 ⇒ 落盘会话 id 被反复回写，同一 id 还会在前端多渲染一次",
+      "_lai_yuan_dan": "`LiuXingAdapter._fa_session` 的 `_fa_le_session` 闸；真机上同会话后续回合拿到的还是同一个 id",
+      "_zhao_lie": [
+        {"type": "system", "subtype": "init", "session_id": "20261005_123701_ebc414"},
+        {"type": "system", "subtype": "init", "session_id": "20261005_123701_ebc414"}
+      ],
+      "expect": [
+        {"kind": "session", "match": {"claudeSessionId": "20261005_123701_ebc414"}}
+      ]
+    },
+    {
+      "_ming": "system 但**没有 session_id**：一条事件都不许发。分岔：发一条 `{\"sessionId\":\"\"}` ⇒ 落盘出一个空会话 id，`run.hui_fu` 恢复时 `--resume \"\"` 续接上一个会话，正文串到错的会话里",
+      "_lai_yuan_dan": "`_fa_session` 的 `if not a1` 早退；hermes 的 system 帧除 init 外还有别的 subtype，真机上不保证都带 session_id",
+      "_zhao_lie": [
+        {"type": "system", "subtype": "heartbeat"}
+      ],
+      "expect": []
+    },
+    {
+      "_ming": "text 分片 ×2：**一条事件都不许发**（约束 5）。分岔：每片发一条 text ⇒ 界面上出现两条碎消息，而真机上两片拼起来才是完整答复",
+      "_lai_yuan_dan": "真机 `{\"type\":\"text\",\"text\":\"\\n\\n完成 —\"}` 紧跟 `{\"type\":\"text\",\"text\":\" bash 执行 `echo hx`，输出 `hx`。\"}`（原文见 hermes.py 文件头 wire 段）",
+      "_zhao_lie": [
+        {"type": "text", "text": "\n\n完成 —"},
+        {"type": "text", "text": " bash 执行 `echo hx`，输出 `hx`。"}
+      ],
+      "expect": []
+    },
+    {
+      "_ming": "**完整正常回合**：init → text×2 → result。零 text 帧 + 一条 result 帧，且 `resultText` 是 `result.text`（**权威全文**），不是两片累加出来的 `\\n\\n完成 — bash 执行…`。分岔：只读累加器 ⇒ 结果是那串拼接碎片",
+      "_lai_yuan_dan": "真机 `{\"type\":\"result\",\"exit_code\":0,\"text\":\"完整最终答复\",\"tokens\":{…},\"duration_ms\":31617}`。⚠ 本样本刻意让 `result.text` 与累加器**内容不同**，否则两条实现读出来一样（CLAUDE.md 5.7）",
+      "_zhao_lie": [
+        {"type": "system", "subtype": "init", "session_id": "20261005_123701_ebc414"},
+        {"type": "text", "text": "\n\n完成 —"},
+        {"type": "text", "text": " bash 执行 `echo hx`，输出 `hx`。"},
+        {"type": "result", "exit_code": 0, "text": "完整最终答复", "tokens": {"input": 100, "output": 20}, "duration_ms": 31617}
+      ],
+      "expect": [
+        {"kind": "session", "match": {"claudeSessionId": "20261005_123701_ebc414"}},
+        {"kind": "result", "match": {"resultText": "完整最终答复", "isError": false, "subtype": "completed", "durationMs": 31617, "numTurns": 1, "totalCostUsd": 0.0, "sessionId": "20261005_123701_ebc414"}}
+      ]
+    },
+    {
+      "_ming": "tool_use：**自造 id** `hermes-1`（约束 3 —— wire 里根本没有 id 字段）。分岔：填空串 / 用工具名当 id ⇒ 下面那条 tool_result 配不上对，前端工具卡永远收不了口",
+      "_lai_yuan_dan": "真机 `{\"type\":\"tool_use\",\"name\":\"terminal\",\"input\":{\"command\":\"echo hx\"},\"timestamp\":…}` —— **无 id 字段**（kimi 与 opencode 都有，hermes 没有）",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo hx"}}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1", "toolName": "terminal", "toolInput": {"command": "echo hx"}}}
+      ]
+    },
+    {
+      "_ming": "tool_use → tool_result：两条帧的 `toolUseId` **相同且非空**，且 `text` 是把 `output` 那串 JSON **连解两层**后取到的纯正文 `hx`（约束 4）。分岔一：只解一层 ⇒ text 变成 `\"hx\"`（带引号的 JSON 串字面量）；分岔二：不造 id ⇒ 两条帧的 toolUseId 对不上（或为空）。⚠ 本样本刻意让**内层 `output` 的值本身还是 JSON 串**（真机 wire 那一行的内层是纯文本 `hx`，在那个形状上第二次解是空操作 ⇒ 两种实现读出来一样，判据是废的，详见 test_gong_ju_guo_de_wen_yao_cong_nei_ceng_json_wen_li_bao_chu_lai 的 docstring）",
+      "_lai_yuan_dan": "真机 `{\"type\":\"tool_result\",\"name\":\"terminal\",\"output\":\"{\\\"output\\\":\\\"hx\\\",\\\"exit_code\\\":0,\\\"error\\\":null}\",\"duration_ms\":11715,\"is_error\":false,…}` —— output 整个是那对象的**字符串形式**。本样本 = 真机那串**再嵌一层**（内层 output 的值也序列化），好让「解两层」这件事真的可观测",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo hx"}},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"\\\"hx\\\"\",\"exit_code\":0,\"error\":null}", "duration_ms": 11715, "is_error": false}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1", "toolName": "terminal"}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "toolName": "terminal", "text": "hx", "isError": false}}
+      ]
+    },
+    {
+      "_ming": "**真机原样的形状**（内层 `output` 是纯文本 `hx`，不是 JSON 串）：同样要拿到纯正文 `hx`。这条守的是「真线上那个形状别被改坏」，同时把上一条那个「第二次解是空操作」的事实写在样本里",
+      "_lai_yuan_dan": "逐字抄 hermes.py 文件头 wire 段那一行（约束 4）。⚠ 在这个形状上把第二次 `_json_wen` 去掉，两种实现读出来**一样**（都给出 `hx`）——所以判据只能落在「正文对不对」，不能落在「解了几次」",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo hx"}},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"hx\",\"exit_code\":0,\"error\":null}", "duration_ms": 11715, "is_error": false}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1"}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "text": "hx", "isError": false}}
+      ]
+    },
+    {
+      "_ming": "**同名工具连续两次**：id 必须**不同**（`hermes-1` / `hermes-2`），两条 tool_result 按 **FIFO** 各配一条。分岔一：id 只按 name 生成 ⇒ 两次调用共用一个 id，界面上两张卡叠在一起；分岔二：LIFO 配对 ⇒ 第一个结果贴到第二次调用上",
+      "_lai_yuan_dan": "约束 3 的推论：hermes 的 tool_result **只给 name**，没有 id，所以只能靠本回合内同名调用的发生顺序反查（`_dai_pei[name]` 队列取最早未配对的那条）",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo A"}},
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo B"}},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"A\",\"exit_code\":0,\"error\":null}", "is_error": false},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"B\",\"exit_code\":0,\"error\":null}", "is_error": false}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1", "toolInput": {"command": "echo A"}}},
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-2", "toolInput": {"command": "echo B"}}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "text": "A", "isError": false}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-2", "text": "B", "isError": false}}
+      ]
+    },
+    {
+      "_ming": "**孤儿 tool_result**（没有待配对的 tool_use）：一条事件都不许发。分岔：照样发一条 `toolUseId:\"\"` 的 tool_result ⇒ 前端拿到一张配不上任何工具卡的孤儿卡，永远收不了口",
+      "_lai_yuan_dan": "`_gong_ju_guo` 的 `_qu_dai_pei` 返回空串就 return。真机上不会出现（tool_result 必跟在 tool_use 后），这条守的是「实现退化成填空串」那个方向",
+      "_zhao_lie": [
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"hx\",\"exit_code\":0,\"error\":null}", "is_error": false}
+      ],
+      "expect": []
+    },
+    {
+      "_ming": "**失败判据是外层 `is_error`**（约束 6）：内层 `error` 是 `null`、外层 `is_error` 是 `true` ⇒ `isError` 必须为 `true`。分岔：读内层 `error` ⇒ 报 false，界面上工具卡显示「成功」，用户以为命令跑成了",
+      "_lai_yuan_dan": "约束 6 的原话：「内层 error 可能为 null 而外层 is_error 为 true」。⚠ 样本刻意造出两个字段**反向**，只读任一个都会读出与另一个不同的结果（CLAUDE.md 5.7）",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "exit 1"}},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"\",\"exit_code\":1,\"error\":null}", "duration_ms": 900, "is_error": true}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1"}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "isError": true}}
+      ]
+    },
+    {
+      "_ming": "约束 6 的**反向**对照：内层 `error` 有值、外层 `is_error` 是 `false` ⇒ `isError` 仍为 `false`。判据只认外层标志，两个字段反向时读内层的实现会在这里报错",
+      "_lai_yuan_dan": "与上一条同一个反向分歧的另一侧；hermes 把 stderr 塞进内层 `error`，而「这次调用算不算失败」由外层 `is_error` 决定",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo hx 2>&1"}},
+        {"type": "tool_result", "name": "terminal", "output": "{\"output\":\"hx\",\"exit_code\":0,\"error\":\"command not found: x\",\"stderr\":\"…\"}", "is_error": false}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1"}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "text": "hx", "isError": false}}
+      ]
+    },
+    {
+      "_ming": "tool_result 的 output **不是 JSON**（纯文本）：原样当正文，且不许抛。分岔：裸 `json.loads` 会抛 ⇒ 被 `_du_zhan` 吞成一条 `translate_failed` 且**不收口回合** ⇒ `fasong()` 挂到 15 分钟看门狗，症状是「Agent 无响应」而不是「翻译出错」（liu_xing.py 承重契约 1）",
+      "_lai_yuan_dan": "`LiuXingAdapter._json_wen` 的兜底「解不了返回原串」。本样本让「抛异常」与「返回原串」两种实现读出完全不同的结果（一条 tool_result 帧 vs 零帧 + translate_failed）",
+      "_zhao_lie": [
+        {"type": "tool_use", "name": "terminal", "input": {"command": "echo hx"}},
+        {"type": "tool_result", "name": "terminal", "output": "hx", "is_error": false}
+      ],
+      "expect": [
+        {"kind": "tool_use", "match": {"toolUseId": "hermes-1"}},
+        {"kind": "tool_result", "match": {"toolUseId": "hermes-1", "text": "hx", "isError": false}}
+      ]
+    },
+    {
+      "_ming": "坏行（stdout 上出现非 JSON）：发**一条** error 帧，`code=hermes_bad_line`、`recoverable=true`，不许抛。分岔：抛出去 ⇒ 变成 `translate_failed` 且回合不收口",
+      "_lai_yuan_dan": "`fan_yi` 的 `except (ValueError, TypeError)` 分支。⚠ hermes 的 stdout 理论上全是 JSONL，这条守的是「解析失败不许把整轮带走」这个不变量",
+      "_zhao_lie": [
+        "Traceback (most recent call last):"
+      ],
+      "expect": [
+        {"kind": "error", "match": {"code": "hermes_bad_line", "recoverable": true}}
+      ]
+    },
+    {
+      "_ming": "坏行**不许吞掉整轮**：坏行之后照常收口，`resultText` 仍是权威全文。分岔：坏行让翻译中断 ⇒ 回合永不收口，`fasong()` 挂到看门狗",
+      "_lai_yuan_dan": "同上的 `hermes_bad_line` 分支 + 随后的 `result` 帧。这是「坏行只影响自己那一行」的判据：判据落在**后面那回合有没有收口、正文对不对**上，不是「有没有发 error 帧」",
+      "_zhao_lie": [
+        "\u001b[?25lnot json at all",
+        {"type": "result", "exit_code": 0, "text": "回合仍然完成", "duration_ms": 100}
+      ],
+      "expect": [
+        {"kind": "error", "match": {"code": "hermes_bad_line", "recoverable": true}},
+        {"kind": "result", "match": {"resultText": "回合仍然完成", "isError": false, "subtype": "completed"}}
+      ]
+    },
+    {
+      "_ming": "**stderr 上那行纯文本**（约束 2）：即使被误送到 `fan_yi`，也只能变成一条 bad_line error，**绝不许变成 session 帧**。分岔：按 `key: value` 回退解析去捞 session_id ⇒ 从 stderr 里凭空造出一个会话 id，`run.hui_fu` 拿它去 `--resume`，续接到一个不存在的会话",
+      "_lai_yuan_dan": "真机 stderr 上 CLI 自己打的一行 `session_id: 20261005_123701_ebc414`（外加 Python SyntaxWarning）。生产路径上它由基类 `_shou_cuo_wei` 攒进 `cuo_wei`、**根本不进 `fan_yi`**；这条样本守的是「万一进来了也不能被当成 wire」",
+      "_zhao_lie": [
+        "session_id: 20261005_123701_ebc414"
+      ],
+      "expect": [
+        {"kind": "error", "match": {"code": "hermes_bad_line", "recoverable": true}}
+      ]
+    },
+    {
+      "_ming": "失败回合：`result.exit_code != 0` ⇒ `isError=true` **且** `subtype=\"error\"` **且** 带 `errorMessage`（正文）。分岔：只置 `isError` 而 `subtype` 仍是 `completed` ⇒ 上层把失败回合当成成功，决策回路把错误正文当正常答复存进 LifeOS 对话上下文",
+      "_lai_yuan_dan": "`_jie_shu_zhao` 在 `exit_code != 0` 时把正文写进 `_cuo_wen`；`_jie_shu_bian_jie` 据此给 `isError` / `subtype`，`_bu_que_men_can` 补 `errorMessage`",
+      "_zhao_lie": [
+        {"type": "result", "exit_code": 2, "text": "认证失败：token 无效", "duration_ms": 500}
+      ],
+      "expect": [
+        {"kind": "result", "match": {"resultText": "认证失败：token 无效", "isError": true, "subtype": "error", "errorMessage": "认证失败：token 无效", "durationMs": 500}}
+      ]
+    },
+    {
+      "_ming": "失败回合且 `result.text` **为空**：正文回落到 text 帧累加器，`errorMessage` 回落成 `hermes 退出码 2`。分岔一：不回落 ⇒ 失败回合的 `resultText` 是空串，3.8 决策回路把空串送回对话上下文，用户看到「跑完了但什么都没说」；分岔二：空 `text` 被当成「无错误」⇒ `isError` 变 false",
+      "_lai_yuan_dan": "`_jie_shou_bian_jie` 的 `str(a1.get(\"text\") or \"\") or \"\".join(self._zhuan_wen)` 兜底链；`_jie_shu_zhao` 的 `or f\"hermes 退出码 {…}\"`。⚠ 本样本让累加器**非空** ⇒ 「回落」与「不回落」两种实现读出来的 `resultText` 不同",
+      "_zhao_lie": [
+        {"type": "text", "text": "正在重试…"},
+        {"type": "result", "exit_code": 2, "text": "", "duration_ms": 700}
+      ],
+      "expect": [
+        {"kind": "result", "match": {"resultText": "正在重试…", "isError": true, "subtype": "error", "errorMessage": "hermes 退出码 2"}}
+      ]
+    }
+  ]
+}

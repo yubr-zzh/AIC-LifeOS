@@ -33,7 +33,7 @@ from lifeos.bridge.adapters import ZHU_CE_QI, ClaudeCodeAdapter, EchoAdapter
 from lifeos.bridge.arbiter import SHEN_HE, ShenQing
 from lifeos.bridge.events import DingYue, ZongXian
 from lifeos.bridge.localbus import LuDao, tui_mian
-from lifeos.bridge.models import AgentSession, lingshou, xianzai
+from lifeos.bridge.models import MOSHI, AgentSession, lingshou, xianzai
 from lifeos.bridge.planner_guard import JuDuan, ShenKa
 from lifeos.bridge.session import HuiHua, InvalidTransition
 from lifeos.bridge.tuomi import tuomi
@@ -345,15 +345,30 @@ class BridgeHandler(BaseHTTPRequestHandler):
         for agentId, cls in ZHU_CE_QI.items():
             if agentId == "echo":
                 continue  # 测试用适配器不对外暴露
+            kai = time.perf_counter()
             try:
                 xian = asyncio.run(cls().tanjian())
             except Exception as e:  # noqa: BLE001
                 xian = {"available": False, "version": None, "sdkVersion": None,
                         "error": f"{type(e).__name__}: {e}"}
+            probe_ms = int((time.perf_counter() - kai) * 1000)
             xian["agentId"] = agentId
             xian["label"] = cls.label
             xian["canUseTool"] = cls.fangquan()
             xian["canAskQuestion"] = cls.wenti2()
+            declared_modes = getattr(cls, "MOSHI_ZI", frozenset())
+            xian["moshi"] = sorted((declared_modes or MOSHI) & MOSHI)
+            xian["yi_ci_xing"] = bool(getattr(cls, "yi_ci_xing", False))
+            xian["xu_pei_zhuang"] = bool(getattr(cls, "xu_pei_zhuang", False))
+            xian["ce_shi"] = {
+                "ok": bool(xian.get("available")),
+                "probeMs": probe_ms,
+                "shuoming": (
+                    f"已确认 {cls.label} 可用（{probe_ms} 毫秒）"
+                    if xian.get("available")
+                    else str(xian.get("error") or f"{cls.label} 探测没通过")
+                ),
+            }
             out.append(xian)
         self._json({"agents": out, "suggestedDirs": [str(self.shen.gen)],
                     "credentialsReady": pingju.JIAN_BING_CHENG_GONG,
@@ -361,14 +376,27 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def _jian_hui(self, a1: list[str]):
         body = self._du_json()
-        mode = self.shen.fang(body.get("permissionMode"))       # 闸门 1
-        if self.server.ren_men()["mismatch"]:
+        agent_id = body.get("agentId", "claude-code")
+        cls = ZHU_CE_QI.get(agent_id)
+        if cls is None:
+            raise YiWu(400, "agent_unavailable", "没有这个 agentId")
+        if not cls.fangquan() and body.get("acknowledgeNoApproval") is not True:
+            raise YiWu(
+                400,
+                "agent_unavailable",
+                f"{cls.label} 没有 LifeOS 可接管的审批回路，指令会直接在本机执行。"
+                "确认接受后，请显式带 acknowledgeNoApproval=true 重试。",
+            )
+        mode = self.shen.fang(body.get("permissionMode"), cls)
+        # This baseline covers Claude CLI + claude-agent-sdk only. It must not
+        # constrain unrelated harnesses such as Codex, Pi, Hermes, or Kimi.
+        if cls.agentId == "claude-code" and self.server.ren_men()["mismatch"]:
             # 9.3 版本门禁：CLI 版本对不上基准时强制 plan，直到用户确认。
             # 强制 plan 而不是拒绝——会话还能建，用户看得到警告，Agent 只能读不能改。
+            if "plan" not in (getattr(cls, "MOSHI_ZI", frozenset()) or MOSHI):
+                raise YiWu(409, "reset_required", "版本门禁要求只读模式，但该 Agent 不支持 plan")
             mode = "plan"
         cwd = self.shen.cwd(body.get("cwd", ""))                # 闸门 3
-        if ZHU_CE_QI.get(body.get("agentId", "claude-code"), None) is None:
-            raise YiWu(400, "agent_unavailable", "没有这个 agentId")
         key = body.get("clientIdempotencyKey")
         if key:
             # **幂等键按 uid 分命名空间。** 它是客户端给的自由字符串，
@@ -380,8 +408,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return self._json({"session": self._dui_hui(old).to_dict()})
         hui = AgentSession(
             sessionId=f"s-{lingshou()}",
-            agentId=body.get("agentId", "claude-code"),
-            agentLabel=body.get("agentId", "claude-code"),
+            agentId=agent_id,
+            agentLabel=cls.label,
             cwd=cwd,
             permissionMode=mode,
             effectiveMode=mode,
@@ -481,8 +509,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         body = self._du_json()
         mo = self.shen.fang(body.get("permissionMode"))   # 闸门 1，非法 → 400
         hui = self._dui_hui(a1)
-        if self.server.ren_men()["mismatch"]:
+        cls = ZHU_CE_QI.get(hui.agentId)
+        mo = self.shen.fang(mo, cls)
+        # The global version gate is specifically a Claude CLI/SDK contract.
+        if hui.agentId == "claude-code" and self.server.ren_men()["mismatch"]:
             # 版本对不上时任何模式都不能给，强制 plan（9.3 版本门禁）
+            if "plan" not in (getattr(cls, "MOSHI_ZI", frozenset()) or MOSHI):
+                raise YiWu(409, "reset_required", "版本门禁要求只读模式，但该 Agent 不支持 plan")
             mo = "plan"
         ad = self.server.shi_ying.get(a1)
         if ad is None or not hasattr(ad, "gai_moshi"):
@@ -874,6 +907,8 @@ class BridgeServer(ThreadingHTTPServer):
         hui = self.hua.du(a1)
         cls = ZHU_CE_QI.get(hui.agentId if hui else "", EchoAdapter)
         ad = cls(self._hui_zhuan(a1))
+        if hasattr(ad, "pid_hui"):
+            ad.pid_hui = lambda pid, _sid=a1: self.lu_pid(pid, _sid)
         await ad.kaishi({
             "cwd": hui.cwd if hui else ".",
             "permissionMode": hui.effectiveMode if hui else "manual",
@@ -896,6 +931,10 @@ class BridgeServer(ThreadingHTTPServer):
 
     def lu_pid(self, a1: int, a2: str) -> None:
         """记下子进程 pid（3.6）。Bridge 崩了以后靠它回收孤儿。"""
+        # Replacing a session's previous one-shot process avoids stale pid entries.
+        for old_pid, session_id in list(self.pids.items()):
+            if session_id == a2 and old_pid != a1:
+                self.pids.pop(old_pid, None)
         self.pids[a1] = a2
         if self.ji_pids:
             self.ji_pids(sorted(self.pids))

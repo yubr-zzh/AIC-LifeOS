@@ -16,6 +16,13 @@ class AgentAdapter:
     # 在别的 loop 上调用等于对一条已经关闭的流写入。
     loop = None
 
+    # Per-harness permission capability. An empty set means the adapter has not
+    # declared a narrower subset and therefore uses the global allowlist.
+    MOSHI_ZI: frozenset[str] = frozenset()
+    dui_hui_id = "claudeSessionId"
+    yi_ci_xing = False
+    xu_pei_zhuang = False
+
     @staticmethod
     def fangquan() -> bool:
         """能否接管权限。False 时 Bridge 必须拒绝创建会话并说明原因。"""
