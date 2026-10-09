@@ -51,4 +51,17 @@ describe("ModelProviderSettings model discovery", () => {
     expect((modelSelect as HTMLSelectElement).value).toBe("Agnes-2.5-thinking");
     expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/models/discover")).toBe(true);
   });
+
+  it("shows a retryable error instead of leaving the model settings stuck loading", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: "model profile secret cannot be decrypted" } }),
+      { status: 500, headers: { "content-type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ModelProviderSettings />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("model profile secret cannot be decrypted");
+    expect(screen.getByRole("button", { name: "重新加载" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

@@ -9,12 +9,13 @@ interface Profile {
   id: string; name: string; provider: string; provider_label: string;
   protocol: Protocol; base_url: string; model: string; models: string[];
   enabled: boolean; builtin: boolean; has_api_key: boolean; api_key_hint: string;
+  api_key_unavailable?: boolean;
 }
 interface Catalog { active_profile_id: string; profiles: Profile[]; presets: Preset[] }
 interface Draft {
   id?: string; name: string; provider: string; protocol: Protocol;
   base_url: string; model: string; api_key: string; models: string[];
-  has_api_key?: boolean; models_discovered?: boolean;
+  has_api_key?: boolean; api_key_unavailable?: boolean; models_discovered?: boolean;
 }
 
 const EMPTY_DRAFT: Draft = { name: "", provider: "openai", protocol: "openai", base_url: "", model: "", api_key: "", models: [] };
@@ -42,6 +43,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function ModelProviderSettings() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -51,8 +54,18 @@ export function ModelProviderSettings() {
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
-    const next = await request<Catalog>("/models");
-    setCatalog(next);
+    setLoadingCatalog(true);
+    setCatalogError("");
+    try {
+      const next = await request<Catalog>("/models");
+      setCatalog(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCatalogError(message);
+      throw error;
+    } finally {
+      setLoadingCatalog(false);
+    }
   }, []);
 
   useEffect(() => { void refresh().catch((error) => setNotice({ kind: "error", text: error.message })); }, [refresh]);
@@ -75,7 +88,7 @@ export function ModelProviderSettings() {
   const openEdit = (profile: Profile) => {
     setDraft({ id: profile.id, name: profile.name, provider: profile.provider, protocol: profile.protocol,
       base_url: profile.base_url, model: profile.model, api_key: "", models: profile.models,
-      has_api_key: profile.has_api_key, models_discovered: false });
+      has_api_key: profile.has_api_key, api_key_unavailable: profile.api_key_unavailable, models_discovered: false });
     setDiscoveryError("");
     setNotice(null);
   };
@@ -168,7 +181,16 @@ export function ModelProviderSettings() {
     finally { setBusy(false); }
   };
 
-  if (!catalog) return <div className="settings-section"><div className="state-empty">正在读取模型配置…</div>{notice ? <p role="alert">{notice.text}</p> : null}</div>;
+  if (!catalog) return (
+    <div className="settings-section">
+      {loadingCatalog ? <div className="state-empty" role="status">正在读取模型配置…</div> : (
+        <div className="settings-load-error" role="alert">
+          <p>模型配置读取失败：{catalogError || notice?.text || "请检查 LifeOS 后端后重试。"}</p>
+          <button className="ghost compact" onClick={() => { void refresh().catch(() => undefined); }}>重新加载</button>
+        </div>
+      )}
+    </div>
+  );
 
   const editingPreset = catalog.presets.find((item) => item.id === draft?.provider);
   return (
@@ -190,7 +212,7 @@ export function ModelProviderSettings() {
                 <div className="provider-card-copy">
                   <div className="provider-title-row"><h3>{profile.name}</h3>{active ? <span className="provider-active-badge">当前使用</span> : null}</div>
                   <p>{profile.provider_label} <span>·</span> {profile.model}</p>
-                  <small>{profile.protocol === "mock" ? "本地演示，无需 API Key" : `${profile.base_url}${profile.has_api_key ? ` · 密钥已设置 ${profile.api_key_hint}` : " · 未设置密钥"}`}</small>
+                  <small>{profile.protocol === "mock" ? "本地演示，无需 API Key" : `${profile.base_url}${profile.api_key_unavailable ? " · 已保存的密钥无法读取，请重新输入" : profile.has_api_key ? ` · 密钥已设置 ${profile.api_key_hint}` : " · 未设置密钥"}`}</small>
                 </div>
               </div>
               <div className="provider-actions">
@@ -217,7 +239,8 @@ export function ModelProviderSettings() {
               <label>模型名称<input value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} placeholder="例如 gpt-4o-mini" /></label>
             </div>
             {draft.protocol !== "mock" ? <label>API Base URL<input value={draft.base_url} onChange={(event) => setDraft({ ...draft, base_url: event.target.value, models: [], model: "", models_discovered: false })} onBlur={() => { if (draft.api_key.trim() || draft.has_api_key) void discoverModels(); }} placeholder="https://api.example.com/v1" autoComplete="url" /></label> : null}
-            {draft.protocol !== "mock" ? <label>API Key<input type="password" value={draft.api_key} onChange={(event) => setDraft({ ...draft, api_key: event.target.value })} onBlur={() => { if (draft.base_url.trim()) void discoverModels(); }} placeholder={draft.id ? "留空则保留当前密钥" : "粘贴 API Key"} autoComplete="new-password" /></label> : null}
+            {draft.api_key_unavailable ? <p className="provider-model-error" role="alert">已保存的密钥无法在当前 Windows 账户下解密；原加密数据已保留。请重新输入 API Key，再拉取模型列表。</p> : null}
+            {draft.protocol !== "mock" ? <label>API Key<input type="password" value={draft.api_key} onChange={(event) => setDraft({ ...draft, api_key: event.target.value })} onBlur={() => { if (draft.base_url.trim()) void discoverModels(); }} placeholder={draft.api_key_unavailable ? "请重新输入 API Key" : draft.id ? "留空则保留当前密钥" : "粘贴 API Key"} autoComplete="new-password" /></label> : null}
             {draft.protocol !== "mock" ? (
               <div className="provider-model-discovery">
                 <div className="provider-model-discovery-copy">

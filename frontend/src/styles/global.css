@@ -1022,6 +1022,8 @@ button.activity-day { cursor: pointer; }
 .provider-security-note strong { color: var(--fg-1); font-size: 11px; }
 .provider-security-note p { margin: 5px 0 0; color: var(--fg-3); font-size: 10px; line-height: 1.6; }
 .settings-notice { padding: 11px 13px; border: 1px solid var(--bd-1); border-radius: 9px; font-size: 11px; line-height: 1.5; }
+.settings-load-error { display: grid; gap: 12px; justify-items: start; padding: 16px; border: 1px solid #e6c0bc; border-radius: 10px; background: #fff2f0; color: #a33f37; font-size: 12px; line-height: 1.6; }
+.settings-load-error p { margin: 0; overflow-wrap: anywhere; }
 .settings-notice.ok { border-color: #b8d7b9; background: #eff8ed; color: #3d7645; }
 .settings-notice.error { border-color: #e6c0bc; background: #fff2f0; color: #a33f37; }
 .settings-modal-scrim { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(19, 35, 22, .48); backdrop-filter: blur(3px); }
@@ -1051,6 +1053,7 @@ button.activity-day { cursor: pointer; }
 .theme-night .provider-security-note { background: var(--bg-2); }
 .theme-night .settings-notice.ok { border-color: #466b4b; background: #263d2a; color: #b5dbb6; }
 .theme-night .settings-notice.error { border-color: #754b46; background: #402b28; color: #f2b5ae; }
+.theme-night .settings-load-error { border-color: #754b46; background: #402b28; color: #f2b5ae; }
 .theme-night .provider-delete:hover { border-color: #754b46; background: #402b28; }
 @media (max-width: 900px) { .settings-layout { grid-template-columns: 220px minmax(0, 1fr); } .provider-card { align-items: flex-start; flex-direction: column; } .provider-actions { justify-content: flex-start; } }
 @media (max-width: 680px) { .settings-layout { grid-template-columns: 1fr; } .settings-sidebar { position: static; padding: 15px; } .settings-sidebar-heading { padding-bottom: 12px; } .settings-sidebar > button { width: calc(50% - 4px); display: inline-flex; vertical-align: top; } .settings-sidebar-foot { display: none; } .settings-content { padding: 17px; } .settings-section-heading { align-items: flex-start; flex-direction: column; } .provider-form-grid { grid-template-columns: 1fr; gap: 0; } .provider-editor { padding: 18px; } .provider-editor-footer { align-items: flex-start; flex-direction: column; } }

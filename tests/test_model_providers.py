@@ -45,6 +45,53 @@ class ModelProviderMvpTests(unittest.TestCase):
         store.activate(created["id"])
         self.assertEqual(store.catalog()["active_profile_id"], created["id"])
 
+    def test_unreadable_dpapi_key_does_not_hide_provider_catalog_or_mutate_ciphertext(self):
+        encrypted = "dpapi:v1:c2VhbGVkLXNlY3JldA=="
+        self.path.write_text(json.dumps({
+            "active_profile_id": "custom",
+            "profiles": [{
+                "id": "custom", "name": "Custom", "provider": "custom", "protocol": "openai",
+                "base_url": "https://api.example.test/v1", "model": "model-a", "models": ["model-a"],
+                "api_key": encrypted, "enabled": True, "builtin": False,
+            }],
+        }), encoding="utf-8")
+        with patch("lifeos.llm.profiles._unprotect_api_key", side_effect=OSError("DPAPI context mismatch")):
+            store = ModelProfileStore(self.path)
+            catalog = store.catalog()
+            profile = catalog["profiles"][0]
+            self.assertEqual(profile["id"], "custom")
+            self.assertTrue(profile["api_key_unavailable"])
+            self.assertFalse(profile["has_api_key"])
+            self.assertEqual(profile["api_key_hint"], "")
+            self.assertNotIn("sealed-secret", json.dumps(catalog))
+            self.assertIn(encrypted, self.path.read_text(encoding="utf-8"))
+
+    def test_discovery_requires_reentering_unreadable_saved_key(self):
+        encrypted = "dpapi:v1:c2VhbGVkLXNlY3JldA=="
+        self.path.write_text(json.dumps({
+            "active_profile_id": "custom",
+            "profiles": [{
+                "id": "custom", "name": "Custom", "provider": "custom", "protocol": "openai",
+                "base_url": "https://api.example.test/v1", "model": "model-a", "models": ["model-a"],
+                "api_key": encrypted, "enabled": True, "builtin": False,
+            }],
+        }), encoding="utf-8")
+        with patch("lifeos.llm.profiles._unprotect_api_key", side_effect=OSError("DPAPI context mismatch")):
+            store = ModelProfileStore(self.path)
+            with self.assertRaisesRegex(ValueError, "re-enter the API key"):
+                store.discover_models({"profile_id": "custom"})
+            observed = {}
+
+            def list_models(client):
+                observed["api_key"] = client.api_key
+                return ["model-b"]
+
+            with patch("lifeos.llm.profiles.LLMClient.list_models", autospec=True, side_effect=list_models):
+                self.assertEqual(store.discover_models({
+                    "profile_id": "custom", "api_key": "new-synthetic-key",
+                }), ["model-b"])
+            self.assertEqual(observed["api_key"], "new-synthetic-key")
+
     def test_openai_client_maps_completion(self):
         client = LLMClient(
             provider="openai",

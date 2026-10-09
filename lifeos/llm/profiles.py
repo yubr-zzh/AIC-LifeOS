@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lifeos.llm.client import LLMClient
+from lifeos.llm.client import LLMClient, LLMRequestError
 from lifeos.storage.atomic import write_json
 
 
@@ -296,7 +296,13 @@ class ModelProfileStore:
                     continue
                 api_key = profile.get("api_key")
                 if isinstance(api_key, str) and api_key.startswith(_DPAPI_PREFIX):
-                    profile["api_key"] = _unprotect_api_key(api_key)
+                    try:
+                        profile["api_key"] = _unprotect_api_key(api_key)
+                    except (OSError, ValueError):
+                        # Keep the ciphertext intact so the user can re-enter a
+                        # key later. One unavailable secret must not hide every
+                        # provider profile from the settings UI.
+                        profile["_api_key_unavailable"] = True
                 elif isinstance(api_key, str) and api_key and os.name == "nt":
                     migrate_plaintext_keys = True
             if migrate_plaintext_keys:
@@ -306,9 +312,10 @@ class ModelProfileStore:
     def _write(self, data: dict) -> None:
         with self._lock:
             stored = copy.deepcopy(data)
-            if os.name == "nt":
-                for profile in stored.get("profiles", []):
-                    if isinstance(profile, dict) and isinstance(profile.get("api_key"), str):
+            for profile in stored.get("profiles", []):
+                if isinstance(profile, dict):
+                    profile.pop("_api_key_unavailable", None)
+                    if os.name == "nt" and isinstance(profile.get("api_key"), str):
                         profile["api_key"] = _protect_api_key(profile["api_key"])
             write_json(self.path, stored)
             try:
@@ -408,7 +415,8 @@ class ModelProfileStore:
 
     def public_profile(self, profile: dict) -> dict:
         preset = _preset(profile.get("provider", "custom"))
-        api_key = profile.get("api_key", "")
+        key_unavailable = bool(profile.get("_api_key_unavailable"))
+        api_key = "" if key_unavailable else profile.get("api_key", "")
         return {
             "id": profile.get("id"),
             "name": profile.get("name") or preset["label"],
@@ -422,6 +430,7 @@ class ModelProfileStore:
             "builtin": bool(profile.get("builtin")),
             "has_api_key": bool(api_key),
             "api_key_hint": _api_key_hint(api_key),
+            "api_key_unavailable": key_unavailable,
             "created_at": profile.get("created_at"),
             "updated_at": profile.get("updated_at"),
         }
@@ -440,6 +449,10 @@ class ModelProfileStore:
                 except KeyError:
                     existing = None
             profile = self._normalize_profile(profile_or_id, existing=existing)
+        if profile.get("_api_key_unavailable"):
+            raise LLMRequestError(
+                "saved API key is unavailable in this Windows account; re-enter it in model settings"
+            )
         client = LLMClient.from_profile(profile)
         started = time.perf_counter()
         result = asyncio.run(
@@ -471,10 +484,14 @@ class ModelProfileStore:
             except KeyError:
                 raise ValueError("model profile not found") from None
 
+        supplied_api_key = str(payload.get("api_key") or "").strip()
+        if existing and existing.get("_api_key_unavailable") and not supplied_api_key:
+            raise ValueError("saved API key is unavailable in this Windows account; re-enter the API key")
+
         protocol = str(payload.get("protocol") or (existing or {}).get("protocol") or "openai").strip()
         provider = str(payload.get("provider") or (existing or {}).get("provider") or "custom").strip()
         base_url = str(payload.get("base_url") or (existing or {}).get("base_url") or "").strip().rstrip("/")
-        api_key = str(payload.get("api_key") or (existing or {}).get("api_key") or "").strip()
+        api_key = supplied_api_key or str((existing or {}).get("api_key") or "").strip()
         if len(base_url) > 2048:
             raise ValueError("base_url must be at most 2048 characters")
         if len(api_key) > 4096:
@@ -555,6 +572,10 @@ class ModelManager:
     async def complete(self, messages, tools=None):
         profile_id = _profile_override.get() or self.store.get_active_profile_id()
         profile = self.store.get_profile(profile_id)
+        if profile.get("_api_key_unavailable"):
+            raise LLMRequestError(
+                "saved API key is unavailable in this Windows account; re-enter it in model settings"
+            )
         if profile.get("protocol") == "mock" and self.fallback is not None:
             result = await self.fallback.complete(messages, tools)
             result["provider"] = profile.get("provider", "mock")
