@@ -107,6 +107,7 @@ type Action =
   | { type: "SET_BUS_STATUS"; status: EventBusStatus }
   | { type: "SET_GLOBAL_STATUS"; status: GlobalAgentStatus }
   | { type: "APPEND_MESSAGE"; message: ChatMessage }
+  | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "APPEND_AGENT_SUMMARY"; text: string; traceId?: string | null }
   | { type: "UPDATE_MESSAGE"; id: string; patch: Partial<ChatMessage> }
   | { type: "PATCH_DELEGATION"; traceId: string; plan: DelegationPlan }
@@ -198,6 +199,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, ui: { ...state.ui, globalStatus: action.status } };
     case "APPEND_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
+    case "REPLACE_MESSAGES":
+      return { ...state, messages: action.messages };
     // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左侧对话。
     // 单向依赖——agentStore 写这里，主 store 不认识 Agent 域。
     case "APPEND_AGENT_SUMMARY":

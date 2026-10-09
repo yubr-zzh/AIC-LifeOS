@@ -174,7 +174,7 @@ export default function App() {
         </header>
 
         <main id="main-content" className="workspace-main">
-          <div className="page-intro">
+          <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
               <h1>{meta.title}</h1>
@@ -203,18 +203,12 @@ function SectionContent({
   onNavigate: (id: SectionId) => void;
 }) {
   if (active === "chat") {
-    // 7:3 的开关点。collapsed 时 DOM 与改造前完全一致——F7 要求像素级一致，
-    // 所以 .chat-page-grid 这层不能动，只在外层按状态换容器。
+    // 对话保持内容优先；运行指标留在系统后台，执行面板按需展开。
     const zuo = (
       <div className="chat-page-grid">
         <section className="content-card chat-card">
-          <div className="card-heading">
-            <div><span className="card-kicker">实时连接</span><h2>对话空间</h2></div>
-            <span className="live-chip"><span className="status-orb" />在线</span>
-          </div>
           <ChatPanel store={store} agent={agent} api={api} />
         </section>
-        <RuntimeRail store={store} />
       </div>
     );
     return (
