@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Store } from "../state/store";
 import { FEEDBACK_RATINGS } from "../api/types";
-import type { FeedbackRating } from "../api/types";
+import type { FeedbackRating, MemoryScope } from "../api/types";
+import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
 import { IconSend, IconCopy, IconMessage } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
@@ -22,6 +23,7 @@ interface LocalConversation {
   updatedAt: string;
   messages: ChatMessage[];
   projectId?: string;
+  memoryScope?: MemoryScope;
 }
 
 const HISTORY_KEY = "lifeos.chat.history.v1";
@@ -48,6 +50,12 @@ function titleFor(messages: ChatMessage[]): string {
   return first ? first.slice(0, 32) + (first.length > 32 ? "…" : "") : "新对话";
 }
 
+function savedScope(conversation: LocalConversation): MemoryScope {
+  return conversation.memoryScope ?? (conversation.projectId
+    ? { kind: "project", project_id: conversation.projectId }
+    : { kind: "global" });
+}
+
 function shortDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return "";
@@ -60,7 +68,10 @@ function shortDate(value: string): string {
 export function ChatPanel({ store, agent, api }: Props) {
   const { state, sendMessage } = store;
   const [text, setText] = useState("");
+  const [scopeKind, setScopeKind] = useState<"global" | "scenario" | "project">("global");
+  const [scenarioType, setScenarioType] = useState("learning");
   const [projectId, setProjectId] = useState("");
+  const [scopeError, setScopeError] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
   const [activeId, setActiveId] = useState(() => newConversationId());
@@ -73,6 +84,10 @@ export function ChatPanel({ store, agent, api }: Props) {
     if (active) {
       setHistory(saved);
       setActiveId(active.id);
+      const scope = savedScope(active);
+      setScopeKind(scope.kind === "scenario" || scope.kind === "project" ? scope.kind : "global");
+      setScenarioType(scope.scenario_type ?? "learning");
+      setProjectId(scope.project_id ?? active.projectId ?? "");
       store.dispatch({ type: "REPLACE_MESSAGES", messages: active.messages });
     }
     setHistoryReady(true);
@@ -88,13 +103,18 @@ export function ChatPanel({ store, agent, api }: Props) {
       updatedAt: new Date().toISOString(),
       messages: state.messages,
       projectId,
+      memoryScope: scopeKind === "project"
+        ? { kind: "project", project_id: projectId.trim() }
+        : scopeKind === "scenario"
+          ? { kind: "scenario", scenario_type: scenarioType }
+          : { kind: "global" },
     };
     setHistory((previous) => {
       const next = [current, ...previous.filter((item) => item.id !== activeId)].slice(0, 30);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* local history is best-effort */ }
       return next;
     });
-  }, [activeId, historyReady, projectId, state.messages]);
+  }, [activeId, historyReady, projectId, scenarioType, scopeKind, state.messages]);
 
   useEffect(() => {
     if (scroller.current) {
@@ -105,17 +125,29 @@ export function ChatPanel({ store, agent, api }: Props) {
   const submit = () => {
     const t = text.trim();
     if (!t || state.loading.chat) return;
+    if (scopeKind === "project" && !projectId.trim()) {
+      setScopeError("填写项目 ID 后才能发送，避免项目记忆串用。");
+      setContextOpen(true);
+      return;
+    }
+    setScopeError("");
     setText("");
-    void sendMessage(t, projectId.trim()
+    const memoryScope: MemoryScope = scopeKind === "project"
       ? { kind: "project", project_id: projectId.trim() }
-      : undefined, agent?.active?.sessionId);
+      : scopeKind === "scenario"
+        ? { kind: "scenario", scenario_type: scenarioType }
+        : { kind: "global" };
+    void sendMessage(t, memoryScope, agent?.active?.sessionId);
   };
 
   const startNew = () => {
     if (state.loading.chat) return;
     setActiveId(newConversationId());
     setText("");
+    setScopeKind("global");
+    setScenarioType("learning");
     setProjectId("");
+    setScopeError("");
     setContextOpen(false);
     store.dispatch({ type: "REPLACE_MESSAGES", messages: [] });
   };
@@ -124,7 +156,11 @@ export function ChatPanel({ store, agent, api }: Props) {
     if (state.loading.chat) return;
     setActiveId(conversation.id);
     setText("");
-    setProjectId(conversation.projectId ?? "");
+    const scope = savedScope(conversation);
+    setScopeKind(scope.kind === "scenario" || scope.kind === "project" ? scope.kind : "global");
+    setScenarioType(scope.scenario_type ?? "learning");
+    setProjectId(scope.project_id ?? conversation.projectId ?? "");
+    setScopeError("");
     store.dispatch({ type: "REPLACE_MESSAGES", messages: conversation.messages });
   };
 
@@ -167,18 +203,33 @@ export function ChatPanel({ store, agent, api }: Props) {
             <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
           </div>
           <div className="chat-context-wrap">
-            <button className={`chat-context ${projectId.trim() ? "selected" : ""}`}
+            <button className={`chat-context ${scopeKind !== "global" ? "selected" : ""}`}
               onClick={() => setContextOpen((open) => !open)} aria-expanded={contextOpen}>
               <span className="context-dot" />
-              {projectId.trim() ? projectId.trim() : "全局记忆"}
+              {scopeKind === "project" ? (projectId.trim() || "选择项目") : scopeKind === "scenario" ? ({ learning: "学习型", project: "项目型", document: "文档型", information_execution: "信息型执行", external_operation: "外部操作型" }[scenarioType] ?? scenarioType) : "全局记忆"}
               <span aria-hidden="true">⌄</span>
             </button>
             {contextOpen ? (
               <div className="chat-context-popover">
-                <label htmlFor="chat-project-id">项目记忆</label>
-                <input id="chat-project-id" value={projectId} onChange={(event) => setProjectId(event.target.value)}
-                  placeholder="输入项目名称或 ID" autoFocus />
-                <small>留空时仅使用全局记忆；项目记忆与其他项目隔离。</small>
+                <label htmlFor="chat-memory-scope">本轮记忆范围</label>
+                <select id="chat-memory-scope" value={scopeKind} onChange={(event) => setScopeKind(event.target.value as typeof scopeKind)}>
+                  <option value="global">全局记忆</option>
+                  <option value="scenario">场景记忆</option>
+                  <option value="project">项目记忆</option>
+                </select>
+                {scopeKind === "scenario" ? (
+                  <select aria-label="选择记忆场景" value={scenarioType} onChange={(event) => setScenarioType(event.target.value)}>
+                    <option value="learning">学习型</option><option value="project">项目型</option>
+                    <option value="document">文档型</option><option value="information_execution">信息型执行</option>
+                    <option value="external_operation">外部操作型</option>
+                  </select>
+                ) : null}
+                {scopeKind === "project" ? (
+                  <input id="chat-project-id" value={projectId} onChange={(event) => setProjectId(event.target.value)}
+                    placeholder="填写稳定的项目 ID" autoFocus />
+                ) : null}
+                <small>{scopeKind === "global" ? "只检索全局记忆。" : scopeKind === "scenario" ? "只检索所选场景；不会自动扩大到其他范围。" : "项目记忆与其他项目隔离。"}</small>
+                {scopeError ? <small role="alert">{scopeError}</small> : null}
                 <button onClick={() => setContextOpen(false)}>完成</button>
               </div>
             ) : null}
@@ -201,7 +252,7 @@ export function ChatPanel({ store, agent, api }: Props) {
           ) : (
             <div className="chat-message-list">
               {state.messages.map((m) => (
-                <Bubble key={m.id} msg={m} store={store} agent={agent} api={api} />
+                  <Bubble key={m.id} msg={m} store={store} agent={agent} api={api} />
               ))}
             </div>
           )}
@@ -261,8 +312,84 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
         {msg.delegation && agent && api ? (
           <DelegationCardBox msg={msg} plan={msg.delegation} agent={agent} api={api} store={store} />
         ) : null}
-        {msg.trace_id && msg.execution === "succeeded" ? <FeedbackRow msg={msg} store={store} /> : null}
+        {msg.trace_id && msg.execution === "succeeded" ? (
+          <>
+            <FeedbackRow msg={msg} store={store} />
+            <ConversationMemoryCapture msg={msg} store={store} />
+          </>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function ConversationMemoryCapture({ msg, store }: { msg: ChatMessage; store: Store }) {
+  const [open, setOpen] = useState(false);
+  const [claim, setClaim] = useState("");
+  const [scopeKind, setScopeKind] = useState<"global" | "scenario" | "project">("global");
+  const [scenarioType, setScenarioType] = useState("learning");
+  const [projectId, setProjectId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  const submit = async () => {
+    const distilledClaim = claim.trim();
+    if (!distilledClaim) { setNotice("请先写下你希望 LifeOS 记住的结论。"); return; }
+    if (scopeKind === "project" && !projectId.trim()) { setNotice("请填写项目 ID，避免项目记忆串用。"); return; }
+    const scope: MemoryScope = scopeKind === "project"
+      ? { kind: "project", project_id: projectId.trim() }
+      : scopeKind === "scenario"
+        ? { kind: "scenario", scenario_type: scenarioType }
+        : { kind: "global" };
+    setBusy(true); setNotice("");
+    try {
+      await proposeTraceMemoryCandidate(msg.trace_id!, {
+        claim: distilledClaim,
+        scope,
+        category: scopeKind === "project" ? "project" : "user",
+      });
+      await store.refreshAll();
+      setSubmitted(true);
+      setNotice("已提交到记忆候选；批准前不会写入长期记忆或同步到外部 Provider。");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="conversation-memory-capture">
+      <button type="button" className="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {open ? "收起记忆提炼" : "从这段对话提炼记忆"}
+      </button>
+      {open ? (
+        <div className="conversation-memory-form">
+          <p>只提交你写下的结论和对话来源编号，不复制聊天原文。提交后仍需审核。</p>
+          <label>希望 LifeOS 记住什么？
+            <textarea value={claim} onChange={(event) => setClaim(event.target.value)} rows={2} maxLength={2000}
+              placeholder="例如：我更容易通过具体例子理解新概念。" />
+          </label>
+          <label>记忆范围
+            <select value={scopeKind} onChange={(event) => setScopeKind(event.target.value as typeof scopeKind)}>
+              <option value="global">全局核心</option><option value="scenario">场景</option><option value="project">具体项目</option>
+            </select>
+          </label>
+          {scopeKind === "scenario" ? <label>场景
+            <select value={scenarioType} onChange={(event) => setScenarioType(event.target.value)}>
+              <option value="learning">学习型</option><option value="project">项目型</option><option value="document">文档型</option>
+              <option value="information_execution">信息型执行</option><option value="external_operation">外部操作型</option>
+            </select>
+          </label> : null}
+          {scopeKind === "project" ? <label>项目 ID
+            <input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="填写稳定的项目标识" />
+          </label> : null}
+          <button type="button" className="green-button" onClick={() => void submit()} disabled={busy || submitted || store.state.ui.dataMode !== "backend"}>
+            {busy ? "提交中…" : submitted ? "已提交候选" : "提交待审核候选"}
+          </button>
+          {store.state.ui.dataMode !== "backend" ? <small>预览模式不可写入。</small> : null}
+          {notice ? <div role="status" className="conversation-memory-notice">{notice}</div> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

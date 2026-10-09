@@ -241,6 +241,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "entries" and parts[2] == "memory-candidates":
             self._handle_structured_entry_memory_candidate(unquote(parts[1]))
             return
+        if len(parts) == 3 and parts[0] == "traces" and parts[2] == "memory-candidates":
+            self._handle_trace_memory_candidate(unquote(parts[1]))
+            return
         if len(parts) == 4 and parts[:2] == ["agent", "evidence"] and parts[3] == "memory-candidates":
             self._handle_agent_memory_candidate(unquote(parts[2]))
             return
@@ -1091,6 +1094,63 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                         memory_id, "pending", error=type(exc).__name__
                     )
         self._send_json({"status": item.get("status"), "memory": item})
+
+    def _handle_trace_memory_candidate(self, trace_id):
+        trace = self.agent.trace.get(trace_id)
+        if trace is None:
+            self._send_json(
+                {"error": {"code": "not_found", "message": "conversation trace not found"}},
+                status=404,
+            )
+            return
+        body = self._read_json()
+        content = body.get("content") if isinstance(body, dict) else None
+        claim = content.get("claim") if isinstance(content, dict) else None
+        category = body.get("category") if isinstance(body, dict) else None
+        scope = body.get("scope") if isinstance(body, dict) else None
+        if not isinstance(claim, str) or not claim.strip() or len(claim) > 2000:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": "a distilled claim of 1-2000 characters is required"}},
+                status=400,
+            )
+            return
+        if not isinstance(scope, dict) or scope.get("kind") not in {"global", "scenario", "project"}:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": "an explicit global, scenario, or project scope is required"}},
+                status=400,
+            )
+            return
+        expected_category = "project" if scope["kind"] == "project" else "user"
+        if category != expected_category:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": f"category must be {expected_category} for this scope"}},
+                status=400,
+            )
+            return
+        try:
+            candidate = asyncio.run(
+                self.agent.memory.propose_update(
+                    source="direct",
+                    content={"claim": claim.strip()},
+                    trace_id=trace_id,
+                    source_ref={"kind": "conversation", "record_id": trace_id},
+                    scope=scope,
+                    category=category,
+                    confidence=1.0,
+                    confidence_method="user_confirmed",
+                    occurred_at=trace.get("created"),
+                )
+            )
+        except ValueError as exc:
+            self._send_json(
+                {"error": {"code": "invalid_request", "message": str(exc)}},
+                status=400,
+            )
+            return
+        self._send_json(
+            {"status": candidate.get("status"), "candidate": candidate},
+            status=201 if candidate.get("status") == "candidate" else 200,
+        )
 
     def _handle_structured_entry_memory_candidate(self, entry_id):
         entry = self.structured_store.get(entry_id)

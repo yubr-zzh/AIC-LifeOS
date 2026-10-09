@@ -83,6 +83,32 @@ class AgentMemoryIntegrationTests(unittest.TestCase):
             self.request("/agent/evidence/not-found/memory-candidates", body)
         self.assertEqual(missing.exception.code, 404)
 
+    def test_conversation_distillation_is_scoped_and_never_copies_transcript(self):
+        raw_input = "private raw conversation text"
+        trace_id = self.agent.trace.start(raw_input)
+        body = {
+            "content": {"claim": "The user prefers concrete examples."},
+            "scope": {"kind": "scenario", "scenario_type": "learning"},
+            "category": "user",
+        }
+        response = self.request(f"/traces/{trace_id}/memory-candidates", body)
+        candidate = response["candidate"]
+
+        self.assertEqual(candidate["source"], "direct")
+        self.assertEqual(candidate["source_ref"]["record_id"], trace_id)
+        self.assertEqual(candidate["scope"]["scenario_type"], "learning")
+        self.assertEqual(candidate["content"], {"claim": "The user prefers concrete examples."})
+        self.assertNotIn(raw_input, json.dumps(candidate))
+        self.assertEqual(self.agent.memory._read()["user"], [])
+
+        with self.assertRaises(HTTPError) as invalid_scope:
+            self.request(f"/traces/{trace_id}/memory-candidates", {
+                **body,
+                "scope": {"kind": "project", "project_id": ""},
+                "category": "project",
+            })
+        self.assertEqual(invalid_scope.exception.code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

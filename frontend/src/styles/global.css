@@ -708,6 +708,15 @@ textarea { resize: vertical; }
 .chat-context-popover input { width: 100%; min-height: 40px; border-radius: 9px; background: white; }
 .chat-context-popover small { color: #838c7e; font-size: 11px; line-height: 1.5; }
 .chat-context-popover button { align-self: flex-end; min-height: 36px; padding: 0 15px; border: 0; border-radius: 9px; background: #426b43; color: white; cursor: pointer; }
+.chat-context-popover select { min-height: 40px; border: 1px solid var(--bd-1); border-radius: 9px; padding: 0 10px; background: var(--bg-1); color: var(--fg-1); }
+.conversation-memory-capture { margin-top: 8px; }
+.conversation-memory-capture > button { min-height: 36px; }
+.conversation-memory-form { display: grid; gap: 10px; max-width: 520px; margin-top: 8px; padding: 14px; border: 1px solid var(--bd-1); border-radius: var(--r-2); background: var(--bg-1); }
+.conversation-memory-form p, .conversation-memory-form small { margin: 0; color: var(--fg-3); font-size: 12px; line-height: 1.5; }
+.conversation-memory-form label { display: grid; gap: 5px; color: var(--fg-2); font-size: 13px; }
+.conversation-memory-form textarea, .conversation-memory-form input, .conversation-memory-form select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--bd-1); border-radius: 9px; background: #fff; color: var(--fg-1); }
+.conversation-memory-form textarea { resize: vertical; }
+.conversation-memory-notice { color: var(--fg-2); font-size: 12px; line-height: 1.5; }
 .chat-messages { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; }
 .chat-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; width: min(660px, calc(100% - 36px)); min-height: 100%; margin: 0 auto; padding: 42px 0 30px; text-align: center; }
 .chat-welcome-mark { display: grid; width: 54px; height: 54px; place-items: center; margin-bottom: 20px; border: 1px solid #e0ead9; border-radius: 18px; background: #f0f5ea; color: #5b8053; }
@@ -765,6 +774,8 @@ textarea { resize: vertical; }
 .theme-night .chat-welcome-mark, .theme-night .assistant-avatar { background: #2b4030; border-color: #405b43; color: #b6d0aa; }
 .theme-night .chat-context-popover label, .theme-night .chat-context-popover small { color: #c1cfbc; }
 .theme-night .chat-context-popover input, .theme-night .chat-tool-item { background: #1f3024; border-color: #415943; color: #dce7d7; }
+.theme-night .chat-context-popover select, .theme-night .conversation-memory-form, .theme-night .conversation-memory-form textarea, .theme-night .conversation-memory-form input, .theme-night .conversation-memory-form select { background: #1f3024; border-color: #415943; color: #dce7d7; }
+.theme-night .conversation-memory-form p, .theme-night .conversation-memory-form small, .theme-night .conversation-memory-notice { color: #c1cfbc; }
 .theme-night .chat-composer textarea { color: #e0e9da; }
 .theme-night .chat-composer textarea::placeholder { color: #9bac98; }
 .theme-night .chat-tool-item pre { color: #b6c3b1; }
