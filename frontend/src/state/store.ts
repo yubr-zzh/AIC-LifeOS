@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useCallback } from "react";
 import type {
   ChatAgentStatus,
   ChatResponse,
+  AgentRoutingPolicy,
   EventBusStatus,
   EventRecord,
   GlobalAgentStatus,
@@ -42,7 +43,8 @@ import {
   sendChat,
   submitFeedback,
 } from "../api/client";
-import type { FeedbackRating } from "../api/types";
+import type { FeedbackRating, MemoryScope } from "../api/types";
+import type { DelegationPlan } from "../api/agentTypes";
 
 export interface ChatMessage {
   id: string;
@@ -51,6 +53,13 @@ export interface ChatMessage {
   trace_id?: string;
   tool_calls?: ToolCall[];
   tool_results?: ToolResult[];
+  // 委派计划属于产生它的那条消息，不属于全局状态。
+  delegation?: DelegationPlan;
+  decision?: ChatResponse["decision"];
+  decision_reason?: string;
+  decision_confidence?: number;
+  agent_enabled?: boolean;
+  plan_steps?: ChatResponse["plan_steps"];
   created_at: string;
   // execution status: pending until /chat returns, then succeeded/blocked.
   execution?: "pending" | "succeeded" | "blocked" | "error";
@@ -104,7 +113,10 @@ type Action =
   | { type: "SET_BUS_STATUS"; status: EventBusStatus }
   | { type: "SET_GLOBAL_STATUS"; status: GlobalAgentStatus }
   | { type: "APPEND_MESSAGE"; message: ChatMessage }
+  | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
+  | { type: "APPEND_AGENT_SUMMARY"; text: string; traceId?: string | null }
   | { type: "UPDATE_MESSAGE"; id: string; patch: Partial<ChatMessage> }
+  | { type: "PATCH_DELEGATION"; traceId: string; plan: DelegationPlan }
   | { type: "PIPELINE_ACTIVE"; stage: PipelineStageId | null }
   | { type: "PIPELINE_VISIT"; stages: PipelineStageId[] }
   | { type: "PIPELINE_RESET" }
@@ -193,6 +205,33 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, ui: { ...state.ui, globalStatus: action.status } };
     case "APPEND_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
+    case "REPLACE_MESSAGES":
+      return { ...state, messages: action.messages };
+    // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左侧对话。
+    // 单向依赖——agentStore 写这里，主 store 不认识 Agent 域。
+    case "APPEND_AGENT_SUMMARY":
+      return {
+        ...state,
+        messages: [
+          ...state.messages,
+          {
+            id: rid("agt"),
+            role: "assistant",
+            content: action.text,
+            trace_id: action.traceId ?? undefined,
+            created_at: isoNow(),
+            execution: "succeeded",
+          },
+        ],
+      };
+    // 委派计划的勾选与编辑就地改在那条消息上，计划的归属不能漂。
+    case "PATCH_DELEGATION":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.trace_id === action.traceId ? { ...m, delegation: action.plan } : m,
+        ),
+      };
     case "UPDATE_MESSAGE":
       return {
         ...state,
@@ -343,7 +382,8 @@ export function useStore() {
   }, [refreshAll, setError]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, memoryScope?: MemoryScope, sessionId?: string,
+      routingPolicy: AgentRoutingPolicy = "auto") => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
@@ -386,7 +426,7 @@ export function useStore() {
 
       let chatRes: ChatResponse;
       try {
-        chatRes = await sendChat(trimmed);
+        chatRes = await sendChat(trimmed, undefined, memoryScope, sessionId, routingPolicy);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`chat failed: ${msg}`);
@@ -422,6 +462,12 @@ export function useStore() {
           trace_id: chatRes.trace_id,
           tool_calls: chatRes.tool_calls,
           tool_results: chatRes.tool_results,
+          delegation: chatRes.delegation,
+          decision: chatRes.decision,
+          decision_reason: chatRes.decision_reason,
+          decision_confidence: chatRes.decision_confidence,
+          agent_enabled: chatRes.agent_enabled,
+          plan_steps: chatRes.plan_steps,
           execution: chatRes.tool_results?.some((result) => result.status === "blocked") ? "blocked" : "succeeded",
         },
       });

@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime
+
+from lifeos.time_util import xie_shi
 
 
 class TraceSystem:
@@ -10,7 +11,7 @@ class TraceSystem:
         trace_id = str(uuid.uuid4())
         self.records[trace_id] = {
             "input": user_input,
-            "created": datetime.utcnow().isoformat(),
+            "created": xie_shi(),
             "events": [],
         }
         return trace_id
@@ -19,7 +20,7 @@ class TraceSystem:
         self.records[trace_id]["events"].append(
             {
                 "name": name,
-                "created": datetime.utcnow().isoformat(),
+                "created": xie_shi(),
                 "data": data or {},
             }
         )

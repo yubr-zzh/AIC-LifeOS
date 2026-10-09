@@ -1,0 +1,5 @@
+claude-agent-sdk==0.2.160
+websockets>=15,<16
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-reporter==0.5.3

@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useState } from "react";
 import type { LifecycleStage, MemoryCandidate, MemoryEntry } from "../api/types";
 import { LIFECYCLE_STAGES } from "../api/types";
 import type { Store } from "../state/store";
-import { getMemoryMarkdown, importMemoryMarkdown } from "../api/client";
+import {
+  correctMemory,
+  getMemoryProfile,
+  getMemoryMarkdown,
+  importMemoryMarkdown,
+  retractMemory,
+} from "../api/client";
 import { Panel } from "../components/Panel";
 import { IconApprove, IconReject } from "../components/Icons";
 
@@ -12,6 +18,7 @@ type Tab =
   | "feedback"
   | "reference"
   | "candidates"
+  | "profile"
   | "backups"
   | "markdown";
 
@@ -21,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "feedback", label: "Feedback" },
   { id: "reference", label: "Reference" },
   { id: "candidates", label: "Candidates" },
+  { id: "profile", label: "画像" },
   { id: "backups", label: "Backups" },
   { id: "markdown", label: "Markdown" },
 ];
@@ -37,7 +45,7 @@ export function MemoryPanel({ store }: Props) {
   return (
     <Panel
       title="Memory"
-      subtitle="lifecycle · user / project / feedback / reference / candidates · markdown editable"
+      subtitle="lifecycle · provenance · correction and retraction · markdown review"
       source={state.ui.dataMode}
       dense
     >
@@ -62,11 +70,12 @@ export function MemoryPanel({ store }: Props) {
         })}
       </div>
 
-      {tab === "user" ? <EntryList entries={mem.user} empty="no user memory yet" /> : null}
-      {tab === "project" ? <EntryList entries={mem.project} empty="no project memory yet" /> : null}
-      {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" /> : null}
-      {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" /> : null}
+      {tab === "user" ? <EntryList entries={mem.user} empty="no user memory yet" store={store} /> : null}
+      {tab === "project" ? <EntryList entries={mem.project} empty="no project memory yet" store={store} /> : null}
+      {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" store={store} /> : null}
+      {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" store={store} /> : null}
       {tab === "markdown" ? <MarkdownTab store={store} /> : null}
+      {tab === "profile" ? <ProfileTab /> : null}
       {tab === "candidates" ? (
         <CandidateList candidates={mem.candidates} store={store} />
       ) : null}
@@ -90,6 +99,65 @@ export function MemoryPanel({ store }: Props) {
       ) : null}
     </Panel>
   );
+}
+
+function ProfileTab() {
+  const [result, setResult] = useState<Awaited<ReturnType<typeof getMemoryProfile>> | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true); setError("");
+    getMemoryProfile()
+      .then(setResult).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(load, [load]);
+  const view = result?.data;
+  return <div className="col" style={{ padding: "4px 6px", gap: 8 }}>
+    <div className="row between" style={{ flexWrap: "wrap" }}>
+      <span className="mono muted" style={{ fontSize: 10 }}>由 active memory 动态重建 · {result?.source === "backend" ? "实时后端" : "预览数据"}{view?.version ? ` · ${view.version.slice(0, 12)}` : ""}</span>
+      <button className="ghost" onClick={load} disabled={loading}>{loading ? "读取中…" : "刷新画像"}</button>
+    </div>
+    {error ? <div className="state-error" role="alert">画像读取失败：{error}</div> : null}
+    {loading && !view ? <div className="state-empty" role="status">正在从当前记忆重建画像…</div> : null}
+    {view ? <>
+      <ProfileGroups title="全局核心画像" groups={view.core_profiles} />
+      <ProfileGroups title="场景画像" groups={view.scenario_profiles} />
+      <ProfileGroups title="项目画像" groups={view.project_profiles} />
+      {view.core_profiles.length + view.scenario_profiles.length + view.project_profiles.length === 0 ? <div className="state-empty">当前没有可展示的 active 记忆。先在候选页审核并采纳记忆。</div> : null}
+    </> : null}
+  </div>;
+}
+
+function ProfileGroups({ title, groups }: { title: string; groups: import("../api/types").MemoryProfileGroup[] }) {
+  if (!groups.length) return null;
+  return <section className="col" style={{ gap: 6 }}><h3 style={{ margin: "4px 0", fontSize: 13 }}>{title}</h3>{groups.map((group, index) => <div key={`${group.scope.kind}-${group.scope.project_id ?? group.scope.scenario_type ?? index}`} className="card-flat">
+    <div className="row between"><strong style={{ fontSize: 12 }}>{scopeLabel(group.scope)}</strong><span className="mono muted" style={{ fontSize: 10 }}>{group.memory_count} 条依据</span></div>
+    {group.memories.map((memory) => <div key={memory.id} style={{ borderTop: "1px solid var(--bd-1)", marginTop: 7, paddingTop: 7 }}>
+      <div style={{ fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{claimText(memory.content)}</div>
+      <Provenance item={memory} />
+    </div>)}
+  </div>)}</section>;
+}
+
+function scopeLabel(scope?: import("../api/types").MemoryScope) {
+  if (!scope) return "范围未标注";
+  if (scope.kind === "global") return "全局";
+  if (scope.kind === "scenario") return `场景 · ${scope.scenario_type ?? "未命名"}`;
+  if (scope.kind === "project") return `项目 · ${scope.project_id ?? "未命名"}`;
+  return "未分配";
+}
+
+function claimText(content: Record<string, unknown>) {
+  return typeof content.claim === "string" ? content.claim : JSON.stringify(content);
+}
+
+function Provenance({ item }: { item: Pick<MemoryCandidate, "source" | "source_ref" | "scope" | "confidence" | "confidence_method" | "occurred_at" | "created_at"> }) {
+  const ref = item.source_ref;
+  return <div className="mono muted" style={{ fontSize: 10, marginTop: 5, lineHeight: 1.5 }}>
+    来源：{ref ? `${ref.kind} / ${ref.record_kind ?? "record"} / ${ref.record_id}` : item.source}{ref?.revision ? ` · 版本 ${ref.revision}` : ""}
+    {` · ${scopeLabel(item.scope)}`}{item.occurred_at ? ` · 发生于 ${item.occurred_at}` : ""}{item.confidence != null ? ` · 置信度 ${item.confidence}${item.confidence_method ? `（${item.confidence_method}）` : ""}` : ""}
+  </div>;
 }
 
 function MarkdownTab({ store }: { store: Store }) {
@@ -139,43 +207,139 @@ function MarkdownTab({ store }: { store: Store }) {
         style={{ width: "100%", minHeight: 220, fontSize: 11, lineHeight: 1.5, resize: "vertical" }}
       />
       <div className="mono muted" style={{ fontSize: 10 }}>
-        memory.md mirror — edit and import to write back to memory.json (readable / editable / auditable)
+        memory.md mirror — review and import; existing memory must use explicit correction or retraction
       </div>
     </div>
   );
 }
 
-function EntryList({ entries, empty }: { entries: MemoryEntry[]; empty: string }) {
+function EntryList({ entries, empty, store }: { entries: MemoryEntry[]; empty: string; store: Store }) {
   if (entries.length === 0) return <div className="state-empty">{empty}</div>;
   return (
     <div className="scroll" style={{ padding: "4px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
       {entries.map((e) => (
-        <div key={e.id} className="card-flat">
-          <div className="row between">
-            <span className="mono" style={{ color: "var(--accent)", fontSize: 11 }}>
-              {e.source}
-            </span>
-            <span className="mono muted" style={{ fontSize: 11 }}>
-              {new Date(e.created_at).toLocaleString()}
-            </span>
-          </div>
-          <pre
-            className="mono"
-            style={{
-              margin: "6px 0 0",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              fontSize: 11,
-              color: "var(--fg-2)",
-            }}
-          >
-            {JSON.stringify(e.content, null, 2)}
-          </pre>
-          {e.trace_id ? (
-            <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>trace {e.trace_id}</div>
-          ) : null}
-        </div>
+        <MemoryEntryCard key={e.id} entry={e} store={store} />
       ))}
+    </div>
+  );
+}
+
+function MemoryEntryCard({ entry, store }: { entry: MemoryEntry; store: Store }) {
+  const [editing, setEditing] = useState(false);
+  const [confirmRetract, setConfirmRetract] = useState(false);
+  const [content, setContent] = useState(JSON.stringify(entry.content, null, 2));
+  const [reason, setReason] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const active = (entry.status ?? "active") === "active";
+  const backend = store.state.ui.dataMode === "backend";
+
+  const submitCorrection = async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      setMessage("内容必须是有效 JSON。");
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setMessage("新记忆内容必须是 JSON 对象。");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await correctMemory(entry.id, parsed as Record<string, unknown>, reason || undefined);
+      await store.refreshAll();
+      setEditing(false);
+      setMessage("已保存为新版本；旧版本保留但不再参与召回。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitRetraction = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await retractMemory(entry.id, reason || undefined);
+      await store.refreshAll();
+      setConfirmRetract(false);
+      setMessage("已撤回；这条记忆将不再用于后续召回，来源记录未删除。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card-flat">
+      <div className="row between">
+        <span className="mono" style={{ color: "var(--accent)", fontSize: 11 }}>
+          {entry.source}
+        </span>
+        <span className="row" style={{ gap: 8 }}>
+          <span className={`pill sm ${active ? "done" : "idle"}`}><span className="dot" />{entry.status ?? "active"}</span>
+          <span className="mono muted" style={{ fontSize: 11 }}>
+            {new Date(entry.created_at).toLocaleString()}
+          </span>
+        </span>
+      </div>
+      <pre
+        className="mono"
+        style={{
+          margin: "6px 0 0",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: 11,
+          color: "var(--fg-2)",
+        }}
+      >
+        {JSON.stringify(entry.content, null, 2)}
+      </pre>
+      <Provenance item={entry} />
+      {entry.version_of ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>corrects {entry.version_of}</div> : null}
+      {entry.superseded_by ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>superseded by {entry.superseded_by}</div> : null}
+      {entry.trace_id ? (
+        <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>trace {entry.trace_id}</div>
+      ) : null}
+      {active ? (
+        <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+          <button className="ghost" disabled={!backend || busy} onClick={() => { setEditing(!editing); setConfirmRetract(false); setReason(""); setMessage(""); }}>
+            {editing ? "取消纠正" : "纠正记忆"}
+          </button>
+          <button className="ghost danger" disabled={!backend || busy} onClick={() => { setConfirmRetract(!confirmRetract); setEditing(false); setReason(""); setMessage(""); }}>
+            撤回记忆
+          </button>
+          {!backend ? <span className="mono muted" style={{ fontSize: 10 }}>预览模式不可修改</span> : null}
+        </div>
+      ) : null}
+      {editing ? (
+        <div className="col" style={{ gap: 7, marginTop: 10 }}>
+          <label className="mono muted" style={{ fontSize: 10 }}>新版本内容预览（JSON）</label>
+          <textarea className="mono" value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} style={{ width: "100%", minHeight: 100, resize: "vertical", fontSize: 11 }} />
+          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="纠正原因（可选）" />
+          <div className="row" style={{ gap: 6 }}>
+            <button disabled={busy} onClick={() => void submitCorrection()}>{busy ? "保存中…" : "确认保存为新版本"}</button>
+            <span className="mono muted" style={{ fontSize: 10 }}>旧版本会保留为历史记录，但退出召回。</span>
+          </div>
+        </div>
+      ) : null}
+      {confirmRetract ? (
+        <div className="col" style={{ gap: 7, marginTop: 10, padding: 10, border: "1px solid var(--bd-2)", borderRadius: "var(--r-2)" }}>
+          <strong style={{ fontSize: 12 }}>确认撤回这条记忆？</strong>
+          <span className="mono muted" style={{ fontSize: 10 }}>撤回后不再参与召回和画像；原始来源与审计记录会保留。此操作不是彻底删除。</span>
+          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="撤回原因（可选）" />
+          <div className="row" style={{ gap: 6 }}>
+            <button className="ghost danger" disabled={busy} onClick={() => void submitRetraction()}>{busy ? "处理中…" : "我确认撤回"}</button>
+            <button className="ghost" disabled={busy} onClick={() => setConfirmRetract(false)}>取消</button>
+          </div>
+        </div>
+      ) : null}
+      {message ? <div className="mono muted" role="status" style={{ fontSize: 10, marginTop: 7 }}>{message}</div> : null}
     </div>
   );
 }
@@ -237,6 +401,7 @@ function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
       >
         {JSON.stringify(c.content, null, 2)}
       </pre>
+      <Provenance item={c} />
       <div className="row" style={{ gap: 4, marginTop: 8, flexWrap: "wrap" }}>
         {LIFECYCLE_STAGES.map((s) => (
           <span

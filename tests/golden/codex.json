@@ -1,0 +1,516 @@
+{
+  "_shuo_ming": "L-B golden 样本。wire 逐字抄自本机 codex 0.157.1 真机输出（tools/verify_v3_harness.py 抓的），expect 是统一事件的期望形状。**这份文件的正确性取决于抄得对不对，所以它只是回归护栏，不是「已验证」**——真验收是 L-C（真 spawn）。",
+  "_lai_yuan": "codex 0.157.1 / Windows 11 / 2026-10-04 真机",
+  "cases": [
+    {
+      "_ming": "turn/started：抓 turnId，供中断用",
+      "wire": {
+        "method": "turn/started",
+        "params": {
+          "threadId": "01a10703-8d38-73b1-b64e-c910ffd03268",
+          "turn": {
+            "id": "01a10703-8e16-7892-875b-49395045e354",
+            "items": [],
+            "itemsView": "notLoaded",
+            "status": "inProgress",
+            "error": null,
+            "startedAt": 1791119035,
+            "completedAt": null,
+            "durationMs": null
+          }
+        },
+        "emittedAtMs": 1791119047361
+      },
+      "expect": []
+    },
+    {
+      "_ming": "thread/status/changed{idle}：**必须不产生任何事件**（它比 turn/completed 早，当状态帧会让界面先显示「空闲」再显示「已完成」）",
+      "wire": {
+        "method": "thread/status/changed",
+        "params": {
+          "threadId": "01a10703-8d38-73b1-b64e-c910ffd03268",
+          "status": {
+            "type": "idle"
+          }
+        },
+        "emittedAtMs": 1791119049817
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/started{reasoning}：只抓 id，不发事件",
+      "wire": {
+        "method": "item/started",
+        "params": {
+          "item": {
+            "type": "reasoning",
+            "id": "rs_tmp_krqifh4ldsn",
+            "summary": [],
+            "content": []
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "startedAtMs": 1791119047361
+        },
+        "emittedAtMs": 1791119047362
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/reasoning/textDelta → chunk(messageKind=thinking)",
+      "wire": {
+        "method": "item/reasoning/textDelta",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "rs_tmp_krqifh4ldsn",
+          "delta": "The user asks",
+          "contentIndex": 0
+        },
+        "emittedAtMs": 1791119047362
+      },
+      "expect": [
+        {
+          "kind": "chunk",
+          "match": {
+            "messageKind": "thinking",
+            "delta": "The user asks"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "item/started{agentMessage}：清空本回合正文累加器",
+      "wire": {
+        "method": "item/started",
+        "params": {
+          "item": {
+            "type": "agentMessage",
+            "id": "msg_tmp_pnb6sydecib",
+            "text": "",
+            "phase": null,
+            "memoryCitation": null,
+            "delivery": null,
+            "questions": null
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "startedAtMs": 1791119047367
+        },
+        "emittedAtMs": 1791119047367
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/agentMessage/delta → chunk(messageKind=text)",
+      "wire": {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "msg_tmp_pnb6sydecib",
+          "delta": "ok"
+        },
+        "emittedAtMs": 1791119047367
+      },
+      "expect": [
+        {
+          "kind": "chunk",
+          "match": {
+            "messageKind": "text",
+            "delta": "ok"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "item/completed{agentMessage} → text（完整回复落成一条消息）",
+      "wire": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "agentMessage",
+            "id": "msg_tmp_pnb6sydecib",
+            "text": "ok",
+            "phase": null,
+            "memoryCitation": null,
+            "delivery": null,
+            "questions": null
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "completedAtMs": 1791119047367
+        },
+        "emittedAtMs": 1791119047369
+      },
+      "expect": [
+        {
+          "kind": "text",
+          "match": {
+            "text": "ok",
+            "messageId": "msg_tmp_pnb6sydecib"
+          }
+        }
+      ],
+      "_zhan_dian": [
+        {
+          "method": "item/started",
+          "params": {
+            "item": {
+              "type": "agentMessage",
+              "id": "msg_tmp_pnb6sydecib",
+              "text": ""
+            },
+            "threadId": "t1",
+            "turnId": "tn1"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "item/completed{userMessage}：用户自己那条不再回显。**判据落在 type 上而不是 text 字段上**——userMessage 的正文在 content[].text 里，顶层没有 text 字段，所以只看「有没有 text」的话分支进了也什么都不发（变异验证实测：这是变异 6 零转红的真实原因，不是覆盖缺口）",
+      "wire": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "userMessage",
+            "id": "um1",
+            "clientId": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "回答一个字：ok",
+                "text_elements": []
+              }
+            ]
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "completedAtMs": 1791119037202
+        },
+        "emittedAtMs": 1791119037202
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/completed{userMessage + 顶层 text}：更该不回显（否则界面重复显示用户输入）",
+      "wire": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "userMessage",
+            "id": "um2",
+            "clientId": null,
+            "text": "回答一个字：ok",
+            "content": [
+              {
+                "type": "text",
+                "text": "回答一个字：ok",
+                "text_elements": []
+              }
+            ]
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "completedAtMs": 1791119037202
+        },
+        "emittedAtMs": 1791119037202
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/started{commandExecution} → tool_use",
+      "wire": {
+        "method": "item/started",
+        "params": {
+          "item": {
+            "type": "commandExecution",
+            "id": "cmd1",
+            "command": "git status",
+            "cwd": "D:/x",
+            "status": "inProgress"
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "startedAtMs": 1791119048000
+        },
+        "emittedAtMs": 1791119048000
+      },
+      "expect": [
+        {
+          "kind": "tool_use",
+          "match": {
+            "toolUseId": "cmd1",
+            "toolName": "Bash",
+            "toolInput": {
+              "command": "git status",
+              "cwd": "D:/x"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "item/commandExecution/outputDelta → chunk",
+      "wire": {
+        "method": "item/commandExecution/outputDelta",
+        "params": {
+          "threadId": "t1",
+          "turnId": "tn1",
+          "itemId": "cmd1",
+          "delta": "On branch main\n",
+          "contentIndex": 0
+        },
+        "emittedAtMs": 1791119048100
+      },
+      "expect": [
+        {
+          "kind": "chunk",
+          "match": {
+            "messageKind": "text",
+            "delta": "On branch main\n"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "item/completed{commandExecution} 退出码非 0 → tool_result(isError)",
+      "wire": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "commandExecution",
+            "id": "cmd1",
+            "command": "false",
+            "cwd": "D:/x",
+            "status": "failed",
+            "aggregatedOutput": "",
+            "exitCode": 1
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "completedAtMs": 1791119049000
+        },
+        "emittedAtMs": 1791119049000
+      },
+      "expect": [
+        {
+          "kind": "tool_result",
+          "match": {
+            "toolUseId": "cmd1",
+            "toolName": "Bash",
+            "isError": true
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "turn/completed{completed} → result，**不是 error**",
+      "wire": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "t1",
+          "turn": {
+            "id": "tn1",
+            "items": [
+              {
+                "type": "agentMessage",
+                "id": "msg_tmp_pnb6sydecib",
+                "text": "ok"
+              }
+            ],
+            "itemsView": "summary",
+            "status": "completed",
+            "error": null,
+            "startedAt": 1791119035,
+            "completedAt": 1791119049,
+            "durationMs": 138
+          }
+        },
+        "emittedAtMs": 1791119049817
+      },
+      "expect": [
+        {
+          "kind": "result",
+          "match": {
+            "isError": false,
+            "subtype": "completed",
+            "durationMs": 138,
+            "resultText": "ok"
+          },
+          "jie_shou": true
+        }
+      ],
+      "_zhan_dian": [
+        {
+          "method": "item/agentMessage/delta",
+          "params": {
+            "delta": "ok",
+            "itemId": "m1"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "turn/completed{failed} → error + result(isError)。**必须两条都发**",
+      "wire": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "t1",
+          "turn": {
+            "id": "tn1",
+            "items": [],
+            "status": "failed",
+            "error": {
+              "message": "Missing environment variable: `X`",
+              "codexErrorInfo": "other",
+              "additionalDetails": null,
+              "misalignment": null
+            },
+            "durationMs": 3
+          }
+        },
+        "emittedAtMs": 1791119049817
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "codex_turn_failed",
+            "recoverable": false
+          }
+        },
+        {
+          "kind": "result",
+          "match": {
+            "isError": true,
+            "subtype": "failed"
+          },
+          "jie_shou": true
+        }
+      ]
+    },
+    {
+      "_ming": "turn/completed{interrupted}：中断也是回合边界（否则 fasong 挂死）。error 为空时用状态名兜底",
+      "wire": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "t1",
+          "turn": {
+            "id": "tn1",
+            "items": [],
+            "status": "interrupted",
+            "error": null,
+            "durationMs": 5
+          }
+        },
+        "emittedAtMs": 1791119049817
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "codex_turn_failed",
+            "recoverable": false
+          }
+        },
+        {
+          "kind": "result",
+          "match": {
+            "isError": true,
+            "subtype": "interrupted"
+          },
+          "jie_shou": true
+        }
+      ]
+    },
+    {
+      "_ming": "error 通知 → error 帧，recoverable 取 willRetry",
+      "wire": {
+        "method": "error",
+        "params": {
+          "error": {
+            "message": "boom",
+            "codexErrorInfo": "other"
+          },
+          "willRetry": false,
+          "threadId": "t1",
+          "turnId": "tn1"
+        },
+        "emittedAtMs": 1791119048476
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "codex_error",
+            "message": "boom",
+            "recoverable": false
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "mcpServer/startupStatus/updated：70+ 种无关通知之一，必须被忽略",
+      "wire": {
+        "method": "mcpServer/startupStatus/updated",
+        "params": {
+          "threadId": "t1",
+          "name": "codegraph",
+          "status": "ready",
+          "error": null,
+          "failureReason": null
+        },
+        "emittedAtMs": 1791119046019
+      },
+      "expect": []
+    },
+    {
+      "_ming": "thread/tokenUsage/updated：不进统一模型，必须被忽略",
+      "wire": {
+        "method": "thread/tokenUsage/updated",
+        "params": {
+          "threadId": "t1",
+          "tokenUsage": {
+            "total": 100
+          }
+        },
+        "emittedAtMs": 1791119046019
+      },
+      "expect": []
+    },
+    {
+      "_ming": "item/completed{agentMessage + 空 text}：**必须不发 text**（空消息会在界面上占一行空白）",
+      "wire": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "agentMessage",
+            "id": "msg_kong",
+            "text": "",
+            "phase": null
+          },
+          "threadId": "t1",
+          "turnId": "tn1",
+          "completedAtMs": 1791119047369
+        },
+        "emittedAtMs": 1791119047369
+      },
+      "_zhan_dian": [
+        {
+          "method": "item/started",
+          "params": {
+            "item": {
+              "type": "agentMessage",
+              "id": "msg_kong",
+              "text": ""
+            },
+            "threadId": "t1",
+            "turnId": "tn1"
+          }
+        }
+      ],
+      "expect": []
+    }
+  ]
+}

@@ -1,0 +1,362 @@
+{
+  "_shuo_ming": "kimi 适配器的 L-B golden 样本。**wire 逐行来自 kimi.py 文件头的「wire」段**（那是本机 2.1.1 的真实 stdout），所以这份样本不是抄 cc-connect 源码——那三个坑（`--print` 已删、`--plan` 不能与 `-p` 组合、回合边界）照抄会直接报错。期望值（expect / _jie_shou）是统一事件的期望形状。**这份文件的正确性取决于抄得对不对，所以它只是回归护栏，不是「已验证」**——真验收是 L-C（真 spawn `kimi -p --output-format stream-json` 打真回合）。标了「防御性」的那几条不是真机抓的，是 `fan_yi` 里真实存在的分支，坏行不许吞掉整轮那条纪律要求它们有护栏。",
+  "_lai_yuan": "kimi 2.1.1 / Windows 11 / 2026-10-05。kimi.py 文件头「wire（真机抓的原始行）」段逐字抄，id 补成完整 uuid 形态。回合边界判据见约束 3：`role==\"meta\"` 有两种 type，只有 `session.resume_hint` 是边界，`system.version` 在开头。",
+  "cases": [
+    {
+      "_ming": "role:meta + system.version（开头那条）：**必须一条事件都不发**，也不许收口",
+      "_lai_yuan_dan": "kimi.py 文件头 wire 第 1 行 `{\"role\":\"meta\",\"type\":\"system.version\",\"version\":\"2.1.1\"}`；约束 3：拿 `role==\"meta\"` 当边界 ⇒ 每回合刚开始就收口，结果是空的，`fasong()` 秒回而界面上什么都没有",
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "meta",
+        "type": "system.version",
+        "version": "2.1.1"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "role:assistant + content：发一条 text，正文进累加器",
+      "_lai_yuan_dan": "kimi.py 文件头 wire 第 4 行 `{\"role\":\"assistant\",\"content\":\"完成。\"}`（tool_calls 与 content 二选一，这条是 content 那一支）",
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "assistant",
+        "content": "完成。"
+      },
+      "expect": [
+        {
+          "kind": "text",
+          "match": {
+            "text": "完成。"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "role:assistant + content 是空串：**不动累加器、不发 text**（防御性）",
+      "_lai_yuan_dan": "防御性：kimi.py:121-123 的注释「空 content 不动累加器：下一条才是真正的答复」。真机样本未抓到空 content，但这条分支存在且被注释点名。分岔：发了空的 text 帧，界面上多一条空白消息",
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "assistant",
+        "content": ""
+      },
+      "expect": []
+    },
+    {
+      "_ming": "role:assistant + tool_calls：发 tool_use，**`arguments` 是 JSON 字符串必须解一次**",
+      "_lai_yuan_dan": "kimi.py 文件头 wire 第 2-3 行。`function.arguments` 的值在真机 stdout 上就是 `\"{\\\"command\\\":\\\"echo kimi-tool\\\"}\"` 这个**字符串**，不是嵌套对象（文件头明确标注）",
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "type": "function",
+            "id": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+            "function": {
+              "name": "Bash",
+              "arguments": "{\"command\":\"echo kimi-tool\"}"
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "kind": "tool_use",
+          "match": {
+            "toolUseId": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+            "toolName": "Bash",
+            "toolInput": {
+              "command": "echo kimi-tool"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "role:tool：**靠 tool_call_id 配对上一步的 tool_use**，toolName 从 gong_ju 反查",
+      "_lai_yuan_dan": "kimi.py 文件头 wire 第 3 行 `{\"role\":\"tool\",\"tool_call_id\":\"3bcb859b-…\",\"content\":\"kimi-tool\\n\"}`。`_zhan_dian` 先喂 tool_calls 那行——`tool_result` 的 toolName 靠 `self.gong_ju[id]` 反查，不喂就查不到",
+      "_zhan_dian": [
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "type": "function",
+              "id": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"echo kimi-tool\"}"
+              }
+            }
+          ]
+        }
+      ],
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "tool",
+        "tool_call_id": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+        "content": "kimi-tool\n"
+      },
+      "expect": [
+        {
+          "kind": "tool_result",
+          "match": {
+            "toolUseId": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+            "toolName": "Bash",
+            "text": "kimi-tool\n",
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "tool_calls 里没有 id：**一条都不发**（防御性）",
+      "_lai_yuan_dan": "防御性：kimi.py:138-140「没有 id ⇒ 后面配不上，等于没有这条工具调用」。真机样本未见缺 id 的 tool_call。分岔：发了 toolUseId=\"\" 的 tool_use，界面上是一张永远配不上的工具卡",
+      "_fei_bian_jie": true,
+      "wire": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "type": "function",
+            "function": {
+              "name": "Bash",
+              "arguments": "{\"command\":\"echo kimi-tool\"}"
+            }
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "_ming": "非 JSON 坏行：发一条可恢复的 error，**回合不许被吞掉**",
+      "_lai_yuan_dan": "防御性：kimi.py:96-103 的分支。真机上 kimi 的坏行出现在 stderr（那是 hermes 的已知问题），stdout 未抓到——但纪律 23 要求这条有护栏：基类读循环捕获 `fan_yi` 异常后只发 translate_failed、**不收口回合**，`fasong()` 挂到 15 分钟看门狗。⚠ 这条**不标 `_fei_bian_jie`**：`jie_shou` 收的是**解完的 dict**，喂裸字符串进去会 AttributeError。「坏行不许吞掉整轮」由 `zhuan_quan_lie_xiu` 第 3 条整段验。",
+      "wire": "not json at all",
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "kimi_bad_line",
+            "message": "kimi 输出了一行非 JSON：not json at all",
+            "recoverable": true
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "role:meta + session.resume_hint：**唯一**的回合边界，先发 session 再发 result",
+      "_lai_yuan_dan": "kimi.py 文件头 wire 第 5-6 行 `{\"role\":\"meta\",\"type\":\"session.resume_hint\",\"session_id\":\"session_xxx\",\"command\":\"kimi -r session_xxx\"}`。`_zhan_dian` 喂了开头那条与正文那条，所以 resultText 不是空的",
+      "_zhan_dian": [
+        {
+          "role": "meta",
+          "type": "system.version",
+          "version": "2.1.1"
+        },
+        {
+          "role": "assistant",
+          "content": "完成。"
+        }
+      ],
+      "_shi_bian_jie": true,
+      "wire": {
+        "role": "meta",
+        "type": "session.resume_hint",
+        "session_id": "session_xxx",
+        "command": "kimi -r session_xxx"
+      },
+      "expect": [
+        {
+          "kind": "session",
+          "match": {
+            "sessionId": "session_xxx",
+            "claudeSessionId": "session_xxx"
+          }
+        },
+        {
+          "kind": "result",
+          "match": {
+            "resultText": "完成。",
+            "sessionId": "session_xxx"
+          }
+        }
+      ],
+      "_jie_shou": {
+        "resultText": "完成。",
+        "sessionId": "session_xxx"
+      }
+    }
+  ],
+  "zhuan_quan_lie_xiu": [
+    {
+      "_ming": "完整正常回合（约束 3 的正面）：system.version 不收口，正文进累加器，resume_hint 收口且恰好一条 result",
+      "_dao_yan_lie_xiu": [
+        [
+          {
+            "role": "meta",
+            "type": "system.version",
+            "version": "2.1.1"
+          },
+          {
+            "role": "assistant",
+            "content": "完成。"
+          },
+          {
+            "role": "meta",
+            "type": "session.resume_hint",
+            "session_id": "session_xxx",
+            "command": "kimi -r session_xxx"
+          }
+        ]
+      ],
+      "_shi_ji_yan_chu": [
+        "text",
+        "session",
+        "result"
+      ],
+      "_jie_shou": [
+        {
+          "resultText": "完成。",
+          "isError": false,
+          "subtype": "completed",
+          "sessionId": "session_xxx",
+          "numTurns": 1,
+          "totalCostUsd": 0.0
+        }
+      ]
+    },
+    {
+      "_ming": "带工具的回合：tool_use 与 tool_result 配成一对，**带 tool_calls 的 assistant 消息不发 text**，正文只取 content 那条",
+      "_dao_yan_lie_xiu": [
+        [
+          {
+            "role": "meta",
+            "type": "system.version",
+            "version": "2.1.1"
+          },
+          {
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "type": "function",
+                "id": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\":\"echo kimi-tool\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "3bcb859b-1f4a-4c2e-9a7d-5e6f70819aa2",
+            "content": "kimi-tool\n"
+          },
+          {
+            "role": "assistant",
+            "content": "完成。"
+          },
+          {
+            "role": "meta",
+            "type": "session.resume_hint",
+            "session_id": "session_xxx",
+            "command": "kimi -r session_xxx"
+          }
+        ]
+      ],
+      "_shi_ji_yan_chu": [
+        "tool_use",
+        "tool_result",
+        "text",
+        "session",
+        "result"
+      ],
+      "_jie_shou": [
+        {
+          "resultText": "完成。",
+          "isError": false,
+          "subtype": "completed",
+          "sessionId": "session_xxx"
+        }
+      ]
+    },
+    {
+      "_ming": "坏行不许吞掉整轮：非 JSON 那行之后回合照样收口，**且 resultText 完整**",
+      "_dao_yan_lie_xiu": [
+        [
+          {
+            "role": "meta",
+            "type": "system.version",
+            "version": "2.1.1"
+          },
+          "not json at all",
+          {
+            "role": "assistant",
+            "content": "完成。"
+          },
+          {
+            "role": "meta",
+            "type": "session.resume_hint",
+            "session_id": "session_xxx",
+            "command": "kimi -r session_xxx"
+          }
+        ]
+      ],
+      "_shi_ji_yan_chu": [
+        "error",
+        "text",
+        "session",
+        "result"
+      ],
+      "_jie_shou": [
+        {
+          "resultText": "完成。",
+          "isError": false,
+          "subtype": "completed",
+          "sessionId": "session_xxx"
+        }
+      ]
+    },
+    {
+      "_ming": "两个回合：session 帧**只发一次**（`_fa_le_session`），result 每回合一条，**第二条 result 的 resultText 不含上一回合的正文**",
+      "_dao_yan_lie_xiu": [
+        [
+          {
+            "role": "assistant",
+            "content": "第一条。"
+          },
+          {
+            "role": "meta",
+            "type": "session.resume_hint",
+            "session_id": "session_xxx",
+            "command": "kimi -r session_xxx"
+          }
+        ],
+        [
+          {
+            "role": "assistant",
+            "content": "第二条。"
+          },
+          {
+            "role": "meta",
+            "type": "session.resume_hint",
+            "session_id": "session_xxx",
+            "command": "kimi -r session_xxx"
+          }
+        ]
+      ],
+      "_shi_ji_yan_chu": [
+        "text",
+        "session",
+        "result",
+        "text",
+        "result"
+      ],
+      "_jie_shou": [
+        {
+          "resultText": "第一条。",
+          "sessionId": "session_xxx"
+        },
+        {
+          "resultText": "第二条。",
+          "sessionId": "session_xxx"
+        }
+      ]
+    }
+  ]
+}

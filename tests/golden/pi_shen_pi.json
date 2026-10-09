@@ -1,0 +1,515 @@
+{
+  "_shuo_ming": "L-B golden：审批与提问的 extension_ui_request。**wire 逐字抄自 pi 1.0.2 自带的 docs/rpc-extension-ui.md 的示例 JSON**（该文档就是本机安装包里的文件，与 dist/modes/rpc/rpc-mode.js 的 emit 点逐条对得上）；响应形状以同文档的 Responses to Pi 段为准。",
+  "_lai_yuan": "pi 1.0.2 docs/rpc-extension-ui.md（对话框方法示例 + Responses 段）；dist/modes/rpc/rpc-mode.js 的 createExtensionUIContext.* 与 `parsed.type === \"extension_ui_response\"` 分支；cc-connect agent/pi/session.go 的 forwardConfirm / forwardInput / forwardSelect 与 RespondPermission",
+  "_hui_ying": "extension_ui_response 的形状。**不是 JSON-RPC 的 result**——pi 认的是 confirmed / value / cancelled 三个平铺字段。",
+  "_zhan_bu_diao": "**必须不回的五种 fire-and-forget**（notify / setStatus / setWidget / setTitle / set_editor_text）：它们在 pi 那边不往 pendingExtensionRequests 里塞 Promise，回响应是无操作（dist/modes/rpc/rpc-mode.js 里这五个方法只调 output(...)）。回错了不会报错，但会让「回响应」这条路径的行为与文档不一致——所以判据是「一条都不许写出去」。",
+  "cases": [
+    {
+      "_ming": "confirm 审批：allow 回 confirmed=true，deny 回 confirmed=false（不是 cancelled）",
+      "_zuo_yong": "permission",
+      "_dao_yan": "用户对问题的回答：\n- 允许",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-2",
+        "method": "confirm",
+        "title": "Clear session?",
+        "message": "All messages will be lost.",
+        "timeout": 5000
+      },
+      "hui_ying": {
+        "confirmed": true
+      },
+      "hui_ying_bie": {
+        "confirmed": false
+      }
+    },
+    {
+      "_ming": "confirm 带 timeout：pi 侧超时会自动按默认值 resolve，**不需要我们管超时**，但确认键仍必须是 confirmed（docs 的 Confirmation response 段）",
+      "_zuo_yong": "permission",
+      "_dao_yan": "用户对问题的回答：\n- 允许",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-2b",
+        "method": "confirm",
+        "title": "Allow dangerous command?",
+        "message": "rm -rf ./build",
+        "timeout": 10000
+      },
+      "hui_ying": {
+        "confirmed": true
+      },
+      "hui_ying_bie": {
+        "confirmed": false
+      }
+    },
+    {
+      "_ming": "select 提问：值必须是 options 里的**原样字符串**（docs：value (the selected option string)）",
+      "_zuo_yong": "question",
+      "_dao_yan": "用户对问题的回答：\n- Allow",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-1",
+        "method": "select",
+        "title": "Allow dangerous command?",
+        "options": [
+          "Allow",
+          "Block"
+        ],
+        "timeout": 10000
+      },
+      "hui_ying": {
+        "value": "Allow"
+      },
+      "hui_ying_bie": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "select 带对象选项（label + description）：**必须原样回 label 字符串**，不能让 options 变成对象数组",
+      "_zuo_yong": "question",
+      "_dao_yan": "用户对问题的回答：\n- dev",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-1b",
+        "method": "select",
+        "title": "用哪个分支",
+        "options": [
+          {
+            "label": "main",
+            "description": "主干"
+          },
+          {
+            "label": "dev",
+            "description": "开发"
+          }
+        ]
+      },
+      "hui_ying": {
+        "value": "dev"
+      },
+      "hui_ying_bie": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "input 提问：回 value（裸字符串，不带 arbiter 的前缀）",
+      "_zuo_yong": "question",
+      "_dao_yan": "用户对问题的回答：\n- hello.py",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-3",
+        "method": "input",
+        "title": "Enter a value",
+        "placeholder": "type something..."
+      },
+      "hui_ying": {
+        "value": "hello.py"
+      },
+      "hui_ying_bie": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "editor：与 input 同一条回路，回 value",
+      "_zuo_yong": "question",
+      "_dao_yan": "用户对问题的回答：\n- 改过的内容",
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-4",
+        "method": "editor",
+        "title": "Edit some text",
+        "prefill": "Line 1\nLine 2\nLine 3"
+      },
+      "hui_ying": {
+        "value": "改过的内容"
+      },
+      "hui_ying_bie": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "notify：fire-and-forget，**一条响应都不许写**（回它没有语义）",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-5",
+        "method": "notify",
+        "message": "Command blocked by user",
+        "notifyType": "warning"
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "setStatus：fire-and-forget，不许回",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-6",
+        "method": "setStatus",
+        "statusKey": "my-ext",
+        "statusText": "Turn 3 running..."
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "setWidget：fire-and-forget，不许回",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-7",
+        "method": "setWidget",
+        "widgetKey": "my-ext",
+        "widgetLines": [
+          "--- My Widget ---",
+          "Line 1",
+          "Line 2"
+        ],
+        "widgetPlacement": "aboveEditor"
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "setTitle：fire-and-forget，不许回",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-8",
+        "method": "setTitle",
+        "title": "pi - my project"
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "set_editor_text：fire-and-forget，不许回",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "id": "uuid-9",
+        "method": "set_editor_text",
+        "text": "prefilled text for the user"
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "对话框请求但没有 id：**一条响应都不能回**（pi 那边用 id 配对，无 id 的请求配不上，回了也是写进 stdin 的垃圾）",
+      "_zuo_yong": null,
+      "wire": {
+        "type": "extension_ui_request",
+        "method": "confirm",
+        "title": "Clear session?",
+        "message": "All messages will be lost."
+      },
+      "hui_ying": null
+    },
+    {
+      "_ming": "response（命令结果）不是 extension_ui_request：不允许进挂起通道",
+      "_zuo_yong": null,
+      "wire": {
+        "id": "uuid-x",
+        "type": "response",
+        "command": "get_state",
+        "success": true,
+        "data": {
+          "sessionId": "abc123"
+        }
+      },
+      "hui_ying": null
+    }
+  ],
+  "xuan_xiang_ce_shi": [
+    {
+      "_ming": "字符串形状的 options",
+      "options": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": [
+        "Allow",
+        "Block"
+      ]
+    },
+    {
+      "_ming": "对象形状（label）",
+      "options": [
+        {
+          "label": "main",
+          "description": "主干"
+        },
+        {
+          "label": "dev",
+          "description": "开发"
+        }
+      ],
+      "jie_xi": [
+        "main",
+        "dev"
+      ]
+    },
+    {
+      "_ming": "对象形状的其它键（cc-connect 的 forwardSelect 依次试 label/text/name）",
+      "options": [
+        {
+          "text": "按 text 取"
+        },
+        {
+          "name": "按 name 取"
+        },
+        {
+          "value": "按 value 取"
+        }
+      ],
+      "jie_xi": [
+        "按 text 取",
+        "按 name 取",
+        "按 value 取"
+      ]
+    },
+    {
+      "_ming": "混着来 + 空串与无 label 的对象：空串与取不出 label 的都必须被丢掉",
+      "options": [
+        "Allow",
+        "",
+        {
+          "description": "没有 label 也没有 text/name/value"
+        },
+        {
+          "label": "Block"
+        }
+      ],
+      "jie_xi": [
+        "Allow",
+        "Block"
+      ]
+    },
+    {
+      "_ming": "不是数组（协议异常）：交空，别抛",
+      "options": null,
+      "jie_xi": []
+    }
+  ],
+  "xuan_jie_xi_ce_shi": [
+    {
+      "_ming": "allow + 选了第一个（原样回候选里的 label）",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- Allow",
+      "xuan_xiang": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": {
+        "value": "Allow"
+      }
+    },
+    {
+      "_ming": "allow + 选了第二个",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- Block",
+      "xuan_xiang": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": {
+        "value": "Block"
+      }
+    },
+    {
+      "_ming": "deny：回 cancelled（不是 value=空串）。扩展那边拿到 undefined，与「用户按了取消」同义",
+      "yong": {
+        "behavior": "deny"
+      },
+      "hui_yi": "命令被拒绝",
+      "xuan_xiang": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "allow 但答案对不上任何候选：回 cancelled。**方向必须是取消**——回一个 pi 不认识的选项，扩展会拿它去索引自己的数组（越界）",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- 都不对",
+      "xuan_xiang": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "空 message（allow 但没带消息）",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": null,
+      "xuan_xiang": [
+        "Allow"
+      ],
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "None（挂起通道没接）→ cancelled，安全侧默认",
+      "yong": null,
+      "xuan_xiang": [
+        "Allow"
+      ],
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "候选里有多个 label 且答案里同时出现两个：**取第一个**（界面上用户只可能选一个，闭集匹配足够）",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- Block 与 Allow",
+      "xuan_xiang": [
+        "Allow",
+        "Block"
+      ],
+      "jie_xi": {
+        "value": "Allow"
+      }
+    }
+  ],
+  "wen_ben_jie_xi_ce_shi": [
+    {
+      "_ming": "标准形状：剥掉 arbiter 的前缀与列表符号",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- hello.py",
+      "jie_xi": {
+        "value": "hello.py"
+      }
+    },
+    {
+      "_ming": "多行值：只剥一层 `- ` 前缀，值内部的换行与缩进保留（扩展可能拿它当文件内容）",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- 第一行\n  第二行",
+      "jie_xi": {
+        "value": "第一行\n  第二行"
+      }
+    },
+    {
+      "_ming": "半角冒号的前缀也要剥",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答:\n- x",
+      "jie_xi": {
+        "value": "x"
+      }
+    },
+    {
+      "_ming": "没有前缀（用户直接答了裸串）：原样交",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "裸答案",
+      "jie_xi": {
+        "value": "裸答案"
+      }
+    },
+    {
+      "_ming": "deny → cancelled",
+      "yong": {
+        "behavior": "deny"
+      },
+      "hui_yi": "用户未能在时限内回答",
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "allow 但答案为空（剥完前缀什么也不剩）→ cancelled",
+      "yong": {
+        "behavior": "allow"
+      },
+      "hui_yi": "用户对问题的回答：\n- ",
+      "jie_xi": {
+        "cancelled": true
+      }
+    },
+    {
+      "_ming": "None（挂起通道没接）→ cancelled",
+      "yong": null,
+      "jie_xi": {
+        "cancelled": true
+      }
+    }
+  ],
+  "jue_ding_ce_shi": [
+    {
+      "_ming": "PermissionResultAllow → confirmed=true",
+      "yong": {
+        "behavior": "allow"
+      },
+      "jie_xi": {
+        "confirmed": true
+      }
+    },
+    {
+      "_ming": "PermissionResultDeny → confirmed=false",
+      "yong": {
+        "behavior": "deny"
+      },
+      "jie_xi": {
+        "confirmed": false
+      }
+    },
+    {
+      "_ming": "None（挂起通道没接）→ confirmed=false，安全侧默认",
+      "yong": null,
+      "jie_xi": {
+        "confirmed": false
+      }
+    },
+    {
+      "_ming": "behavior 大小写混杂 → allow",
+      "yong": {
+        "behavior": "Accept"
+      },
+      "jie_xi": {
+        "confirmed": true
+      }
+    },
+    {
+      "_ming": "dict 形状的 allowed=true → allow",
+      "yong": {
+        "allowed": true
+      },
+      "jie_xi": {
+        "confirmed": true
+      }
+    },
+    {
+      "_ming": "dict 形状的 allowed=false → deny",
+      "yong": {
+        "allowed": false
+      },
+      "jie_xi": {
+        "confirmed": false
+      }
+    },
+    {
+      "_ming": "既没有 behavior 也不是 dict（不明确）→ deny",
+      "yong": {},
+      "jie_xi": {
+        "confirmed": false
+      }
+    }
+  ]
+}

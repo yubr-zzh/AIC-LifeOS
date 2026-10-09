@@ -1,0 +1,838 @@
+{
+  "_shuo_ming": "L-B golden 样本。wire 分两类来源，逐条标在 _lai_yuan_dan 里：(a) 从 cc-connect 的 agent/pi/session.go `handleEvent` 的 case 分支逐字抄（那是 pi wire 格式的权威描述）；(b) 本机 pi 1.0.2 真机 spawn 抓的 stdout 原行（docs 里只给字段表，不给真实取值）。expect 是统一事件的期望形状。**这份文件的正确性取决于抄得对不对，所以它只是回归护栏，不是「已验证」**——真验收是 L-C（tests/test_pi_lc_ji_cheng.py，真 spawn pi 打真回合）。",
+  "_lai_yuan": "pi 1.0.2 / Windows 11 / 2026-10-05。cc-connect agent/pi/session.go handleEvent 的 case \"session\"/\"message_update\"/\"message_end\"/\"agent_end\"/\"compaction_start\"/\"compaction_end\"/\"extension_ui_request\"/\"agent_start\",\"turn_start\",\"turn_end\",\"message_start\"；pi docs/json.md 事件序与 message_update 子事件表；docs/rpc-extension-ui.md 的对话框方法表。真机样本用 `pi.cmd --mode rpc --model <本机可用 provider>` 抓的。",
+  "cases": [
+    {
+      "_ming": "agent_start：低层 run 开始。**必须不产生任何事件**（分岔：当成回合边界 ⇒ 回合刚开始就被收走，用户看到空结果）",
+      "_lai_yuan_dan": "cc-connect session.go:687 `case \"agent_start\", \"turn_start\", \"turn_end\", \"message_start\", \"extension_error\":`（注释写明 Informational — no events produced）；本机真机抓到 `{\"type\":\"agent_start\"}`",
+      "wire": {
+        "type": "agent_start"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "turn_start：一次 assistant 回合开始，不发事件",
+      "_lai_yuan_dan": "cc-connect session.go:687 同上；真机 `{\"type\":\"turn_start\"}`",
+      "wire": {
+        "type": "turn_start"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_start{system}：系统提示。**必须不回显**（它含完整工具说明与规则，回显出来界面直接被刷屏）",
+      "_lai_yuan_dan": "pi docs/json.md 事件序里 `message_start`/`message_end` 都可能出现 system；本机真机抓到 role=system 且 `content` 是空串、`sections.preamble`/`sections.tools`/`sections.rules` 是全文。真机上 system 的 message_start/message_end 各一条，本样本取 message_start",
+      "wire": {
+        "type": "message_start",
+        "message": {
+          "role": "system",
+          "content": "",
+          "sections": {
+            "preamble": "You are an expert coding assistant operating inside pi, a coding agent harness.",
+            "tools": "<tools>\n- read: Read file contents\n- bash: Execute bash commands (ls, grep, find, etc.)\n</tools>",
+            "rules": "<rules>\n- Use bash for file operations like ls, rg, find\n</rules>"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_end{user}：**必须不回显用户输入**（分岔：role 判错成「不是 assistant 就当正文」⇒ 界面把用户刚说的话再显示一遍）",
+      "_lai_yuan_dan": "cc-connect session.go:1007 `case \"assistant\":`（handleMessageEnd 只对 assistant / toolResult 分支）；本机真机 `message_end` 的 role=user，content=[{type:\"text\",text:\"只回答两个字：收到\"}]",
+      "wire": {
+        "type": "message_end",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "只回答两个字：收到"
+            }
+          ],
+          "timestamp": 1791166789342
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_update{text_delta} → chunk(messageKind=text)。**样本刻意用空 messageId**：delta 帧在真机上就带着上一次消息的 id，判据必须落在 delta 与 messageKind 上",
+      "_lai_yuan_dan": "cc-connect session.go:882 `case \"text_delta\":`（`delta, _ := msg[\"delta\"].(string); if delta == \"\" { return }`）；本机真机 `{\"type\":\"message_update\",\"usage\":{...},\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"hi\"}}`",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 20,
+          "output": 2,
+          "cacheRead": 10292,
+          "cacheWrite": 0,
+          "totalTokens": 10314
+        },
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "收到"
+        }
+      },
+      "expect": [
+        {
+          "kind": "chunk",
+          "match": {
+            "messageKind": "text",
+            "delta": "收到"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "message_update{thinking_delta} → chunk(messageKind=thinking)。⚠ **delta 字符串与上一条 text_delta 逐字相同**（都是「收到」）：分岔只可能来自读的是哪个 type / 哪个字段，混成同一个 kind 的话思考会被当成回复正文显示出去（CLAUDE.md 5.7 的「样本本身必须造出分岔」）",
+      "_lai_yuan_dan": "cc-connect session.go:893 `case \"thinking_delta\":`（写进 thinkingBuf 而**不是**直接发，与 text_delta 分开）；pi docs/json.md 的 message_update 子事件表：thinking_delta 字段是 contentIndex + delta，与 text_delta 同形",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 20,
+          "output": 2,
+          "cacheRead": 10292,
+          "cacheWrite": 0,
+          "totalTokens": 10314
+        },
+        "assistantMessageEvent": {
+          "type": "thinking_delta",
+          "contentIndex": 0,
+          "delta": "收到"
+        }
+      },
+      "expect": [
+        {
+          "kind": "chunk",
+          "match": {
+            "messageKind": "thinking",
+            "delta": "收到"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "message_update{text_delta + 空 delta}：pi 自己会发空 delta（`if delta == \"\" { return }` 是 cc-connect 的防御），**必须不发 chunk**（空 delta 在界面上是零宽闪烁）",
+      "_lai_yuan_dan": "cc-connect session.go:884-887 那个 `if delta == \"\" { return }`；本样本按同一形状构造",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0
+        },
+        "assistantMessageEvent": {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": ""
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_update{text_start}：块开始，无内容。**必须不发事件**（分岔：把 start 当正文 ⇒ 每条消息前面多一个空块）",
+      "_lai_yuan_dan": "pi docs/json.md 的 message_update 子事件表：`text_start` 字段只有 contentIndex，没有 delta/content；本机真机抓到 `{\"type\":\"text_start\",\"contentIndex\":0}`",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0
+        },
+        "assistantMessageEvent": {
+          "type": "text_start",
+          "contentIndex": 0
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_update{text_end}：块结束，**带着与前面 delta 完全相同的完整 content**。必须不发事件——正文已经逐字发过 chunk，再发一条 text 就是界面上两条一样的消息（codex 的约束 4 同一个坑）",
+      "_lai_yuan_dan": "pi docs/json.md：`text_end` 字段 contentIndex + content，「The text block ended with authoritative content」；本机真机 `{\"type\":\"text_end\",\"contentIndex\":0,\"content\":\"hi\"}` 紧跟在同一条消息的 text_delta 之后",
+      "_zhan_dian": [
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": "hi"
+          }
+        }
+      ],
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 20,
+          "output": 2,
+          "cacheRead": 10292,
+          "cacheWrite": 0,
+          "totalTokens": 10314
+        },
+        "assistantMessageEvent": {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "hi"
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_update{toolcall_delta}：模型正在流式吐工具参数（**半截 JSON**）。必须忽略——转成工具卡就是把 `{\"command\": \"echo hi` 显示给用户",
+      "_lai_yuan_dan": "本机真机：`{\"type\":\"toolcall_delta\",\"contentIndex\":0,\"delta\":\"{\\\"command\\\": \\\"echo hi\"}` 与下一条 `\"}\"`（cc-connect 的 handleMessageUpdate 只 switch 四个 case，toolcall_delta 不在其中）",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 0,
+          "output": 27,
+          "cacheRead": 140,
+          "cacheWrite": 0,
+          "totalTokens": 10294
+        },
+        "assistantMessageEvent": {
+          "type": "toolcall_delta",
+          "contentIndex": 0,
+          "delta": "{\"command\": \"echo hi"
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "message_update{toolcall_end} → tool_use。**判据落在 `assistantMessageEvent.toolCall` 上**（pi >= 0.84 删掉了 message_update 里的累积 message 与 partial，cc-connect 的 `emitToolFromMessage` 注释专门记了这件事）",
+      "_lai_yuan_dan": "本机真机逐字：`{\"type\":\"message_update\",\"usage\":{...},\"assistantMessageEvent\":{\"type\":\"toolcall_end\",\"contentIndex\":0,\"toolCall\":{\"type\":\"toolCall\",\"id\":\"6ac63baa-71a3-4672-809f-8b5f0e590ea4\",\"name\":\"bash\",\"arguments\":{\"command\":\"echo hi\"}}}}`；cc-connect session.go:916 `case \"toolcall_end\": s.emitToolFromMessage(msg)`",
+      "wire": {
+        "type": "message_update",
+        "usage": {
+          "input": 10127,
+          "output": 27,
+          "cacheRead": 140,
+          "cacheWrite": 0,
+          "totalTokens": 10294
+        },
+        "assistantMessageEvent": {
+          "type": "toolcall_end",
+          "contentIndex": 0,
+          "toolCall": {
+            "type": "toolCall",
+            "id": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+            "name": "bash",
+            "arguments": {
+              "command": "echo hi"
+            }
+          }
+        }
+      },
+      "expect": [
+        {
+          "kind": "tool_use",
+          "match": {
+            "toolUseId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+            "toolName": "bash",
+            "toolInput": {
+              "command": "echo hi"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "tool_execution_start：**必须不发 tool_use**。⚠ 本样本的 toolCallId 与前一条 toolcall_end **完全相同**——真机上 pi 为一次工具调用发这两条，都发的话界面出现两张一样的工具卡（判据落在「同一个 toolUseId 出现几次」这个量上）",
+      "_lai_yuan_dan": "本机真机逐字：`{\"type\":\"tool_execution_start\",\"toolCallId\":\"6ac63baa-...\",\"toolName\":\"bash\",\"args\":{\"command\":\"echo hi\"}}` 紧跟在 toolcall_end 的 message_end 之后；cc-connect 的 handleEvent 只 switch 那十来个 case，`tool_execution_*` 三种根本不在其中",
+      "_zhan_dian": [
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "toolcall_end",
+            "contentIndex": 0,
+            "toolCall": {
+              "type": "toolCall",
+              "id": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+              "name": "bash",
+              "arguments": {
+                "command": "echo hi"
+              }
+            }
+          }
+        }
+      ],
+      "wire": {
+        "type": "tool_execution_start",
+        "toolCallId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+        "toolName": "bash",
+        "args": {
+          "command": "echo hi"
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "tool_execution_end → tool_result。**text 取 `result.content[].text` 而不是整个 result**（structuredContent 里是 exit_code / wall_time_seconds，展示价值低）",
+      "_lai_yuan_dan": "本机真机逐字：`{\"type\":\"tool_execution_end\",\"toolCallId\":\"6ac63baa-...\",\"toolName\":\"bash\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\\n\"}],\"structuredContent\":{\"output\":\"hi\\n\",\"truncated\":false,\"exit_code\":0,\"wall_time_seconds\":0.4}},\"isError\":false}`；pi docs/json.md 工具执行事件表同形",
+      "wire": {
+        "type": "tool_execution_end",
+        "toolCallId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+        "toolName": "bash",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hi\n"
+            }
+          ],
+          "structuredContent": {
+            "output": "hi\n",
+            "truncated": false,
+            "exit_code": 0,
+            "wall_time_seconds": 0.4
+          }
+        },
+        "isError": false
+      },
+      "expect": [
+        {
+          "kind": "tool_result",
+          "match": {
+            "toolUseId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+            "toolName": "bash",
+            "text": "hi\n",
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "tool_execution_end{isError}：失败也必须发 tool_result（isError=true），**不能吞掉**——工具失败是 Agent 继续重试的依据，吞了用户只看到 Agent 卡住",
+      "_lai_yuan_dan": "pi docs/json.md：`tool_execution_end` 字段 toolCallId / toolName / result / isError，isError 是顶层布尔（不在 result 里）",
+      "wire": {
+        "type": "tool_execution_end",
+        "toolCallId": "tc_err",
+        "toolName": "bash",
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "命令找不到"
+            }
+          ]
+        },
+        "isError": true
+      },
+      "expect": [
+        {
+          "kind": "tool_result",
+          "match": {
+            "toolUseId": "tc_err",
+            "text": "命令找不到",
+            "isError": true
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "message_end{assistant, stopReason:stop} → text。⚠ **本样本前面没有任何 text_delta**（真机上 provider 不吐增量时就是这个形状）：只靠 delta 累加的实现会一条都不发，界面表现是「Agent 跑完了但什么都没说」⇒ 判据落在 content 与 delta 两条路读出来不一样",
+      "_lai_yuan_dan": "pi docs/json.md：`message_end` 的 `message` 是「the authoritative final message」；本机真机 `{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"收到\"}],\"stopReason\":\"stop\",\"rawStopReason\":\"end_turn\",...}}`",
+      "wire": {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "收到"
+            }
+          ],
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "model": "claude-opus-4-8",
+          "usage": {
+            "input": 10119,
+            "output": 2,
+            "cacheRead": 140,
+            "cacheWrite": 0,
+            "totalTokens": 10261
+          },
+          "stopReason": "stop",
+          "timestamp": 1791166938877,
+          "rawStopReason": "end_turn",
+          "thinkingLevel": "medium"
+        }
+      },
+      "expect": [
+        {
+          "kind": "text",
+          "match": {
+            "text": "收到"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "message_end{assistant, content 有两个 text 块}：**必须两块都取**。分岔：只取 content[0] ⇒ 后半截回复被丢掉，而单测「断言发了 text」照样成立（CLAUDE.md 5.1）",
+      "_lai_yuan_dan": "pi docs/message-types.md 的 AssistantMessage content 是 ContentBlock 数组；本样本按「一次 assistant 消息里两个 text 块」构造（真机上工具调用前后各一段文本就是这个形状）",
+      "wire": {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "前半："
+            },
+            {
+              "type": "toolCall",
+              "id": "tc1",
+              "name": "bash",
+              "arguments": {
+                "command": "echo hi"
+              }
+            },
+            {
+              "type": "text",
+              "text": "后半。"
+            }
+          ],
+          "stopReason": "stop"
+        }
+      },
+      "expect": [
+        {
+          "kind": "text",
+          "match": {
+            "text": "前半：后半。"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "message_end{assistant, 空 content}：**必须不发 text**（空消息在界面上占一行空白）。⚠ 同时它**不能把上一条正文作废**——这一条就是「工具调用轮」的 assistant message（真机上 `content: []` + `stopReason:\"toolUse\"`），这一轮真正的答复在后面那条消息里；清掉等于在「工具调用后回合直接结束」时把已经说过的话丢掉",
+      "_lai_yuan_dan": "pi docs/message-types.md：content 可以是空数组（本机真机上工具调用那一轮的 assistant message 就是 `content: []` + `stopReason:\"toolUse\"`）；docs/json.md 的事件序里它紧跟在 toolcall_end 的 message_update 之后、turn_end 之前",
+      "_zhan_dian": [
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "toolcall_end",
+            "contentIndex": 0,
+            "toolCall": {
+              "type": "toolCall",
+              "id": "tc1",
+              "name": "bash",
+              "arguments": {
+                "command": "echo hi"
+              }
+            }
+          }
+        },
+        {
+          "type": "message_end",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "让我先看看"
+              }
+            ],
+            "stopReason": "toolUse"
+          }
+        }
+      ],
+      "wire": {
+        "type": "message_end",
+        "message": {
+          "role": "assistant",
+          "content": [],
+          "stopReason": "toolUse",
+          "rawStopReason": "tool_use"
+        }
+      },
+      "expect": [],
+      "_jie_shou": {
+        "isError": false,
+        "subtype": "completed",
+        "resultText": "让我先看看"
+      },
+      "_jie_shou_zai_hou_mian_ji": {
+        "type": "agent_settled"
+      }
+    },
+    {
+      "_ming": "message_end{toolResult}：**必须不发事件**。它与 tool_execution_end 是同一次工具结果的两个视图，tool_execution_end 那条已经带了 toolUseId 能配对，这里再发一条界面就多一个气泡（分岔：把 toolResult 当正文 ⇒ 工具输出被当成 Agent 的回复显示）",
+      "_lai_yuan_dan": "本机真机：`{\"type\":\"message_end\",\"message\":{\"role\":\"toolResult\",\"toolCallId\":\"6ac63baa-...\",\"toolName\":\"bash\",\"content\":[{\"type\":\"text\",\"text\":\"hi\\n\"}],\"isError\":false,\"timestamp\":1791167737318}}` 紧跟在同一次调用的 tool_execution_end 之后；cc-connect session.go:983 `case \"toolResult\":` 发的是 EventToolResult",
+      "_zhan_dian": [
+        {
+          "type": "tool_execution_end",
+          "toolCallId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+          "toolName": "bash",
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "hi\n"
+              }
+            ]
+          },
+          "isError": false
+        }
+      ],
+      "wire": {
+        "type": "message_end",
+        "message": {
+          "role": "toolResult",
+          "toolCallId": "6ac63baa-71a3-4672-809f-8b5f0e590ea4",
+          "toolName": "bash",
+          "content": [
+            {
+              "type": "text",
+              "text": "hi\n"
+            }
+          ],
+          "isError": false,
+          "timestamp": 1791167737318
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "turn_end：**不是回合边界，且必须不产生任何事件**。⚠ 它带着完整的 assistant message（含 content 文本），拿它当边界或当正文都会出事——真机上一个 run 里能有多次 turn_end（工具调用前后各一次）",
+      "_lai_yuan_dan": "本机真机逐字（一次工具回合里出现两次 turn_end，中间夹着第二个 turn_start）：`{\"type\":\"turn_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"hi\"}],\"stopReason\":\"stop\",...},\"toolResults\":[]}`；pi docs/json.md：「A turn is one assistant response plus any tool calls and tool results produced by that response」",
+      "wire": {
+        "type": "turn_end",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "hi"
+            }
+          ],
+          "stopReason": "stop",
+          "rawStopReason": "end_turn"
+        },
+        "toolResults": []
+      },
+      "expect": []
+    },
+    {
+      "_ming": "agent_end：**不是回合边界，必须不产生任何事件**。⚠ 这条是本适配器最承重的判据——docs/json.md 原文：agent_end 闭的是「one low-level agent run」，之后还可能有重试 / 溢出恢复 / 压缩恢复 / steer / follow-up；「Pi 不会自动继续」的事件是 agent_settled。判错的后果是 fasong() 提前返回（单测全绿、真机上结果是空的）",
+      "_lai_yuan_dan": "cc-connect session.go:591 `case \"agent_end\": s.handleAgentEnd(raw); if willRetry { break }`——RPC 模式就在这里发 EventResult，然后紧跟一段 if s.pendingErr；pi docs/json.md 的 agent_end 字段表（messages / willRetry）与「agent_settled means Pi will not continue automatically」。本机真机顺序：`turn_end → agent_end → agent_settled`",
+      "wire": {
+        "type": "agent_end",
+        "messages": [
+          {
+            "role": "system",
+            "content": "",
+            "sections": {
+              "preamble": "…"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "收到"
+              }
+            ],
+            "usage": {
+              "input": 10119,
+              "output": 2,
+              "cacheRead": 140,
+              "cacheWrite": 0
+            }
+          }
+        ],
+        "willRetry": false
+      },
+      "expect": []
+    },
+    {
+      "_ming": "agent_end{willRetry:true}：pi 在同一次 run 内自己重试（429 / 529）。**更不能收回合**——它会紧跟着重新 agent_start 一轮",
+      "_lai_yuan_dan": "cc-connect session.go:591-606 那段 `if willRetry, _ := raw[\"willRetry\"].(bool); willRetry { break }`，注释「Pi is auto-retrying a transient failure (e.g. 429) inside this turn … Keep the turn open」；pi docs/json.md 的 Retry events 段",
+      "wire": {
+        "type": "agent_end",
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [],
+            "stopReason": "error",
+            "errorMessage": "429 rate limited",
+            "usage": {
+              "input": 0,
+              "output": 0
+            }
+          }
+        ],
+        "willRetry": true
+      },
+      "expect": []
+    },
+    {
+      "_ming": "auto_retry_start：正在重试。**必须不发事件**（分岔：立刻发 error ⇒ pi 自己重试成功了，用户却看到一条失败）",
+      "_lai_yuan_dan": "pi docs/json.md Retry events：`auto_retry_start` 字段 attempt / maxAttempts / delayMs / errorMessage",
+      "wire": {
+        "type": "auto_retry_start",
+        "attempt": 1,
+        "maxAttempts": 3,
+        "delayMs": 2000,
+        "errorMessage": "529 overloaded"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "auto_retry_end{success:false}：**不发事件，但必须把失败攒到回合边界**。本样本前置 auto_retry_start，然后 agent_settled 的结果 isError=true、resultText 取之前 delta 累加的正文 ⇒ 判据落在「回合结果里的 isError」这个量上，而不是「auto_retry_end 自己发了什么」",
+      "_lai_yuan_dan": "pi docs/json.md：「On final failure, auto_retry_end has success: false and a finalError string」；cc-connect 的 handleEvent 完全没有 auto_retry_* 这两个 case（它靠 message_end 的 errorMessage 走 pendingErr），本适配器多接一条是为了覆盖「重试耗尽但本轮没有 assistant errorMessage」那种形状",
+      "_zhan_dian": [
+        {
+          "type": "auto_retry_start",
+          "attempt": 1,
+          "maxAttempts": 3,
+          "delayMs": 2000,
+          "errorMessage": "529 overloaded"
+        },
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": "部分结果"
+          }
+        }
+      ],
+      "wire": {
+        "type": "auto_retry_end",
+        "success": false,
+        "attempt": 3,
+        "finalError": "529 overloaded"
+      },
+      "expect": [],
+      "_jie_shou": {
+        "isError": true,
+        "subtype": "error",
+        "resultText": "部分结果"
+      },
+      "_jie_shou_zai_hou_mian_ji": {
+        "type": "agent_settled"
+      }
+    },
+    {
+      "_ming": "agent_settled：**唯一的回合边界** → result。判据是「本回合有没有攒到 errorMessage」，不是「最后一条 assistant 的 stopReason」——后者会被后一次成功的消息覆盖掉",
+      "_lai_yuan_dan": "cc-connect session.go 的 `if s.rpc { … EventResult{Done:true} }` 就在 agent_end 那个 case 的最后（它比本适配器判的早，所以 cc-connect 在 willRetry 场景会提前收尾）；pi docs/json.md：「agent_settled means Pi will not continue automatically through retries, compaction recovery, or queued messages」，且 RpcClient 自己的 waitForIdle 就是等这一条。本机真机：正常回合的最后一帧就是 `{\"type\":\"agent_settled\"}`",
+      "_zhan_dian": [
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": "收到"
+          }
+        }
+      ],
+      "wire": {
+        "type": "agent_settled"
+      },
+      "expect": [
+        {
+          "kind": "result",
+          "match": {
+            "isError": false,
+            "subtype": "completed",
+            "resultText": "收到"
+          },
+          "jie_shou": true
+        }
+      ]
+    },
+    {
+      "_ming": "agent_settled 之前有过一次失败的 assistant 消息（已被后来的成功消息覆盖）→ **error + result 两条都发、isError 仍为 true**。分岔一：改成读「最后一条 assistant 的 stopReason」⇒ 这里返回 completed，用户看到「跑完了但结论是失败」。分岔二：只发 result 不发 error ⇒ 决策回路收不到结果 / 状态机不知道失败（codex 的同一条判据）",
+      "_lai_yuan_dan": "cc-connect session.go:1007-1020 `case \"assistant\":` 的 pendingErr 逻辑（错误先攒着）与 agent_end 里 flush pendingErr 那段（成功回复之后仍然把攒着的 error 发出来）；本样本按「先错后对」构造",
+      "_zhan_dian": [
+        {
+          "type": "message_end",
+          "message": {
+            "role": "assistant",
+            "content": [],
+            "stopReason": "error",
+            "errorMessage": "401 authentication failed"
+          }
+        },
+        {
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": "还是答了"
+          }
+        },
+        {
+          "type": "message_end",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "还是答了"
+              }
+            ],
+            "stopReason": "stop"
+          }
+        }
+      ],
+      "wire": {
+        "type": "agent_settled"
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "pi_run_failed",
+            "message": "401 authentication failed"
+          }
+        },
+        {
+          "kind": "result",
+          "match": {
+            "isError": true,
+            "subtype": "error",
+            "resultText": "还是答了"
+          },
+          "jie_shou": true
+        }
+      ]
+    },
+    {
+      "_ming": "compaction_end{errorMessage} → error。压缩（上下文满了自动摘要）失败必须让用户知道",
+      "_lai_yuan_dan": "cc-connect session.go:630 `case \"compaction_end\":`（`if errMsg != \"\" { … EventError }`，注释说 pi 的 errorMessage 通常自解释）；本机对应的 wire 见 cc-connect session.go:630 那段读的是顶层 errorMessage",
+      "wire": {
+        "type": "compaction_end",
+        "reason": "threshold",
+        "aborted": false,
+        "willRetry": false,
+        "errorMessage": "Compaction failed: Nothing to compact (session too small)"
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "pi_compaction_failed",
+            "message": "Compaction failed: Nothing to compact (session too small)"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "compaction_end{成功}：**必须不发事件**（压缩是后台行为，不是给用户的通知；发一条等于告诉用户「上下文满了」而他什么都没做）",
+      "_lai_yuan_dan": "cc-connect session.go:630-660 的注释（compaction_end 成功时它只发 EventResult 收回合，不发别的）；pi docs/json.md 的 compaction_end 形状",
+      "wire": {
+        "type": "compaction_end",
+        "reason": "threshold",
+        "result": {
+          "summary": "Summary of conversation...",
+          "firstKeptEntryId": "abc123",
+          "tokensBefore": 150000,
+          "estimatedTokensAfter": 32000
+        },
+        "aborted": false,
+        "willRetry": false
+      },
+      "expect": []
+    },
+    {
+      "_ming": "compaction_start：只有 reason，不发事件",
+      "_lai_yuan_dan": "cc-connect session.go:623 `case \"compaction_start\":`（只有一句 slog.Debug，注释「just stop logging it as unrecognized event type」）；pi docs/json.md：`compaction_start` 字段 reason = manual / threshold / overflow",
+      "wire": {
+        "type": "compaction_start",
+        "reason": "threshold"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "extension_error → error。扩展抛异常不能静默（cc-connect 把它归到「Informational — no events produced」，但那是因为它有别处兜底；我们这层丢了就真丢了）",
+      "_lai_yuan_dan": "cc-connect session.go:687 把 extension_error 归进 informational；但 pi docs/json.md 的 RPC-only events 段明确它带 error 字段。本样本按后者构造——**这是本适配器与 cc-connect 有意不同的一处**",
+      "wire": {
+        "type": "extension_error",
+        "extensionPath": "/path/to/extension.ts",
+        "event": "tool_call",
+        "error": "Error message"
+      },
+      "expect": [
+        {
+          "kind": "error",
+          "match": {
+            "code": "pi_extension_error",
+            "message": "Error message"
+          }
+        }
+      ]
+    },
+    {
+      "_ming": "queue_update：steering / followUp 队列变化，不进统一模型必须忽略",
+      "_lai_yuan_dan": "pi docs/json.md Queue and state events 段：`queue_update` 字段 steering / followUp，两项都是完整队列；cc-connect 的 handleEvent 没有这个 case",
+      "wire": {
+        "type": "queue_update",
+        "steering": [
+          "Change direction"
+        ],
+        "followUp": [
+          "Summarize when finished"
+        ]
+      },
+      "expect": []
+    },
+    {
+      "_ming": "bash_execution_update：RPC 直发 bash 命令的输出增量（带命令 id），不是本项目的回合内容，必须忽略",
+      "_lai_yuan_dan": "pi docs/json.md RPC-only events 段：`bash_execution_update` 的 id 匹配 bash 命令的 id；cc-connect 的 handleEvent 也没有这个 case",
+      "wire": {
+        "type": "bash_execution_update",
+        "id": "req-1",
+        "delta": "total 48\n"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "session_info_changed：会话显示名变了，不进统一模型必须忽略",
+      "_lai_yuan_dan": "pi docs/json.md Queue and state events 段：`session_info_changed` 字段 name，absent 表示被清掉",
+      "wire": {
+        "type": "session_info_changed",
+        "name": "my-feature-work"
+      },
+      "expect": []
+    },
+    {
+      "_ming": "response（别人的命令 id）：**必须不产生任何事件、也不能当回合边界**（判据落在「只有自己 id 的 response 才唤醒 Future」上）",
+      "_lai_yuan_dan": "pi docs/rpc.md Errors 段：解析失败会产生**没有 id 的** response；本样本是带别的 id 的成功 response（多客户端/多命令在飞时的常态）",
+      "wire": {
+        "id": "not-mine",
+        "type": "response",
+        "command": "prompt",
+        "success": true,
+        "data": {
+          "disposition": "started"
+        }
+      },
+      "expect": []
+    },
+    {
+      "_ming": "tool_execution_update：工具部分输出。必须忽略——完整结果由 tool_execution_end 给，转成 chunk 会让工具输出与正文混在一起",
+      "_lai_yuan_dan": "本机真机：`{\"type\":\"tool_execution_update\",\"toolCallId\":\"6ac63baa-...\",\"toolName\":\"bash\",\"args\":{\"command\":\"echo hi\"},\"partialResult\":{\"content\":[{\"type\":\"text\",\"text\":\"partial output\"}],\"details\":{}}}`；pi docs/json.md 工具执行事件表",
+      "wire": {
+        "type": "tool_execution_update",
+        "toolCallId": "tc_partial",
+        "toolName": "bash",
+        "args": {
+          "command": "echo hi"
+        },
+        "partialResult": {
+          "content": [
+            {
+              "type": "text",
+              "text": "partial output"
+            }
+          ],
+          "details": {}
+        }
+      },
+      "expect": []
+    }
+  ]
+}

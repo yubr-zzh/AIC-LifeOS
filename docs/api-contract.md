@@ -33,9 +33,29 @@ Request body:
 
 ```json
 {
-  "message": "hello lifeos"
+  "message": "hello lifeos",
+  "memory_scope": {
+    "kind": "scenario",
+    "scenario_type": "learning",
+    "project_id": null,
+    "user_id": null
+  }
 }
 ```
+
+`memory_scope` is optional. When omitted, recall is limited to global Memory.
+When supplied, it must be a valid explicit scope and is included in the durable
+`conversation.completed` event; the backend does not infer scenario or project
+identity yet.
+
+Recall is hierarchical: `global` sees global entries; `scenario` sees global
+plus entries in the same `scenario_type`; `project` sees global, same-scenario,
+and entries with the same `project_id`. Other scenarios/projects and
+`unassigned` entries are excluded. If a Memory has a non-null `user_id`, the
+request must supply the same ID for that entry to match. This is a retrieval
+filter only, not authentication or authorization. The current API does not
+automatically classify a message into a scenario/project; callers must pass an
+explicit scope or accept the global-only default.
 
 Response body:
 
@@ -171,9 +191,11 @@ Source: `.lifeos/memory.json`
 
 ```ts
 type MemoryStore = {
+  schema_version: number;
   user: MemoryEntry[];
   project: MemoryEntry[];
   feedback: MemoryEntry[];
+  reference: MemoryEntry[];
   candidates: MemoryCandidate[];
   backups: MemoryBackup[];
   vector_index: Record<string, unknown>;
@@ -186,20 +208,135 @@ type MemoryStore = {
 ```ts
 type MemoryCandidate = {
   id: string;
-  source: string;
+  source: string; // origin kind: direct, reflection, user_feedback, etc.
+  category: "user" | "project" | "feedback" | "reference";
+  source_ref: MemorySourceRef | null;
+  scope: MemoryScope;
+  occurred_at: string | null;
+  confidence: number | null;
+  confidence_method: string | null;
   content: Record<string, unknown>;
   trace_id?: string | null;
   status: "candidate" | "committed" | "rejected";
   created_at: string;
   committed_at?: string;
 };
+
+type MemorySourceRef = {
+  kind: string;
+  record_id: string;
+  record_kind?: string;
+  revision?: string;
+  trace_id?: string | null;
+};
+
+type MemoryScope = {
+  kind: "global" | "scenario" | "project" | "unassigned";
+  scenario_type: string | null;
+  project_id: string | null;
+  user_id: string | null;
+};
 ```
+
+Memory entries carry the same provenance, scope, occurrence-time, and optional
+confidence fields as candidates. New stores use schema version 3. Existing
+stores are upgraded once and retain a pre-upgrade snapshot in `backups`; legacy
+`user/direct` records become `global`, other legacy records without a scope are
+marked `unassigned`, and existing accepted memories become `active`. Unknown
+sources are rejected on new writes instead of being silently routed to project
+memory. `structured_entry` sources must specify an explicit category.
 
 Memory commit lifecycle:
 
 ```text
 candidate -> validate -> backup -> apply -> vector_upsert -> cache_invalidate
 ```
+
+Accepted-memory lifecycle:
+
+```text
+active --POST /memory/{id}/correct--> superseded + new active version
+active --POST /memory/{id}/retract--> retracted
+```
+
+Both operations are intended only for explicit user-directed actions. The
+current Memory UI provides a correction form and a second-step retraction
+confirmation; the local prototype has no authenticated user identity, so the
+API relies on its caller to honor that intent boundary. Correction requires a
+non-empty replacement `content`; it keeps the prior evidence reference on the
+new version and links the versions with `version_of` / `superseded_by`.
+Retraction and supersession remove the prior item from recall, vector index and
+cache, while keeping its record and source in the store. Retraction is
+idempotent. Physical deletion and deletion of original source records are not
+implemented by these endpoints. Markdown export remains readable, but import
+cannot remove accepted memories or rewrite their content; callers must use the
+explicit correction/retraction endpoints so the lifecycle state is preserved.
+
+The current candidate states are `candidate`, `committed`, and `rejected`.
+There is no `needs_confirmation` runtime state yet: no conflict detector
+currently produces a structured conflict target and evidence. Candidates
+remain subject to explicit commit/reject review. A future detector must not
+mutate an active memory; conflict confirmation should use a separate, auditable
+transition after the detector and evidence contract are defined.
+
+### POST /memory/{memory_id}/correct
+
+Request: `{"content":{"claim":"..."},"reason":"optional explanation"}`
+
+Response: `{"status":"active","memory":{...}}`. A repeated identical
+correction to an already superseded ID returns the same replacement. Other
+attempts to mutate a non-active version return HTTP 409.
+
+### POST /memory/{memory_id}/retract
+
+Request: `{"reason":"optional explanation"}`
+
+Response: `{"status":"retracted","memory":{...}}`. Repeating a retraction
+returns the existing retracted memory.
+
+### GET /memory/profile
+
+Returns a derived, on-demand profile view from active Memory entries. This is a
+read model only: it is not persisted as a second source of truth, does not call
+an LLM, and does not promote entries between scopes. The view contains the
+original structured claims with source references, timestamps, confidence, and
+scope so that a later presentation layer can explain every item.
+
+```json
+{
+  "schema_version": 1,
+  "version": "sha256-of-profile-content",
+  "generated_at": "2026-10-03T00:00:00",
+  "core_profiles": [
+    {
+      "scope": {"kind": "global", "scenario_type": null, "project_id": null, "user_id": null},
+      "memory_count": 1,
+      "memories": [
+        {
+          "id": "memory-id",
+          "source": "direct",
+          "source_ref": {"kind": "manual", "record_id": "note-id"},
+          "confidence": 0.9,
+          "confidence_method": "user_confirmed",
+          "content": {"claim": "prefers concise answers"},
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "scenario_profiles": [],
+  "project_profiles": []
+}
+```
+
+Groups are keyed by their exact scope dimensions, including `user_id`; project
+profiles remain separate by project ID. `unassigned`, malformed-scope, and
+non-active entries are omitted. `version` is a stable SHA-256 digest of the
+profile content and is unchanged by `generated_at`; consumers can use it to
+detect whether the derived view changed. An empty store returns empty profile
+arrays. The endpoint has no authenticated-user filtering yet and must be
+treated as a local prototype inspection endpoint, not a per-user access-control
+boundary.
 
 ### SkillRegistry
 
@@ -334,6 +471,30 @@ Response:
 
 - `POST /memory/candidates/{candidate_id}/reject` marks a pending candidate rejected.
 - `POST /skills/pending/{skill_id}/reject` removes a pending skill.
+- `POST /entries/{entry_id}/memory-candidates` proposes a distilled Memory from a
+  saved daily/phase plan or review. The caller must provide non-empty `content`,
+  an explicit legacy `category`, and an explicit `scope`; the backend links the
+  candidate to the structured entry ID, kind, revision, and entry date. It does
+  not copy or summarize the source record automatically. Replaying the same
+  proposal for the same entry revision returns the existing candidate.
+
+Example request:
+
+```json
+{
+  "content": { "claim": "学习时先做小例子有助于理解" },
+  "category": "user",
+  "scope": {
+    "kind": "scenario",
+    "scenario_type": "learning",
+    "project_id": null
+  }
+}
+```
+
+This endpoint keeps original plan/review text in `StructuredStore`; the
+candidate stores only the caller-supplied distilled content and a source
+reference. The candidate still requires the existing user commit/reject step.
 - `GET /permissions` currently returns `{ "requests": [] }` because persisted
   permission requests and execution resumption are not implemented.
 

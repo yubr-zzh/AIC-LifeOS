@@ -1,9 +1,14 @@
 import type {
   ChatResponse,
+  MemoryScope,
   EventRecord,
   FeedbackPayload,
   MemoryMarkdownResponse,
+  MemoryEntry,
   MemoryStore,
+  MemoryProfileView,
+  MemoryCandidate,
+  AgentRoutingPolicy,
   PermissionRequest,
   RunOnceResponse,
   SkillRegistryState,
@@ -75,12 +80,20 @@ async function readError(res: Response): Promise<ApiError> {
 export async function sendChat(
   message: string,
   opts?: ApiOptions,
+  memoryScope?: MemoryScope,
+  sessionId?: string,
+  routingPolicy: AgentRoutingPolicy = "auto",
 ): Promise<ChatResponse> {
   const base = getBase(opts);
   const res = await f(opts)(`${base}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      ...(memoryScope ? { memory_scope: memoryScope } : {}),
+      ...(sessionId ? { session_id: sessionId } : {}),
+      routing_policy: routingPolicy,
+    }),
   });
   if (!res.ok) throw await readError(res);
   const data = (await res.json()) as ChatResponse;
@@ -92,6 +105,16 @@ export async function sendChat(
     response: data.response,
     tool_calls: Array.isArray(data.tool_calls) ? data.tool_calls : [],
     tool_results: Array.isArray(data.tool_results) ? data.tool_results : [],
+    ...(data.delegation ? { delegation: data.delegation } : {}),
+    ...(data.decision ? { decision: data.decision } : {}),
+    ...(data.decision_reason ? { decision_reason: data.decision_reason } : {}),
+    ...(typeof data.decision_confidence === "number" ? { decision_confidence: data.decision_confidence } : {}),
+    ...(Array.isArray(data.plan_steps) ? { plan_steps: data.plan_steps } : {}),
+    ...(typeof data.agent_enabled === "boolean" ? { agent_enabled: data.agent_enabled } : {}),
+    ...(data.routing_policy ? { routing_policy: data.routing_policy } : {}),
+    ...(data.route_source ? { route_source: data.route_source } : {}),
+    ...(Array.isArray(data.route_signals) ? { route_signals: data.route_signals } : {}),
+    ...(typeof data.requires_side_effects === "boolean" ? { requires_side_effects: data.requires_side_effects } : {}),
   };
 }
 
@@ -165,6 +188,84 @@ export async function getMemory(opts?: ApiOptions): Promise<SourceTag<MemoryStor
   return safeGet<MemoryStore>("/memory", mockMemory, opts);
 }
 
+export async function getMemoryProfile(
+  opts?: ApiOptions,
+): Promise<SourceTag<MemoryProfileView>> {
+  return safeGet<MemoryProfileView>(
+    "/memory/profile",
+    () => ({
+      schema_version: 1,
+      version: "preview-empty",
+      generated_at: "",
+      core_profiles: [],
+      scenario_profiles: [],
+      project_profiles: [],
+    }),
+    opts,
+  );
+}
+
+export async function proposeEntryMemoryCandidate(
+  entryId: string,
+  input: { claim: string; scope: MemoryScope; category: "user" | "project" },
+  opts?: ApiOptions,
+): Promise<{ status: string; candidate: MemoryCandidate }> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/entries/${encodeURIComponent(entryId)}/memory-candidates`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ content: { claim: input.claim.trim() }, scope: input.scope, category: input.category }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { status: string; candidate: MemoryCandidate };
+}
+
+export async function proposeTraceMemoryCandidate(
+  traceId: string,
+  input: { claim: string; scope: MemoryScope; category: "user" | "project" },
+  opts?: ApiOptions,
+): Promise<{ status: string; candidate: MemoryCandidate }> {
+  const res = await f(opts)(`${getBase(opts)}/traces/${encodeURIComponent(traceId)}/memory-candidates`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      content: { claim: input.claim.trim() },
+      scope: input.scope,
+      category: input.category,
+    }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { status: string; candidate: MemoryCandidate };
+}
+
+export interface AgentEvidence {
+  id: string;
+  owner_id: string;
+  session_id: string;
+  agent_id: string;
+  summary: string;
+  occurred_at: string;
+}
+
+export async function listAgentEvidence(sessionId: string, opts?: ApiOptions): Promise<AgentEvidence[]> {
+  const res = await f(opts)(`${getBase(opts)}/agent/evidence?session_id=${encodeURIComponent(sessionId)}`);
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { items: AgentEvidence[] };
+  return data.items;
+}
+
+export async function proposeAgentMemoryCandidate(
+  evidenceId: string, claim: string, projectId: string, opts?: ApiOptions,
+): Promise<{ status: string; candidate: MemoryCandidate }> {
+  const res = await f(opts)(`${getBase(opts)}/agent/evidence/${encodeURIComponent(evidenceId)}/memory-candidates`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ claim, project_id: projectId }),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { status: string; candidate: MemoryCandidate };
+}
+
 export async function getMemoryMarkdown(
   opts?: ApiOptions,
 ): Promise<MemoryMarkdownResponse> {
@@ -186,6 +287,39 @@ export async function importMemoryMarkdown(
   });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { ok: boolean; categories: Record<string, number> };
+}
+
+export async function correctMemory(
+  memoryId: string,
+  content: Record<string, unknown>,
+  reason?: string,
+  opts?: ApiOptions,
+): Promise<MemoryEntry> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/${encodeURIComponent(memoryId)}/correct`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ content, ...(reason ? { reason } : {}) }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { memory: MemoryEntry };
+  return data.memory;
+}
+
+export async function retractMemory(
+  memoryId: string,
+  reason?: string,
+  opts?: ApiOptions,
+): Promise<MemoryEntry> {
+  const base = getBase(opts);
+  const res = await f(opts)(`${base}/memory/${encodeURIComponent(memoryId)}/retract`, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = (await res.json()) as { memory: MemoryEntry };
+  return data.memory;
 }
 
 async function postAction<T>(path: string, opts?: ApiOptions): Promise<T> {

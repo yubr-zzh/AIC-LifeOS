@@ -1,4 +1,7 @@
 // Shared TypeScript types for the LifeOS Agent Console.
+import type { DelegationPlan } from "./agentTypes";
+
+export type { DelegationPlan };
 // These mirror the data shapes documented in docs/api-contract.md and the
 // Python runtime in lifeos/event/bus.py, lifeos/memory/, lifeos/skills/.
 
@@ -29,11 +32,30 @@ export interface ToolResult {
   review?: PermissionReview;
 }
 
+export type PlanningDecision = "self_plan" | "agent";
+export type AgentRoutingPolicy = "auto" | "force_self_plan" | "force_agent";
+
 export interface ChatResponse {
   trace_id: string;
   response: string;
   tool_calls: ToolCall[];
   tool_results?: ToolResult[];
+  delegation?: DelegationPlan;
+  decision?: PlanningDecision;
+  decision_reason?: string;
+  decision_confidence?: number;
+  plan_steps?: Array<{ id: number; title: string; detail?: string; time?: string }>;
+  agent_enabled?: boolean;
+  routing_policy?: AgentRoutingPolicy;
+  route_source?: "user_override" | "rules" | "model" | "fallback";
+  route_signals?: string[];
+  requires_side_effects?: boolean;
+}
+
+export interface ChatRequest {
+  message: string;
+  memory_scope?: MemoryScope;
+  routing_policy?: AgentRoutingPolicy;
 }
 
 /**
@@ -69,17 +91,52 @@ export interface FeedbackPayload {
 export interface MemoryEntry {
   id: string;
   source: string;
+  category?: "user" | "project" | "feedback" | "reference";
+  source_ref?: MemorySourceRef | null;
+  evidence_source_ref?: MemorySourceRef | null;
+  scope?: MemoryScope;
+  confidence?: number | null;
+  confidence_method?: string | null;
+  occurred_at?: string | null;
   content: Record<string, unknown>;
   trace_id?: string | null;
+  status?: "active" | "superseded" | "retracted";
+  version_of?: string;
+  superseded_by?: string;
+  superseded_at?: string;
+  retracted_at?: string;
+  correction_reason?: string;
+  retraction_reason?: string;
   created_at: string;
   committed_at?: string;
 }
 
 export type MemoryCandidateStatus = "candidate" | "committed" | "rejected";
 
+export interface MemorySourceRef {
+  kind: string;
+  record_id: string;
+  record_kind?: string;
+  revision?: string;
+  trace_id?: string | null;
+}
+
+export interface MemoryScope {
+  kind: "global" | "scenario" | "project" | "unassigned";
+  scenario_type?: string | null;
+  project_id?: string | null;
+  user_id?: string | null;
+}
+
 export interface MemoryCandidate {
   id: string;
   source: string;
+  category?: "user" | "project" | "feedback" | "reference";
+  source_ref?: MemorySourceRef | null;
+  scope?: MemoryScope;
+  confidence?: number | null;
+  confidence_method?: string | null;
+  occurred_at?: string | null;
   content: Record<string, unknown>;
   trace_id?: string | null;
   status: MemoryCandidateStatus;
@@ -93,6 +150,7 @@ export interface MemoryBackup {
 }
 
 export interface MemoryStore {
+  schema_version?: number;
   user: MemoryEntry[];
   project: MemoryEntry[];
   feedback: MemoryEntry[];
@@ -101,6 +159,26 @@ export interface MemoryStore {
   backups: MemoryBackup[];
   vector_index: Record<string, unknown>;
   cache: Record<string, unknown>;
+}
+
+export interface MemoryProfileMemory extends MemoryEntry {
+  status: "active";
+}
+
+export interface MemoryProfileGroup {
+  scope: MemoryScope;
+  memory_count: number;
+  memories: MemoryProfileMemory[];
+}
+
+/** Rebuildable read model; the memory store remains the source of truth. */
+export interface MemoryProfileView {
+  schema_version: 1;
+  version: string;
+  generated_at: string;
+  core_profiles: MemoryProfileGroup[];
+  scenario_profiles: MemoryProfileGroup[];
+  project_profiles: MemoryProfileGroup[];
 }
 
 export interface MemoryMarkdownResponse {
