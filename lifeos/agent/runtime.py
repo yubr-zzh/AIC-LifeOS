@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 from lifeos.agent.chat.runtime import ChatRuntime
 from lifeos.agent.context import AgentContextStore
 from lifeos.agent.executor.executor import Executor
@@ -16,8 +18,9 @@ from lifeos.trace.system import TraceSystem
 class LifeOSAgent:
     """Top-level composition root for foreground and background agents."""
 
-    def __init__(self, llm, storage_dir=".lifeos", delegation_enabled=True, external_memory=None):
+    def __init__(self, llm, storage_dir=".lifeos", delegation_enabled=True, external_memory=None, model_store=None):
         self.llm = llm
+        self.model_store = model_store or getattr(llm, "store", None)
         self.memory = MemoryManager(storage_dir=storage_dir)
         self.agent_evidence = AgentEvidenceStore(storage_dir=storage_dir)
         if external_memory is None:
@@ -64,10 +67,14 @@ class LifeOSAgent:
             trace=self.trace,
         )
 
-    async def run(self, user_input: str, session_id: str | None = None, memory_scope=None):
-        return await self.chat.handle_message(
-            user_input, session_id=session_id, memory_scope=memory_scope
-        )
+    async def run(self, user_input: str, session_id: str | None = None, memory_scope=None,
+                  model_profile_id: str | None = None):
+        bind = getattr(self.llm, "bind", None)
+        context = bind(model_profile_id) if callable(bind) else nullcontext()
+        with context:
+            return await self.chat.handle_message(
+                user_input, session_id=session_id, memory_scope=memory_scope
+            )
 
     def agent_event(self, kind: str, session_id: str | None, detail: dict,
                     event_id: str | None = None, owner_id: str | None = None) -> str:

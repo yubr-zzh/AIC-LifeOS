@@ -13,7 +13,8 @@ from lifeos.api import bridge_admin
 from lifeos.api.dangqian import dang_qian_yong_hu
 from lifeos.api.devices import SheBiao
 from lifeos.api.tunnel_gw import TunnelGw, WuDui, he_cheng_zhen, xie_zhen
-from lifeos.llm.client import LLMClient
+from lifeos.llm.client import LLMClient, LLMRequestError
+from lifeos.llm.profiles import ModelManager, ModelProfileStore
 from lifeos.storage.sqlite import StructuredStore
 
 # 7.7.2 展示旁路：这些 kind **只**写事件总线，绝不进 AgentContextStore。
@@ -70,7 +71,13 @@ def guo_lu2(a1: str, a2: dict) -> tuple[dict, int]:
 
 def create_agent():
     # 10.1：环境变量是服务端硬关，用于线上应急。默认开着。
-    return LifeOSAgent(LLMClient(), delegation_enabled=os.environ.get("LIFEOS_DELEGATION", "on") != "off")
+    model_store = ModelProfileStore(".lifeos/models.json")
+    agent = LifeOSAgent(
+        ModelManager(model_store, fallback=LLMClient()),
+        delegation_enabled=os.environ.get("LIFEOS_DELEGATION", "on") != "off",
+    )
+    agent.model_store = model_store
+    return agent
 
 
 class LiAnHTTPServer(ThreadingHTTPServer):
@@ -144,6 +151,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "GET")
             return
+        if parsed.path == "/models":
+            self._send_json(self.agent.model_store.catalog())
+            return
         if parsed.path == "/events":
             self._send_json({"events": [vars(event) for event in self.agent.event_bus.all_events()]})
             return
@@ -203,6 +213,22 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             self._dai_li(parsed, "POST")
             return
         parts = parsed.path.strip("/").split("/")
+        if parsed.path == "/models/profiles":
+            if self._fangxing():
+                self._handle_create_model_profile()
+            return
+        if parsed.path == "/models/test":
+            if self._fangxing():
+                self._handle_model_test_payload()
+            return
+        if len(parts) == 4 and parts[:2] == ["models", "profiles"] and parts[3] == "activate":
+            if self._fangxing():
+                self._handle_model_activate(unquote(parts[2]))
+            return
+        if len(parts) == 4 and parts[:2] == ["models", "profiles"] and parts[3] == "test":
+            if self._fangxing():
+                self._handle_model_test(unquote(parts[2]))
+            return
         if len(parts) == 4 and parts[:2] == ["memory", "candidates"] and parts[3] in {"commit", "reject"}:
             self._handle_memory_candidate(unquote(parts[2]), parts[3])
             return
@@ -271,8 +297,26 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "PUT")
             return
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
+            if self._fangxing():
+                self._handle_update_model_profile(unquote(parts[2]))
+            return
         if parsed.path.startswith("/entries/"):
             self._handle_update_entry(unquote(parsed.path.rsplit("/", 1)[-1]))
+            return
+        self.send_error(404, "not found")
+
+    def do_DELETE(self):
+        self._du_wan()
+        parsed = urlparse(self.path)
+        if self._shi_fou_dai_li(parsed):
+            self._dai_li(parsed, "DELETE")
+            return
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
+            if self._fangxing():
+                self._handle_delete_model_profile(unquote(parts[2]))
             return
         self.send_error(404, "not found")
 
@@ -598,9 +642,13 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                 body.get("message", ""),
                 session_id=body.get("session_id"),
                 memory_scope=scope,
+                model_profile_id=body.get("profile_id"),
             ))
-        except ValueError as exc:
+        except (ValueError, KeyError) as exc:
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        except LLMRequestError as exc:
+            self._send_json({"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}}, status=502)
             return
         self._send_json(result)
 
@@ -765,6 +813,66 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         kai = bool(body.get("enabled"))
         self.agent.chat.delegation_enabled = kai
         self._send_json({"enabled": kai})
+
+    def _handle_create_model_profile(self):
+        try:
+            profile = self.agent.model_store.create(self._read_json())
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"profile": profile}, status=201)
+
+    def _handle_update_model_profile(self, profile_id):
+        try:
+            profile = self.agent.model_store.update(profile_id, self._read_json())
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        self._send_json({"profile": profile})
+
+    def _handle_model_activate(self, profile_id):
+        try:
+            profile = self.agent.model_store.activate(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        self._send_json({"active_profile_id": profile["id"], "profile": profile})
+
+    def _handle_delete_model_profile(self, profile_id):
+        try:
+            profile = self.agent.model_store.delete(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except ValueError as exc:
+            self._send_json({"error": {"code": "conflict", "message": str(exc)}}, status=409)
+            return
+        self._send_json({"deleted": True, "profile": profile})
+
+    def _handle_model_test(self, profile_id):
+        try:
+            result = self.agent.model_store.test(profile_id)
+        except KeyError as exc:
+            self._send_json({"error": {"code": "not_found", "message": str(exc)}}, status=404)
+            return
+        except LLMRequestError as exc:
+            self._send_json({"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}}, status=502)
+            return
+        self._send_json(result)
+
+    def _handle_model_test_payload(self):
+        try:
+            result = self.agent.model_store.test(self._read_json())
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        except LLMRequestError as exc:
+            self._send_json({"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}}, status=502)
+            return
+        self._send_json(result)
 
     def _handle_list_entries(self, query):
         kind = query.get("kind", [None])[0]

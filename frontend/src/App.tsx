@@ -15,6 +15,7 @@ import { TracePanel } from "./panels/TracePanel";
 import { SkillsPanel } from "./panels/SkillsPanel";
 import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
+import { SettingsPage } from "./panels/SettingsPage";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
@@ -28,7 +29,8 @@ type SectionId =
   | "feedback"
   | "diary"
   | "insight"
-  | "admin";
+  | "admin"
+  | "settings";
 
 type NavIcon = "home" | "message" | "calendar" | "book" | "spark" | "bolt";
 const navigation: { group: string; items: { id: SectionId; label: string; icon: NavIcon; hint?: string }[] }[] = [
@@ -61,7 +63,7 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
   },
 ];
 
-const sectionMeta: Record<SectionId, { eyebrow: string; title: string; description: string }> = {
+const sectionMeta = {
   home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
   "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
   "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
@@ -73,7 +75,7 @@ const sectionMeta: Record<SectionId, { eyebrow: string; title: string; descripti
   diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
   insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
   admin: { eyebrow: "后台 · 系统", title: "LifeOS 的运行后台", description: "这里放置事件、记忆、技能与运行状态等工程信息。" },
-};
+} as Record<SectionId, { eyebrow: string; title: string; description: string }>;
 
 function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "home") return <IconHome size={17} />;
@@ -83,6 +85,8 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "bolt") return <IconBolt size={17} />;
   return <IconSpark size={17} />;
 }
+
+sectionMeta.settings = { eyebrow: "系统 · 设置", title: "让 LifeOS 按你的方式工作", description: "管理模型 Provider、API 连接和工作区外观。" };
 
 export default function App() {
   const store = useStore();
@@ -161,7 +165,7 @@ export default function App() {
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
             <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
-            <button className="header-icon-button" onClick={() => setSettingsOpen(!settingsOpen)} title="设置" aria-label="设置" aria-expanded={settingsOpen}><IconSettings size={16} /></button>
+            <button className="header-icon-button" onClick={() => { setSettingsOpen(false); select("settings"); }} title="设置" aria-label="设置" aria-expanded={active === "settings"}><IconSettings size={16} /></button>
             <div className="avatar">Z</div>
           </div>
           {settingsOpen ? (
@@ -182,7 +186,7 @@ export default function App() {
             </div>
             <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
           </div>
-          <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} />
+          <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} dark={dark} onDarkChange={setDark} />
         </main>
       </div>
     </div>
@@ -195,12 +199,16 @@ function SectionContent({
   agent,
   api,
   onNavigate,
+  dark,
+  onDarkChange,
 }: {
   active: SectionId;
   store: ReturnType<typeof useStore>;
   agent: ReturnType<typeof useAgentStore>;
   api: ReturnType<typeof useAgentStream>;
   onNavigate: (id: SectionId) => void;
+  dark: boolean;
+  onDarkChange: (dark: boolean) => void;
 }) {
   if (active === "chat") {
     // 对话保持内容优先；运行指标留在系统后台，执行面板按需展开。
@@ -232,6 +240,7 @@ function SectionContent({
   if (active === "diary") return <DiaryPage />;
   if (active === "insight") return <InsightPage />;
   if (active === "admin") return <AdminPage store={store} />;
+  if (active === "settings") return <SettingsPage dark={dark} onDarkChange={onDarkChange} />;
   if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
   if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
   return <HomePage store={store} onNavigate={onNavigate} />;
