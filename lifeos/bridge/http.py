@@ -356,8 +356,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             xian["label"] = cls.label
             xian["canUseTool"] = cls.fangquan()
             xian["canAskQuestion"] = cls.wenti2()
+            # 保留 v2 字段，同时暴露 v3 能力契约名称；两组值必须同源，避免前后端判断分叉。
+            xian["fangquan"] = xian["canUseTool"]
+            xian["wenti2"] = xian["canAskQuestion"]
             declared_modes = getattr(cls, "MOSHI_ZI", frozenset())
             xian["moshi"] = sorted((declared_modes or MOSHI) & MOSHI)
+            xian["dui_hui_id"] = getattr(cls, "dui_hui_id", "claudeSessionId")
             xian["yi_ci_xing"] = bool(getattr(cls, "yi_ci_xing", False))
             xian["xu_pei_zhuang"] = bool(getattr(cls, "xu_pei_zhuang", False))
             xian["ce_shi"] = {

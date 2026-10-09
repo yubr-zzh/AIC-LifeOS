@@ -28,24 +28,33 @@
 - 源码参考：`origin/zhang-memory` 的 `a40ea69 feat(memory): connect scoped conversation memory flow`，按当前实现适配而非 cherry-pick 整个提交。
 - 提交：`9bd2a74 feat(memory): capture scoped conversation memories`。
 
-### 阶段 C：ai-memory 项目只读检索 — 完成，待单独提交
+### 阶段 C：ai-memory 项目只读检索 — 完成
 
 - 实现显式 LifeOS project ID → ai-memory workspace/project 映射、只读 search/page 请求、路径/跨项目校验和检索上限。
 - 仅当本轮是明确 project scope 且进入 Agent 执行时检索；外部页面只进入本轮不可信提示上下文，Trace 仅保留 source_ref，事件和 LifeOS Memory 不保存页面正文。
 - 配置经环境变量读取：`LIFEOS_AIMEMORY_ENDPOINT`、`LIFEOS_AIMEMORY_PROJECT_MAP`，可选 `LIFEOS_AIMEMORY_API_TOKEN`、`LIFEOS_AIMEMORY_TIMEOUT_SECONDS`。当前只允许 loopback endpoint；没有新增 UI 配置页。
 - 验收：ai-memory adapter 配置/隔离/HTTP mock 和 transient context 共 5 个新测试通过；记忆/provider 联合测试 10 项通过；前端 typecheck 与 94 项测试通过；Python 编译与 `git diff --check` 通过。没有访问真实 ai-memory 服务。
 - 源码参考：`origin/zhang-memory` 的 `ecdac8f feat(memory): verify external adapters with local HTTP mocks`，适配到当前 ChatRuntime / Executor，不移植其不同的 planner 架构。
+- 提交：`ac037b4 feat(memory): add scoped ai-memory project retrieval`。
 
-### 阶段 D：TencentDB 适配差异与审批写入 — 待核对
+### 阶段 D：TencentDB 适配差异与审批写入 — 等待用户确认范围
 
 - 对照当前 TencentDB adapter 与 `origin/zhang-memory` 的修改，先核验 v3 创建/更新能力、外部 ID 对应关系、scope 身份映射及审批后写入语义。
 - 不启用新的外部写入路径，不切换 Memory 权威来源；若候选创建或身份映射依赖上游未提供的能力，先与用户讨论。
+- 已发现队友版本使用 `/v3/atomic/create`，但目前没有可验证的上游接口证据；只对该端点做 mock 测试不足以证明真实服务支持。已向用户询问先接 scope 映射和只读召回、写入保持关闭，还是暂时跳过 TencentDB。
+
+### 阶段 E：Liu Bridge 能力契约补齐 — 部分完成
+
+- Codex、Pi、Hermes、Kimi、OpenCode 等适配器已在当前分支；无审批回路的知情确认、权限子集校验和一次性进程 PID 上报/回收也已存在，不重复搬运。
+- 已从 `origin/liu` 选择性补齐 `/agents` 的 `fangquan`、`wenti2`、`dui_hui_id` 三个 v3 能力字段，保留 `canUseTool`、`canAskQuestion` 旧字段；新旧布尔字段取同一来源。
+- 验收：补丁前 `tests.test_neng_li_qian_yue` 有 1 项失败（缺少 `fangquan`）；补丁后 22 项通过。此测试运行时输出了凭据目录权限告警，但测试通过；未改动目录权限或用户数据。
+- 暂不移植 Liu 分支“版本不匹配时对所有 Agent 强制 plan”的改动：它扩大现有门禁范围，且不是所有后端都支持 `plan`，可能改变执行/安全语义。等待用户确认门禁策略。
 
 ## 后续顺序
 
-1. 完成阶段 C 的构建/差异检查并独立提交。
-2. 完成阶段 D 的 TencentDB 差异审查；遇到创建能力、身份映射或数据权威冲突时先讨论，不擅自更换权威存储。
-3. 对照 `origin/liu` 的 Bridge 和适配器，按 Codex、Pi、Hermes、Kimi、OpenCode 等契约逐项找缺口；禁止以整分支合并代替兼容审查。
+1. 等待用户确定 TencentDB 此轮接入范围；在此之前不引入 `/v3/atomic/create` 写入。
+2. 完成 Liu Bridge 能力契约剩余审查并独立提交；版本门禁范围先按用户意见处理。
+3. 对照 `origin/liu` 的 Bridge 和适配器逐项找缺口；禁止以整分支合并代替兼容审查。
 4. 最后审阅 `origin/api&nonAgent` 其余页面和存储功能，仅接入明确缺失且与当前路由/存储架构兼容的项。
 
 ## 当前已知风险 / 暂停条件
