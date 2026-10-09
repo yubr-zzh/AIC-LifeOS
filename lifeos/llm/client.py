@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
@@ -107,6 +108,74 @@ class LLMClient:
         if protocol == "anthropic":
             return await asyncio.to_thread(self._complete_anthropic, messages, tools)
         raise NotImplementedError(f"provider protocol not implemented: {protocol}")
+
+    def list_models(self) -> list[str]:
+        """Fetch model IDs from an OpenAI-compatible or Anthropic models endpoint."""
+        if self.protocol not in {"openai", "anthropic"}:
+            raise LLMRequestError(f"model discovery is not supported for protocol: {self.protocol}")
+        if not self.base_url:
+            raise LLMRequestError("model provider base URL is required")
+        try:
+            parsed_url = urlparse(self.base_url)
+            _validated_port = parsed_url.port  # Force validation before opening a socket.
+        except ValueError as exc:
+            raise LLMRequestError("base URL is invalid") from exc
+        if (parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname
+                or parsed_url.username or parsed_url.password):
+            raise LLMRequestError("base URL must be an http(s) URL without embedded credentials")
+
+        endpoint = self._endpoint(self.base_url, "/models")
+        headers = {}
+        if self.protocol == "anthropic":
+            headers.update({"anthropic-version": "2023-06-01"})
+            if self.api_key:
+                headers["x-api-key"] = self.api_key
+        elif self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        try:
+            request = Request(endpoint, headers=headers, method="GET")
+        except ValueError as exc:
+            raise LLMRequestError("base URL is invalid") from exc
+        try:
+            with urlopen(request, timeout=min(self.timeout, 20)) as response:
+                raw = response.read().decode("utf-8", errors="replace")
+        except HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            try:
+                payload = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                payload = {}
+            message = _error_message(payload, raw or f"HTTP {exc.code}")
+            raise LLMRequestError(message, status=exc.code) from exc
+        except URLError as exc:
+            raise LLMRequestError(f"could not reach model provider: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise LLMRequestError("model provider model-list request timed out") from exc
+
+        try:
+            payload = json.loads(raw) if raw else {}
+        except json.JSONDecodeError as exc:
+            raise LLMRequestError("model provider returned invalid JSON for model list") from exc
+        if not isinstance(payload, dict):
+            raise LLMRequestError("model provider returned an unexpected model-list response")
+        items = payload.get("data", payload.get("models", []))
+        if not isinstance(items, list):
+            raise LLMRequestError("model provider model list must be an array")
+        models = []
+        seen = set()
+        for item in items[:500]:
+            model_id = item if isinstance(item, str) else (
+                item.get("id") or item.get("name") if isinstance(item, dict) else None
+            )
+            if not isinstance(model_id, str):
+                continue
+            model_id = model_id.strip()
+            if model_id and len(model_id) <= 200 and model_id not in seen:
+                seen.add(model_id)
+                models.append(model_id)
+        if not models:
+            raise LLMRequestError("provider returned no model IDs; check the endpoint or use manual entry")
+        return models
 
     def _complete_openai(self, messages, tools=None):
         if not self.base_url:

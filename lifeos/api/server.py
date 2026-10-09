@@ -213,6 +213,10 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             self._dai_li(parsed, "POST")
             return
         parts = parsed.path.strip("/").split("/")
+        if parsed.path == "/models/discover":
+            if self._fangxing():
+                self._handle_model_discovery()
+            return
         if parsed.path == "/models/profiles":
             if self._fangxing():
                 self._handle_create_model_profile()
@@ -828,6 +832,17 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
             return
         self._send_json({"profile": profile}, status=201)
+
+    def _handle_model_discovery(self):
+        try:
+            models = self.agent.model_store.discover_models(self._read_json())
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        except LLMRequestError as exc:
+            self._send_json({"error": {"code": "model_provider_error", "message": str(exc), "status": exc.status}}, status=502)
+            return
+        self._send_json({"models": models})
 
     def _handle_update_model_profile(self, profile_id):
         try:

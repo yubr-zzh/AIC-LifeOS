@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Protocol = "mock" | "openai" | "anthropic";
 interface Preset {
@@ -13,10 +13,11 @@ interface Profile {
 interface Catalog { active_profile_id: string; profiles: Profile[]; presets: Preset[] }
 interface Draft {
   id?: string; name: string; provider: string; protocol: Protocol;
-  base_url: string; model: string; api_key: string;
+  base_url: string; model: string; api_key: string; models: string[];
+  has_api_key?: boolean; models_discovered?: boolean;
 }
 
-const EMPTY_DRAFT: Draft = { name: "", provider: "openai", protocol: "openai", base_url: "", model: "", api_key: "" };
+const EMPTY_DRAFT: Draft = { name: "", provider: "openai", protocol: "openai", base_url: "", model: "", api_key: "", models: [] };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -44,6 +45,9 @@ export function ModelProviderSettings() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [discoveringModels, setDiscoveringModels] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState("");
+  const discoveryInFlight = useRef(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -56,25 +60,74 @@ export function ModelProviderSettings() {
   const applyPreset = (provider: string) => {
     const preset = catalog?.presets.find((item) => item.id === provider);
     if (!preset || !draft) return;
-    setDraft({ ...draft, provider, protocol: preset.protocol, base_url: preset.base_url, model: preset.models[0] ?? "" });
+    setDraft({ ...draft, provider, protocol: preset.protocol, base_url: preset.base_url,
+      model: preset.models[0] ?? "", models: preset.models, models_discovered: false });
   };
 
   const openNew = () => {
     const preset = catalog?.presets.find((item) => item.id === "openai") ?? catalog?.presets[0];
-    setDraft({ ...EMPTY_DRAFT, provider: preset?.id ?? "custom", protocol: preset?.protocol ?? "openai", base_url: preset?.base_url ?? "", model: preset?.models[0] ?? "" });
+    setDraft({ ...EMPTY_DRAFT, provider: preset?.id ?? "custom", protocol: preset?.protocol ?? "openai",
+      base_url: preset?.base_url ?? "", model: preset?.models[0] ?? "", models: preset?.models ?? [] });
+    setDiscoveryError("");
     setNotice(null);
   };
 
   const openEdit = (profile: Profile) => {
-    setDraft({ id: profile.id, name: profile.name, provider: profile.provider, protocol: profile.protocol, base_url: profile.base_url, model: profile.model, api_key: "" });
+    setDraft({ id: profile.id, name: profile.name, provider: profile.provider, protocol: profile.protocol,
+      base_url: profile.base_url, model: profile.model, api_key: "", models: profile.models,
+      has_api_key: profile.has_api_key, models_discovered: false });
+    setDiscoveryError("");
     setNotice(null);
+  };
+
+  const discoverModels = async () => {
+    if (!draft || discoveryInFlight.current) return;
+    if (!draft.base_url.trim()) {
+      setDiscoveryError("请先填写 API Base URL。");
+      return;
+    }
+    if (!draft.api_key.trim() && !draft.has_api_key) {
+      setDiscoveryError("请先填写 API Key，再获取模型列表。");
+      return;
+    }
+    discoveryInFlight.current = true;
+    setDiscoveringModels(true);
+    setDiscoveryError("");
+    try {
+      const result = await request<{ models: string[] }>("/models/discover", {
+        method: "POST",
+        body: JSON.stringify({
+          profile_id: draft.id,
+          provider: draft.provider,
+          protocol: draft.protocol,
+          base_url: draft.base_url,
+          api_key: draft.api_key || undefined,
+        }),
+      });
+      if (!Array.isArray(result.models) || !result.models.length) throw new Error("服务没有返回可选模型。");
+      setDraft((current) => current ? {
+        ...current,
+        models: result.models,
+        model: result.models.includes(current.model) ? current.model : result.models[0],
+        models_discovered: true,
+      } : current);
+    } catch (error) {
+      setDiscoveryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      discoveryInFlight.current = false;
+      setDiscoveringModels(false);
+    }
   };
 
   const save = async () => {
     if (!draft) return;
     setBusy(true); setNotice(null);
     try {
-      const payload = { ...draft, api_key: draft.api_key || undefined };
+      const payload = {
+        id: draft.id, name: draft.name, provider: draft.provider, protocol: draft.protocol,
+        base_url: draft.base_url, model: draft.model, models: draft.models,
+        api_key: draft.api_key || undefined,
+      };
       await request(draft.id ? `/models/profiles/${encodeURIComponent(draft.id)}` : "/models/profiles", {
         method: draft.id ? "PUT" : "POST", body: JSON.stringify(payload),
       });
@@ -163,9 +216,35 @@ export function ModelProviderSettings() {
               <label>接口协议<select value={draft.protocol} onChange={(event) => setDraft({ ...draft, protocol: event.target.value as Protocol })}><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option><option value="mock">LifeOS 本地演示</option></select></label>
               <label>模型名称<input value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} placeholder="例如 gpt-4o-mini" /></label>
             </div>
-            {draft.protocol !== "mock" ? <label>API Base URL<input value={draft.base_url} onChange={(event) => setDraft({ ...draft, base_url: event.target.value })} placeholder="https://api.example.com/v1" autoComplete="url" /></label> : null}
-            {draft.protocol !== "mock" ? <label>API Key<input type="password" value={draft.api_key} onChange={(event) => setDraft({ ...draft, api_key: event.target.value })} placeholder={draft.id ? "留空则保留当前密钥" : "粘贴 API Key"} autoComplete="new-password" /></label> : null}
-            <div className="provider-editor-footer"><span>{draft.id ? "留空 API Key 不会覆盖已保存密钥。" : "保存后可测试连接，再设为默认模型。"}</span><button className="green-button" onClick={() => void save()} disabled={busy}>{busy ? "保存中…" : "保存配置"}</button></div>
+            {draft.protocol !== "mock" ? <label>API Base URL<input value={draft.base_url} onChange={(event) => setDraft({ ...draft, base_url: event.target.value, models: [], model: "", models_discovered: false })} onBlur={() => { if (draft.api_key.trim() || draft.has_api_key) void discoverModels(); }} placeholder="https://api.example.com/v1" autoComplete="url" /></label> : null}
+            {draft.protocol !== "mock" ? <label>API Key<input type="password" value={draft.api_key} onChange={(event) => setDraft({ ...draft, api_key: event.target.value })} onBlur={() => { if (draft.base_url.trim()) void discoverModels(); }} placeholder={draft.id ? "留空则保留当前密钥" : "粘贴 API Key"} autoComplete="new-password" /></label> : null}
+            {draft.protocol !== "mock" ? (
+              <div className="provider-model-discovery">
+                <div className="provider-model-discovery-copy">
+                  <strong>从服务商读取可用模型</strong>
+                  <span>只请求模型目录接口，不会发送对话或消耗生成额度。</span>
+                </div>
+                <button type="button" className="ghost compact" onClick={() => void discoverModels()}
+                  disabled={discoveringModels || busy || (!draft.api_key && !draft.has_api_key)}>
+                  {discoveringModels ? "正在读取…" : draft.models_discovered ? "刷新模型列表" : "拉取模型列表"}
+                </button>
+                {draft.models.length ? (
+                  <label className="provider-model-choice">选择模型
+                    <select aria-label="选择模型" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })}>
+                      {draft.models.map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                    {!draft.models_discovered ? <small>当前是已保存/预设列表；拉取后会更新为服务商实时返回的列表。</small> : null}
+                  </label>
+                ) : null}
+                {discoveryError ? <p className="provider-model-error" role="alert">{discoveryError}</p> : null}
+                <details className="provider-model-manual">
+                  <summary>模型列表不可用？手动填写模型 ID</summary>
+                  <input aria-label="手动填写模型 ID" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+                    placeholder="例如：provider/model-name" />
+                </details>
+              </div>
+            ) : null}
+            <div className="provider-editor-footer"><span>{draft.id ? "留空 API Key 不会覆盖已保存密钥。" : "保存后可测试连接，再设为默认模型。"}</span><button className="green-button" onClick={() => void save()} disabled={busy || discoveringModels || (draft.protocol !== "mock" && !draft.model.trim())}>{busy ? "保存中…" : "保存配置"}</button></div>
           </section>
         </div>
       ) : null}

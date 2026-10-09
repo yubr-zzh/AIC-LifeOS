@@ -459,6 +459,36 @@ class ModelProfileStore:
             "preview": preview,
         }
 
+    def discover_models(self, payload: dict) -> list[str]:
+        """Fetch model IDs without persisting credentials or sending a completion."""
+        if not isinstance(payload, dict):
+            raise ValueError("model discovery payload must be an object")
+        existing = None
+        profile_id = str(payload.get("profile_id") or "").strip()
+        if profile_id:
+            try:
+                existing = self.get_profile(profile_id)
+            except KeyError:
+                raise ValueError("model profile not found") from None
+
+        protocol = str(payload.get("protocol") or (existing or {}).get("protocol") or "openai").strip()
+        provider = str(payload.get("provider") or (existing or {}).get("provider") or "custom").strip()
+        base_url = str(payload.get("base_url") or (existing or {}).get("base_url") or "").strip().rstrip("/")
+        api_key = str(payload.get("api_key") or (existing or {}).get("api_key") or "").strip()
+        if len(base_url) > 2048:
+            raise ValueError("base_url must be at most 2048 characters")
+        if len(api_key) > 4096:
+            raise ValueError("api_key must be at most 4096 characters")
+        client = LLMClient(
+            provider=provider,
+            model="",
+            base_url=base_url,
+            api_key=api_key,
+            timeout=20,
+            protocol=protocol,
+        )
+        return client.list_models()
+
     def _profile_from_payload(self, payload: dict) -> dict:
         profile = self._normalize_profile(payload)
         profile_id = str(payload.get("id") or "").strip()
