@@ -16,10 +16,12 @@ import { SkillsPanel } from "./panels/SkillsPanel";
 import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
 import { SettingsPage } from "./panels/SettingsPage";
+import { WorkCalendar } from "./components/WorkCalendar";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
   | "home"
+  | "calendar"
   | "daily-plan"
   | "daily-review"
   | "phase-plan"
@@ -61,9 +63,14 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     group: "系统",
     items: [{ id: "admin", label: "系统后台", icon: "spark", hint: "工程与运行状态" }],
   },
+  {
+    group: "记录",
+    items: [{ id: "calendar", label: "工作历", icon: "calendar", hint: "回看每日记录" }],
+  },
 ];
 
 const sectionMeta = {
+  calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
   home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
   "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
   "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
@@ -238,6 +245,7 @@ function SectionContent({
   if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
   if (active === "feedback") return <FeedbackPage />;
   if (active === "diary") return <DiaryPage />;
+  if (active === "calendar") return <WorkCalendar onNavigate={onNavigate} />;
   if (active === "insight") return <InsightPage />;
   if (active === "admin") return <AdminPage store={store} />;
   if (active === "settings") return <SettingsPage dark={dark} onDarkChange={onDarkChange} />;

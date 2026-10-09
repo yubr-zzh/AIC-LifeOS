@@ -13,9 +13,16 @@ Target branch: `feat/agent-memory-integration`. This is a selective port, not a 
 
 ## Pending slices
 
-1. Calendar UI: inspect and selectively adapt the calendar view to the existing structured-entry API and navigation without replacing existing planning/review pages.
-2. Vault integration: wait for the user to choose the Vault's deployment location before implementing a filesystem path or sync endpoint. The upstream code performs explicit SQLite/Markdown import/export and manual sync; it does not provide an automatic watcher or conflict merge.
-3. Settings UI: after the Vault deployment model is chosen, add only the controls that map to implemented behavior. Provider settings already exist locally and should not be duplicated.
+1. Vault integration: explain the Obsidian Vault folder model and agree on deployment location before implementing filesystem paths or sync endpoints. The upstream code performs explicit SQLite/Markdown import/export and manual sync; it does not provide an automatic watcher or conflict merge.
+2. Settings UI: routing preference is now exposed both in chat and Settings; after the Vault deployment model is chosen, add only Vault controls that map to implemented behavior. Provider settings already exist locally and should not be duplicated.
+
+## Completed slice: Work calendar
+
+- Added a calendar navigation page that reads existing structured entries (daily/phase plans and reviews, diary, insight, feedback) through the existing `/entries` client.
+- The annual heatmap summarizes record density. Selecting a day lists its entries and links to the existing page for that entry type; it does not create, alter, or replace structured records.
+- Added refresh, year selection, loading/error/empty states, keyboard-native buttons, and responsive/dark theme styling.
+- Added a settings control for the chat's default routing policy, sharing the same local-storage preference as the chat composer.
+- Validation: frontend `npm run build` passed; full frontend suite passed (97 tests, including 2 WorkCalendar tests); `git diff --check` passed.
 
 ## Do not port without review
 
