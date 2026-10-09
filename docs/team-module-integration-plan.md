@@ -41,7 +41,7 @@
 
 - 对照当前 TencentDB adapter 与 `origin/zhang-memory` 的修改，先核验 v3 创建/更新能力、外部 ID 对应关系、scope 身份映射及审批后写入语义。
 - 不启用新的外部写入路径，不切换 Memory 权威来源；若候选创建或身份映射依赖上游未提供的能力，先与用户讨论。
-- 已发现队友版本使用 `/v3/atomic/create`，但目前没有可验证的上游接口证据；只对该端点做 mock 测试不足以证明真实服务支持。已向用户询问先接 scope 映射和只读召回、写入保持关闭，还是暂时跳过 TencentDB。
+- 更正：`origin/zhang-memory` 上这部分是用户自己的实现，不是队友代码。提交 `448ace7` 与 `ecdac8f` 的 author/committer 均为 `yubr-zzh <3255904958@qq.com>`。该版本加入 scope 身份映射，并对未绑定记忆调用 `/v3/atomic/create`；当前集成分支仍保留此前的 fail-closed 行为。是否启用创建写入需结合用户已有验证再决定，mock 本身不能代表真实服务联调。
 
 ### 阶段 E：Liu Bridge 能力契约补齐 — 部分完成
 
