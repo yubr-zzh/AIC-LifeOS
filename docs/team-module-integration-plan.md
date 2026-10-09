@@ -19,26 +19,34 @@
 - 验收：`npm run typecheck`、前端 94 项测试、`npm run build`、模型 Provider 后端 3 项单测通过；未用真实供应商 Key 做网络联调。
 - 提交：`68ef5f4 feat(settings): add model provider configuration`。
 
-### 阶段 B：对话 scope 与用户确认的记忆候选 — 完成，待单独提交
+### 阶段 B：对话 scope 与用户确认的记忆候选 — 完成
 
 - 每轮对话显式选择 global / scenario / project scope，并保存在本地对话历史；旧历史的 `projectId` 继续兼容。
 - 成功对话可由用户手动写出“提炼结论”，只提交结论及 trace 来源引用，原始对话不复制进 Memory。
 - 候选仍须在记忆页审核；审核前不写入长期 Memory，也不同步外部 Provider。
 - 验收：后端集成测试覆盖范围、来源引用、原始对话不泄漏、非法 scope 拒绝；`python -m unittest tests.test_agent_memory_integration tests.test_model_providers -v` 5 项通过；前端 typecheck、build、94 项测试通过；`git diff --check` 通过。
 - 源码参考：`origin/zhang-memory` 的 `a40ea69 feat(memory): connect scoped conversation memory flow`，按当前实现适配而非 cherry-pick 整个提交。
+- 提交：`9bd2a74 feat(memory): capture scoped conversation memories`。
 
-### 阶段 C：ai-memory 项目只读检索 — 待开始
+### 阶段 C：ai-memory 项目只读检索 — 完成，待单独提交
 
-- 先审查适配器 API 和现有 ChatRuntime 的检索插入点，再实现显式 LifeOS project ID 映射与只读检索。
-- HTTP 联调用本地 mock；不访问外部服务、不复制原始页面进 LifeOS Memory。
+- 实现显式 LifeOS project ID → ai-memory workspace/project 映射、只读 search/page 请求、路径/跨项目校验和检索上限。
+- 仅当本轮是明确 project scope 且进入 Agent 执行时检索；外部页面只进入本轮不可信提示上下文，Trace 仅保留 source_ref，事件和 LifeOS Memory 不保存页面正文。
+- 配置经环境变量读取：`LIFEOS_AIMEMORY_ENDPOINT`、`LIFEOS_AIMEMORY_PROJECT_MAP`，可选 `LIFEOS_AIMEMORY_API_TOKEN`、`LIFEOS_AIMEMORY_TIMEOUT_SECONDS`。当前只允许 loopback endpoint；没有新增 UI 配置页。
+- 验收：ai-memory adapter 配置/隔离/HTTP mock 和 transient context 共 5 个新测试通过；记忆/provider 联合测试 10 项通过；前端 typecheck 与 94 项测试通过；Python 编译与 `git diff --check` 通过。没有访问真实 ai-memory 服务。
+- 源码参考：`origin/zhang-memory` 的 `ecdac8f feat(memory): verify external adapters with local HTTP mocks`，适配到当前 ChatRuntime / Executor，不移植其不同的 planner 架构。
+
+### 阶段 D：TencentDB 适配差异与审批写入 — 待核对
+
+- 对照当前 TencentDB adapter 与 `origin/zhang-memory` 的修改，先核验 v3 创建/更新能力、外部 ID 对应关系、scope 身份映射及审批后写入语义。
+- 不启用新的外部写入路径，不切换 Memory 权威来源；若候选创建或身份映射依赖上游未提供的能力，先与用户讨论。
 
 ## 后续顺序
 
-1. 完成阶段 B 的构建/差异检查并独立提交。
-2. 对照 `origin/zhang-memory` 的 `lifeos/memory/providers/ai_memory.py`，接入 ai-memory 的显式项目映射、只读检索及 HTTP mock 测试；不复制原始页面进 LifeOS Memory。
-3. 单独核对 TencentDB 适配器差异：明确原子创建能力、LifeOS 审批后写入、身份映射与撤回语义。遇到接口/权威数据冲突时先讨论，不擅自更换权威存储。
-4. 对照 `origin/liu` 的 Bridge 和适配器，按 Codex、Pi、Hermes、Kimi、OpenCode 等契约逐项找缺口；禁止以整分支合并代替兼容审查。
-5. 最后审阅 `origin/api&nonAgent` 其余页面和存储功能，仅接入明确缺失且与当前路由/存储架构兼容的项。
+1. 完成阶段 C 的构建/差异检查并独立提交。
+2. 完成阶段 D 的 TencentDB 差异审查；遇到创建能力、身份映射或数据权威冲突时先讨论，不擅自更换权威存储。
+3. 对照 `origin/liu` 的 Bridge 和适配器，按 Codex、Pi、Hermes、Kimi、OpenCode 等契约逐项找缺口；禁止以整分支合并代替兼容审查。
+4. 最后审阅 `origin/api&nonAgent` 其余页面和存储功能，仅接入明确缺失且与当前路由/存储架构兼容的项。
 
 ## 当前已知风险 / 暂停条件
 

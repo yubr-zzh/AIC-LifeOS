@@ -11,13 +11,14 @@ class ChatRuntime:
     """Foreground path optimized for fast user responses."""
 
     def __init__(self, llm, memory, executor, event_bus, trace, external_memory=None, agent_context=None,
-                 planner=None, delegation_enabled=True):
+                 planner=None, delegation_enabled=True, project_memory=None):
         self.llm = llm
         self.memory = memory
         self.executor = executor
         self.event_bus = event_bus
         self.trace = trace
         self.external_memory = external_memory
+        self.project_memory = project_memory
         # planner 之前是死代码：lifeos/agent/runtime.py 实例化了它，
         # 但这里没有参数、全仓库无人调用 guihua()。不接这一步，
         # 委派计划功能就是一段永远不执行的代码。
@@ -62,13 +63,45 @@ class ChatRuntime:
         if plan is not None:
             self.trace.event(trace_id, "delegation.planned", {"planId": plan["planId"]})
 
-        result = await self.executor.execute_chat_turn(
+        project_context = []
+        if (
+            plan is not None
+            and self.project_memory is not None
+            and resolved_scope is not None
+            and resolved_scope.get("kind") == "project"
+        ):
+            try:
+                project_context = await asyncio.to_thread(
+                    self.project_memory.retrieve,
+                    user_input,
+                    scope=resolved_scope,
+                )
+                self.trace.event(
+                    trace_id,
+                    "memory.project_evidence_retrieved",
+                    {
+                        "provider": "ai-memory",
+                        "source_refs": [item.get("source_ref") for item in project_context],
+                        "count": len(project_context),
+                    },
+                )
+            except Exception as exc:
+                self.trace.event(
+                    trace_id,
+                    "memory.external_unavailable",
+                    {"provider": "ai-memory", "error": type(exc).__name__},
+                )
+
+        executor_args = dict(
             user_input=user_input,
             memory=chunks,
             trace_id=trace_id,
             context=self.agent_context.du(session_id),
             plan=plan,
         )
+        if project_context:
+            executor_args["project_context"] = project_context
+        result = await self.executor.execute_chat_turn(**executor_args)
 
         await self.event_bus.publish(
             "conversation.completed",

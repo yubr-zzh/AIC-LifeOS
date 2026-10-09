@@ -7,6 +7,7 @@ from lifeos.agent.planner.planner import Planner
 from lifeos.event.bus import ReliableEventBus
 from lifeos.memory.manager import MemoryManager
 from lifeos.memory.agent_evidence import AgentEvidenceStore
+from lifeos.memory.providers.ai_memory import AiMemoryProjectAdapter, AiMemoryProjectConfig
 from lifeos.memory.providers.tencentdb import TencentDBConfig, TencentDBMemoryAdapter
 from lifeos.reflection.engine import ReflectionEngine
 from lifeos.security.permission import PermissionManager
@@ -18,7 +19,8 @@ from lifeos.trace.system import TraceSystem
 class LifeOSAgent:
     """Top-level composition root for foreground and background agents."""
 
-    def __init__(self, llm, storage_dir=".lifeos", delegation_enabled=True, external_memory=None, model_store=None):
+    def __init__(self, llm, storage_dir=".lifeos", delegation_enabled=True, external_memory=None,
+                 model_store=None, project_memory=None):
         self.llm = llm
         self.model_store = model_store or getattr(llm, "store", None)
         self.memory = MemoryManager(storage_dir=storage_dir)
@@ -27,6 +29,10 @@ class LifeOSAgent:
             config = TencentDBConfig.from_env()
             external_memory = TencentDBMemoryAdapter(config) if config else None
         self.external_memory = external_memory
+        if project_memory is None:
+            ai_memory_config = AiMemoryProjectConfig.from_env()
+            project_memory = AiMemoryProjectAdapter(ai_memory_config) if ai_memory_config else None
+        self.project_memory = project_memory
         self.trace = TraceSystem()
         self.event_bus = ReliableEventBus(f"{storage_dir}/events.json")
         self.skills = SkillRegistry(f"{storage_dir}/skills.json")
@@ -52,6 +58,7 @@ class LifeOSAgent:
             # 之前 planner 在这里被实例化却没人用。接上之后它才不是死代码。
             planner=self.planner,
             delegation_enabled=delegation_enabled,
+            project_memory=self.project_memory,
         )
         self.global_agent = GlobalAgentRuntime(
             event_bus=self.event_bus,
