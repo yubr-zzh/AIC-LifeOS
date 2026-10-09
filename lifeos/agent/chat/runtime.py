@@ -32,7 +32,7 @@ class ChatRuntime:
         self.agent_context = agent_context or AgentContextStore()
 
     async def handle_message(self, user_input: str, session_id: str | None = None,
-                             memory_scope: dict | None = None):
+                             memory_scope: dict | None = None, routing_policy: str = "auto"):
         trace_id = self.trace.start(user_input)
         resolved_scope = normalize_scope(memory_scope) if memory_scope is not None else None
         chunks = await self.memory.retrieve(user_input, scope=resolved_scope)
@@ -58,14 +58,55 @@ class ChatRuntime:
         self.trace.event(trace_id, "memory.retrieved",
                          {"chunks": chunks, "scope": resolved_scope})
 
-        # 先规划：委派计划要跟着这条消息一起返回，前端才能把卡片贴在它下面。
-        plan = await self.planner.cehuao(user_input, trace_id, self.delegation_enabled)
+        route_analyzer = getattr(self.planner, "analyze", None)
+        legacy_plan = None
+        if callable(route_analyzer):
+            planning = await route_analyzer(
+                user_input, chunks, routing_policy=routing_policy
+            )
+        else:
+            # Compatibility for injected legacy planners that only implement
+            # cehuao(); a returned delegation plan means this turn needs Agent.
+            legacy_plan = await self.planner.cehuao(
+                user_input, trace_id, self.delegation_enabled
+            )
+            is_agent = legacy_plan is not None
+            planning = {
+                "decision": "agent" if is_agent else "self_plan",
+                "confidence": 1.0 if is_agent else 0.55,
+                "reason": "Legacy planner returned an execution plan." if is_agent
+                else "Legacy planner found no execution plan.",
+                "route_source": "rules" if is_agent else "fallback",
+                "route_signals": ["legacy:delegation_plan" if is_agent else "legacy:no_plan"],
+                "requires_side_effects": is_agent,
+                "plan_requested": False,
+                "routing_policy": routing_policy,
+                "steps": [],
+            }
+        self.trace.event(
+            trace_id,
+            "planning.assessed",
+            {
+                "decision": planning["decision"],
+                "confidence": planning["confidence"],
+                "reason": planning["reason"],
+                "route_source": planning["route_source"],
+                "route_signals": planning["route_signals"],
+            },
+        )
+
+        # 只有进入执行路径才生成可交给本机 Agent 的委派草案。
+        plan = None
+        if planning["decision"] == "agent":
+            plan = legacy_plan or await self.planner.cehuao(
+                user_input, trace_id, self.delegation_enabled
+            )
         if plan is not None:
             self.trace.event(trace_id, "delegation.planned", {"planId": plan["planId"]})
 
         project_context = []
         if (
-            plan is not None
+            planning["decision"] == "agent"
             and self.project_memory is not None
             and resolved_scope is not None
             and resolved_scope.get("kind") == "project"
@@ -92,16 +133,39 @@ class ChatRuntime:
                     {"provider": "ai-memory", "error": type(exc).__name__},
                 )
 
-        executor_args = dict(
-            user_input=user_input,
-            memory=chunks,
-            trace_id=trace_id,
-            context=self.agent_context.du(session_id),
-            plan=plan,
-        )
-        if project_context:
-            executor_args["project_context"] = project_context
-        result = await self.executor.execute_chat_turn(**executor_args)
+        if planning["decision"] == "self_plan":
+            plan_steps = (
+                await self.planner.create_plan(planning)
+                if planning.get("plan_requested") and hasattr(self.planner, "create_plan")
+                else {"steps": []}
+            )
+            answer_args = dict(
+                user_input=user_input,
+                memory=chunks,
+                trace_id=trace_id,
+                context=self.agent_context.du(session_id),
+            )
+            answer = getattr(self.executor, "answer_chat_turn", None)
+            if callable(answer):
+                result = await answer(**answer_args)
+            else:
+                # Compatibility for injected executors used by integrations/tests.
+                result = await self.executor.execute_chat_turn(**answer_args, plan=None)
+        else:
+            executor_args = dict(
+                user_input=user_input,
+                memory=chunks,
+                trace_id=trace_id,
+                context=self.agent_context.du(session_id),
+                plan=plan,
+            )
+            if project_context:
+                executor_args["project_context"] = project_context
+            result = await self.executor.execute_chat_turn(**executor_args)
+            plan_steps = (
+                await self.planner.create_plan(planning)
+                if hasattr(self.planner, "create_plan") else {"steps": []}
+            )
 
         await self.event_bus.publish(
             "conversation.completed",
@@ -110,17 +174,31 @@ class ChatRuntime:
                 "user_input": user_input,
                 "memory": chunks,
                 "memory_scope": resolved_scope,
+                "planning": planning,
                 "result": result,
             },
             trace_id=trace_id,
         )
-        self.trace.event(trace_id, "conversation.completed", {"result": result})
+        self.trace.event(trace_id, "conversation.completed", {
+            "decision": planning["decision"], "result": result,
+        })
         # 保持纯字典返回，不引入新返回类型——与现有风格一致。
         out = {
             "trace_id": trace_id,
             "response": result["response"],
             "tool_calls": result.get("tool_calls", []),
             "tool_results": result.get("tool_results", []),
+            "provider": result.get("provider"),
+            "model": result.get("model"),
+            "decision": planning["decision"],
+            "decision_reason": planning["reason"],
+            "decision_confidence": planning["confidence"],
+            "plan_steps": plan_steps["steps"],
+            "agent_enabled": planning["decision"] == "agent",
+            "routing_policy": planning["routing_policy"],
+            "route_source": planning["route_source"],
+            "route_signals": planning["route_signals"],
+            "requires_side_effects": planning["requires_side_effects"],
         }
         if plan is not None:
             out["delegation"] = plan

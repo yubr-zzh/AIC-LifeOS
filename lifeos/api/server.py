@@ -635,6 +635,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     def _handle_chat(self):
         body = self._read_json()
         try:
+            routing_policy = body.get("routing_policy", "auto")
+            if routing_policy not in {"auto", "force_self_plan", "force_agent"}:
+                raise ValueError("routing_policy must be auto, force_self_plan, or force_agent")
             scope = body.get("memory_scope")
             if isinstance(scope, dict):
                 owner_id = dang_qian_yong_hu()
@@ -646,6 +649,7 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                 session_id=body.get("session_id"),
                 memory_scope=scope,
                 model_profile_id=body.get("profile_id"),
+                routing_policy=routing_policy,
             ))
         except (ValueError, KeyError) as exc:
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)

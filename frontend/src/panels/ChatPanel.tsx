@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Store } from "../state/store";
 import { FEEDBACK_RATINGS } from "../api/types";
-import type { FeedbackRating, MemoryScope } from "../api/types";
+import type { AgentRoutingPolicy, FeedbackRating, MemoryScope } from "../api/types";
 import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
 import { IconSend, IconCopy, IconMessage } from "../components/Icons";
@@ -27,7 +27,17 @@ interface LocalConversation {
 }
 
 const HISTORY_KEY = "lifeos.chat.history.v1";
+const ROUTING_POLICY_KEY = "lifeos-agent-routing-policy";
 const WELCOME_ID = "system-welcome";
+
+function readRoutingPolicy(): AgentRoutingPolicy {
+  try {
+    const value = localStorage.getItem(ROUTING_POLICY_KEY);
+    return value === "force_agent" || value === "force_self_plan" ? value : "auto";
+  } catch {
+    return "auto";
+  }
+}
 
 function readHistory(): LocalConversation[] {
   try {
@@ -73,6 +83,7 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [projectId, setProjectId] = useState("");
   const [scopeError, setScopeError] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
+  const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
   const [activeId, setActiveId] = useState(() => newConversationId());
   const [historyReady, setHistoryReady] = useState(false);
@@ -117,6 +128,10 @@ export function ChatPanel({ store, agent, api }: Props) {
   }, [activeId, historyReady, projectId, scenarioType, scopeKind, state.messages]);
 
   useEffect(() => {
+    try { localStorage.setItem(ROUTING_POLICY_KEY, routingPolicy); } catch { /* preference is best-effort */ }
+  }, [routingPolicy]);
+
+  useEffect(() => {
     if (scroller.current) {
       scroller.current.scrollTop = scroller.current.scrollHeight;
     }
@@ -137,7 +152,7 @@ export function ChatPanel({ store, agent, api }: Props) {
       : scopeKind === "scenario"
         ? { kind: "scenario", scenario_type: scenarioType }
         : { kind: "global" };
-    void sendMessage(t, memoryScope, agent?.active?.sessionId);
+    void sendMessage(t, memoryScope, agent?.active?.sessionId, routingPolicy);
   };
 
   const startNew = () => {
@@ -259,8 +274,17 @@ export function ChatPanel({ store, agent, api }: Props) {
         </div>
 
         <div className="chat-compose-wrap">
-          <Composer value={text} onChange={setText} onSubmit={submit} onKey={onKey} disabled={state.loading.chat} />
-          <div className="chat-compose-hint">Enter 发送 · Shift + Enter 换行</div>
+          <Composer value={text} onChange={setText} onSubmit={submit} onKey={onKey}
+            routingPolicy={routingPolicy} onRoutingPolicyChange={setRoutingPolicy}
+            disabled={state.loading.chat} />
+          <div className="chat-compose-hint">
+            {routingPolicy === "auto"
+              ? "自动判断 · 含糊请求可能增加一次模型判断 · 工具调用仍需权限审查"
+              : routingPolicy === "force_agent"
+                ? "本轮进入执行型 Agent 路径 · 工具调用仍需权限审查"
+                : "本轮只生成文本，不进入执行型 Agent"}
+            <span> · Enter 发送 · Shift + Enter 换行</span>
+          </div>
         </div>
       </section>
     </div>
@@ -286,7 +310,23 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           <strong>LifeOS</strong>
           {pending ? <span className="chat-thinking"><span className="dot" />正在思考</span> : null}
           {errored ? <span className="chat-error">暂时遇到问题</span> : null}
+          {!pending && msg.decision ? (
+            <span className={`chat-route-badge ${msg.agent_enabled ? "agent" : "self"}`}>
+              {msg.agent_enabled ? "执行型 Agent 路径" : "文本回答"}
+            </span>
+          ) : null}
         </div>
+        {msg.decision_reason ? (
+          <details className="chat-route-details">
+            <summary>路由说明{typeof msg.decision_confidence === "number" ? ` · ${Math.round(msg.decision_confidence * 100)}%` : ""}</summary>
+            <p>{msg.decision_reason}</p>
+          </details>
+        ) : null}
+        {msg.plan_steps?.length ? (
+          <ol className="chat-plan-steps">
+            {msg.plan_steps.map((step) => <li key={step.id}><strong>{step.title}</strong>{step.detail ? <span>{step.detail}</span> : null}</li>)}
+          </ol>
+        ) : null}
         <div className={`assistant-content ${errored ? "has-error" : ""}`}>
           {pending ? <span className="muted">正在整理思路…</span> : msg.content || <span className="muted">没有生成文字回复</span>}
         </div>
@@ -480,10 +520,12 @@ interface ComposerProps {
   onChange: (v: string) => void;
   onSubmit: () => void;
   onKey: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  routingPolicy: AgentRoutingPolicy;
+  onRoutingPolicyChange: (value: AgentRoutingPolicy) => void;
   disabled?: boolean;
 }
 
-function Composer({ value, onChange, onSubmit, onKey, disabled }: ComposerProps) {
+function Composer({ value, onChange, onSubmit, onKey, routingPolicy, onRoutingPolicyChange, disabled }: ComposerProps) {
   return (
     <div className="chat-composer">
       <textarea
@@ -495,9 +537,19 @@ function Composer({ value, onChange, onSubmit, onKey, disabled }: ComposerProps)
         onKeyDown={onKey}
         disabled={disabled}
       />
-      <button className="chat-send" onClick={onSubmit} disabled={disabled || !value.trim()} title="发送消息" aria-label="发送消息">
-        <IconSend size={17} />
-      </button>
+      <div className="chat-composer-side">
+        <label className="chat-route-control">
+          <span>处理方式</span>
+          <select value={routingPolicy} onChange={(event) => onRoutingPolicyChange(event.target.value as AgentRoutingPolicy)} disabled={disabled}>
+            <option value="auto">自动判断</option>
+            <option value="force_self_plan">只给文本建议</option>
+            <option value="force_agent">使用执行型 Agent</option>
+          </select>
+        </label>
+        <button className="chat-send" onClick={onSubmit} disabled={disabled || !value.trim()} title="发送消息" aria-label="发送消息">
+          <IconSend size={17} />
+        </button>
+      </div>
     </div>
   );
 }

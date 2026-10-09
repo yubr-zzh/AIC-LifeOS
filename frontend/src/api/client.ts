@@ -8,6 +8,7 @@ import type {
   MemoryStore,
   MemoryProfileView,
   MemoryCandidate,
+  AgentRoutingPolicy,
   PermissionRequest,
   RunOnceResponse,
   SkillRegistryState,
@@ -81,6 +82,7 @@ export async function sendChat(
   opts?: ApiOptions,
   memoryScope?: MemoryScope,
   sessionId?: string,
+  routingPolicy: AgentRoutingPolicy = "auto",
 ): Promise<ChatResponse> {
   const base = getBase(opts);
   const res = await f(opts)(`${base}/chat`, {
@@ -90,6 +92,7 @@ export async function sendChat(
       message,
       ...(memoryScope ? { memory_scope: memoryScope } : {}),
       ...(sessionId ? { session_id: sessionId } : {}),
+      routing_policy: routingPolicy,
     }),
   });
   if (!res.ok) throw await readError(res);
@@ -103,6 +106,15 @@ export async function sendChat(
     tool_calls: Array.isArray(data.tool_calls) ? data.tool_calls : [],
     tool_results: Array.isArray(data.tool_results) ? data.tool_results : [],
     ...(data.delegation ? { delegation: data.delegation } : {}),
+    ...(data.decision ? { decision: data.decision } : {}),
+    ...(data.decision_reason ? { decision_reason: data.decision_reason } : {}),
+    ...(typeof data.decision_confidence === "number" ? { decision_confidence: data.decision_confidence } : {}),
+    ...(Array.isArray(data.plan_steps) ? { plan_steps: data.plan_steps } : {}),
+    ...(typeof data.agent_enabled === "boolean" ? { agent_enabled: data.agent_enabled } : {}),
+    ...(data.routing_policy ? { routing_policy: data.routing_policy } : {}),
+    ...(data.route_source ? { route_source: data.route_source } : {}),
+    ...(Array.isArray(data.route_signals) ? { route_signals: data.route_signals } : {}),
+    ...(typeof data.requires_side_effects === "boolean" ? { requires_side_effects: data.requires_side_effects } : {}),
   };
 }
 

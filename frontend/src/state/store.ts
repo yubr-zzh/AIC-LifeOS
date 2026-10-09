@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useCallback } from "react";
 import type {
   ChatAgentStatus,
   ChatResponse,
+  AgentRoutingPolicy,
   EventBusStatus,
   EventRecord,
   GlobalAgentStatus,
@@ -54,6 +55,11 @@ export interface ChatMessage {
   tool_results?: ToolResult[];
   // 委派计划属于产生它的那条消息，不属于全局状态。
   delegation?: DelegationPlan;
+  decision?: ChatResponse["decision"];
+  decision_reason?: string;
+  decision_confidence?: number;
+  agent_enabled?: boolean;
+  plan_steps?: ChatResponse["plan_steps"];
   created_at: string;
   // execution status: pending until /chat returns, then succeeded/blocked.
   execution?: "pending" | "succeeded" | "blocked" | "error";
@@ -376,7 +382,8 @@ export function useStore() {
   }, [refreshAll, setError]);
 
   const sendMessage = useCallback(
-    async (text: string, memoryScope?: MemoryScope, sessionId?: string) => {
+    async (text: string, memoryScope?: MemoryScope, sessionId?: string,
+      routingPolicy: AgentRoutingPolicy = "auto") => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
@@ -419,7 +426,7 @@ export function useStore() {
 
       let chatRes: ChatResponse;
       try {
-        chatRes = await sendChat(trimmed, undefined, memoryScope, sessionId);
+        chatRes = await sendChat(trimmed, undefined, memoryScope, sessionId, routingPolicy);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`chat failed: ${msg}`);
@@ -456,6 +463,11 @@ export function useStore() {
           tool_calls: chatRes.tool_calls,
           tool_results: chatRes.tool_results,
           delegation: chatRes.delegation,
+          decision: chatRes.decision,
+          decision_reason: chatRes.decision_reason,
+          decision_confidence: chatRes.decision_confidence,
+          agent_enabled: chatRes.agent_enabled,
+          plan_steps: chatRes.plan_steps,
           execution: chatRes.tool_results?.some((result) => result.status === "blocked") ? "blocked" : "succeeded",
         },
       });

@@ -24,7 +24,7 @@ class Executor:
         return similar[0]
 
     async def execute_chat_turn(self, user_input, memory, trace_id=None, context=None, plan=None,
-                                project_context=None):
+                                project_context=None, allow_tools=True):
         skill = await self._match_skill(user_input)
         if skill and self.trace and trace_id:
             self.trace.event(
@@ -33,6 +33,11 @@ class Executor:
                 {"skill": skill.get("name"), "description": skill.get("description")},
             )
         system_prompt = "You are the foreground LifeOS Chat Agent."
+        if not allow_tools:
+            system_prompt += (
+                " This is a text-only response: answer the user directly and do not request, "
+                "invoke, or imply execution of tools."
+            )
         if skill:
             system_prompt += (
                 "\nThe user has an approved skill for this kind of task: "
@@ -99,6 +104,13 @@ class Executor:
         tool_results = []
 
         for tool_call in tool_calls:
+            if not allow_tools:
+                tool_results.append({
+                    "tool_call": tool_call,
+                    "status": "blocked",
+                    "review": {"decision": "deny", "reason": "This turn was routed to text-only mode."},
+                })
+                continue
             review = await self.permission_manager.review_tool_execution(tool_call)
             if review["decision"] != "allow":
                 tool_results.append(
@@ -127,7 +139,21 @@ class Executor:
             "response": response,
             "tool_calls": tool_calls,
             "tool_results": tool_results,
+            "provider": completion.get("provider"),
+            "model": completion.get("model"),
         }
+
+    async def answer_chat_turn(self, user_input, memory, trace_id=None, context=None,
+                              project_context=None):
+        """Generate a normal conversational answer while keeping tools disabled."""
+        return await self.execute_chat_turn(
+            user_input=user_input,
+            memory=memory,
+            trace_id=trace_id,
+            context=context,
+            project_context=project_context,
+            allow_tools=False,
+        )
 
     async def execute(self, plan):
         results = []

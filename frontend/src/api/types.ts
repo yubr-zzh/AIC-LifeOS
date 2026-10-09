@@ -32,17 +32,30 @@ export interface ToolResult {
   review?: PermissionReview;
 }
 
+export type PlanningDecision = "self_plan" | "agent";
+export type AgentRoutingPolicy = "auto" | "force_self_plan" | "force_agent";
+
 export interface ChatResponse {
   trace_id: string;
   response: string;
   tool_calls: ToolCall[];
   tool_results?: ToolResult[];
   delegation?: DelegationPlan;
+  decision?: PlanningDecision;
+  decision_reason?: string;
+  decision_confidence?: number;
+  plan_steps?: Array<{ id: number; title: string; detail?: string; time?: string }>;
+  agent_enabled?: boolean;
+  routing_policy?: AgentRoutingPolicy;
+  route_source?: "user_override" | "rules" | "model" | "fallback";
+  route_signals?: string[];
+  requires_side_effects?: boolean;
 }
 
 export interface ChatRequest {
   message: string;
   memory_scope?: MemoryScope;
+  routing_policy?: AgentRoutingPolicy;
 }
 
 /**
