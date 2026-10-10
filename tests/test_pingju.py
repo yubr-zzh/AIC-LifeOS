@@ -365,13 +365,22 @@ class ZhuangPeiTest(unittest.TestCase):
             loop.run_until_complete(_pao({"cwd": "."}))
         finally:
             loop.close()
-        # 不传时必须是 None 而不是 {}：{} 在 SDK 的 process_env 展开里
-        # 与 None 等价，但 None 同时是「调用方没意见」的诚实表示。
-        self.assertIsNone(kan.get("env"))
+        # 不传时归一为空 dict。旧断言 None 是 bug 现场：SDK 0.2.160 的
+        # transport 在 `{**inherited, **options.env}` 处对 None 抛
+        # `TypeError: 'NoneType' object is not a mapping`，被包成
+        # `CLIConnectionError: Failed to start Claude Code`——
+        # 前端连后端一开会话必报（2026-10-10 实锤）。
+        self.assertEqual(kan.get("env"), {})
 
 
 class RunTest(unittest.TestCase):
-    """run.py 按 runtime.json 的 userId 算目录，并挂到 BridgeServer 上。"""
+    """run.py 按 runtime.json 的 userId 算目录，并挂到 BridgeServer 上。
+
+    改动三（2026-10-10）后隔离**默认关**（`fu.env = None`，CLI 直用
+    `~/.claude`）。本类默认在 `LIFEOS_GELI=1` 下跑，钉的是隔离开着时的
+    旧形态——它被原样保留，多人/公网形态仍靠它；默认关的形态由
+    `test_mo_ren_bu_ge_li` 钉。
+    """
 
     def setUp(self):
         # **必须自己管这个目录，不能用 TemporaryDirectory 的自动清理。**
@@ -400,10 +409,16 @@ class RunTest(unittest.TestCase):
         BridgeHandler.ri = self._ri
         shutil.rmtree(self.gen, ignore_errors=True)
 
-    def _zhen(self):
+    def _zhen(self, ge_li: bool = True):
+        """`ge_li`：在 `LIFEOS_GELI=1`（隔离开，改动三前的旧形态）还是关名单
+        值 `""`（改动三后的默认形态）下真跑 `zhen_ben`。**关形态必须显式设
+        关名单值而不是「不设」**：patch.dict 的空字典删不掉外层环境里可能
+        残留的 `LIFEOS_GELI`，只有钉一个 `""` 进去才能两个形态都测得死。"""
         from lifeos.bridge import run
+        huan = {"LIFEOS_GELI": "1"} if ge_li else {"LIFEOS_GELI": ""}
         with mock.patch.object(run, "DK", 0), \
-                mock.patch.object(pingju, "PINGJU_GEN", Path(self.gen) / "users"):
+                mock.patch.object(pingju, "PINGJU_GEN", Path(self.gen) / "users"), \
+                mock.patch.dict(os.environ, huan):
             fu, _ = run.zhen_ben(self.root, 0)
         return fu
 
@@ -432,6 +447,18 @@ class RunTest(unittest.TestCase):
             p = Path(fu.env["CLAUDE_CONFIG_DIR"])
             self.assertEqual(p.parent, Path(self.gen) / "users")
             self.assertTrue(p.name.startswith("local-"), p.name)
+        finally:
+            fu.server_close()
+
+    def test_mo_ren_bu_ge_li(self):
+        """改动三：`LIFEOS_GELI` 是关名单值时**默认不隔离**——`fu.env` 是
+        None（SDK 逐字继承本进程 os.environ，CLI 直用 `~/.claude`），
+        且 `users/` 根下一个目录都不建。"""
+        fu = self._zhen(ge_li=False)
+        try:
+            self.assertIsNone(fu.env)
+            self.assertFalse((Path(self.gen) / "users").exists(),
+                             "隔离关着时 users/ 下不该落任何目录")
         finally:
             fu.server_close()
 
@@ -543,9 +570,12 @@ class AgentsBaoGaoTest(unittest.TestCase):
     装软件，一个要改磁盘权限），给错提示比不给提示更糟。
 
     **`PINGJU_GEN` 必须在类级别打补丁。** `/agents` 每次请求都现场重跑
-    `huan_jing(self.server.yong_hu)`（`http.py:343`），而 `setUpClass` 里那个
-    `BridgeServer` 的 `yong_hu` 还是默认的 `"local"` ⇒ 不打补丁时下面两条
-    `_qu()` 直接在**真实凭据根** `~/.lifeos-bridge/users` 下建出
+    `huan_jing(self.server.yong_hu)`（`http.py:343`）——**改动三之后仅在
+    隔离开时**。所以本类四条 11.2 用例都套 `LIFEOS_GELI=1` 跑（它们钉的
+    正是隔离形态下的语义），默认关的形态由
+    `test_guan_ge_li_shi_bu_jian_mu_lu_bu_bao_jing` 钉，而 `setUpClass`
+    里那个 `BridgeServer` 的 `yong_hu` 还是默认的 `"local"` ⇒ 不打补丁时
+    隔离开着的用例会直接在**真实凭据根** `~/.lifeos-bridge/users` 下建出
     `local-<哈希>` 并对它跑 `icacls`。后果是 (a) 污染用户真实状态、
     (b) 断言依赖宿主家目录可写（只读家目录的沙箱/CI 会挂）。
     另外两条 `test_qian_chang_zhong_can_*` 自己带了更窄的补丁，作用域内会
@@ -571,6 +601,14 @@ class AgentsBaoGaoTest(unittest.TestCase):
         # 把这个错误掩盖了：它根本没用 `cls._ban`，所以那个坏句柄一直没被碰到。
         cls._ban = mock.patch.object(pingju, "PINGJU_GEN", cls.gen)
         cls._ban.start()
+        # 注册表削到只剩 echo（探测即返回，不起任何子进程）。`/agents` 本会
+        # 串行探测全部真 CLI——本机实测一轮 ≈9 秒（hermes 一项就 4 秒+），
+        # 而本类断言的 credentialsReady / geli 与本机装了什么 CLI 无关；
+        # 真探测只会让 10 秒的客户端超时在机器一忙时随机炸，红得与本域无关。
+        # echo 在 `_agents` 里本来就被 continue 跳过，agents 列表为空是预期。
+        from lifeos.bridge.http import ZHU_CE_QI
+        cls._zhuce = mock.patch.dict(ZHU_CE_QI, {"echo": EchoAdapter}, clear=True)
+        cls._zhuce.start()
         cls.z = ZongXian(uuid.uuid4().hex[:8])
         cls.h = HuiHua(cls.z)
         cls.z.zhan = cls.h
@@ -594,6 +632,8 @@ class AgentsBaoGaoTest(unittest.TestCase):
         # 它们后面读到的就是没打补丁的真实值，症状是「另一组测试忽然红了」，
         # 且与本组毫无关系。此刻全树只有 `cls._ban` 这一个 `.start()`，
         # 但那只是**今天**的事实；新增一个 `.start()` 就会变成跨组互相踩。
+        # 后进先出：zhuce 后挂，先摘。与上面 `_ban` 同一套纪律。
+        cls._zhuce.stop()
         cls._ban.stop()
         cls._qing[0](cls._qing[1], cls._qing[2])
 
@@ -605,6 +645,7 @@ class AgentsBaoGaoTest(unittest.TestCase):
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read().decode("utf-8"))
 
+    @mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"})
     def test_zheng_chang_shi_credentialsReady_wei_deng_yu_True(self):
         b = pingju.JIAN_BING_CHENG_GONG
         try:
@@ -614,6 +655,7 @@ class AgentsBaoGaoTest(unittest.TestCase):
             pingju.JIAN_BING_CHENG_GONG = b
         self.assertIs(d["credentialsReady"], True)
 
+    @mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"})
     def test_jian_bing_quan_wen_lei_ba_credentialsReady_wei_deng_yu_False(self):
         """真降级时 `credentialsReady: false`，而 `available` **不动**。
 
@@ -634,6 +676,7 @@ class AgentsBaoGaoTest(unittest.TestCase):
             # available 是 tanjian() 的原样返回值，一个字节都不许被改
             self.assertIsInstance(x["available"], bool)
 
+    @mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"})
     def test_qian_chang_zhong_can_liu_chu_ba_jian_bing_quan_wen(self):
         """**现场重试**：`/agents` 每次都重跑一次 `huan_jing`（必修 3）。
 
@@ -659,6 +702,7 @@ class AgentsBaoGaoTest(unittest.TestCase):
             import shutil
             shutil.rmtree(gen, ignore_errors=True)
 
+    @mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"})
     def test_qian_chang_zhong_can_cha_chu_bei_ren_mo_diao_de_mu_lu(self):
         """反过来：运行中目录被删，`/agents` **要**从 true 翻成 false。
 
@@ -674,6 +718,29 @@ class AgentsBaoGaoTest(unittest.TestCase):
                 d = self._qu()
             self.assertIs(d["credentialsReady"], False,
                           "目录建不出来却报 true——界面一声不吭")
+        finally:
+            pingju.JIAN_BING_CHENG_GONG = b
+            import shutil
+            shutil.rmtree(gen, ignore_errors=True)
+
+    @mock.patch.dict(os.environ, {"LIFEOS_GELI": ""})
+    def test_guan_ge_li_shi_bu_jian_mu_lu_bu_bao_jing(self):
+        """改动三：隔离关（默认）时 `/agents` 整个不跑 `huan_jing`——`geli`
+        报 false、`users/` 下一个目录不建，且 mkdir 真失败也**不许**把
+        `credentialsReady` 打成 false：去隔离形态下凭据目录这回事不存在，
+        报 false 只会让前端弹「重新登录」的假警报。"""
+        b = pingju.JIAN_BING_CHENG_GONG
+        gen = tempfile.mkdtemp()
+        try:
+            pingju.JIAN_BING_CHENG_GONG = True
+            with mock.patch.object(pingju, "PINGJU_GEN", Path(gen)), \
+                    mock.patch.object(Path, "mkdir", side_effect=OSError("拒绝访问")):
+                d = self._qu()
+            self.assertIs(d["geli"], False)
+            self.assertIs(d["credentialsReady"], True,
+                          "隔离关着时 credentialsReady 没有语义，不许被 mkdir 失败拉成 false")
+            self.assertEqual(list(Path(gen).iterdir()), [],
+                             "隔离关着时 /agents 不该建任何凭据目录")
         finally:
             pingju.JIAN_BING_CHENG_GONG = b
             import shutil

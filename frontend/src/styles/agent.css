@@ -287,6 +287,10 @@
 .ags-fact strong { font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; }
 .ags-note { margin: 0; font-size: 11px; line-height: 1.6; color: var(--fg-3); }
 .ags-note.err { color: var(--st-failed); }
+.ags-note.warn { color: var(--st-pending); }
+.ags-cwd-row { display: flex; gap: 6px; align-items: stretch; }
+.ags-cwd-row input { flex: 1; min-width: 0; }
+.ags-cwd-row .btn-ghost { white-space: nowrap; }
 .ags-btns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ags-btns select {
   font: 11.5px var(--font-ui); padding: 4px 6px;

@@ -314,16 +314,19 @@ class ChuanShuTests(unittest.TestCase):
         self.assertIsNone(a._huan_jing({"env": {}}))
 
     def test_chuang_kong_men_you_zhi_ding_zi_chuang_process_group(self):
-        """Windows 上必须新进程组。
+        """Windows 上必须新进程组，且带 CREATE_NO_WINDOW。
 
         默认情况下 `kill()` 只杀 `cmd /c more` 这一层，CLI 自己再起的那些
         （codex 的沙箱、gemini 的工具进程）会变孤儿，Bridge 崩溃后继续跑用户命令。
+        `CREATE_NO_WINDOW`（2026-10-10 追加）：Bridge 自身无控制台，子进程
+        继承不到控制台就自开新窗口跑完即关——网页上表现为终端窗闪现。
         """
         import sys as _s
         men = ZiChengAdapter._chuang_kong()
         if _s.platform == "win32":
             import subprocess as sp
-            self.assertEqual(men.get("creationflags"), sp.CREATE_NEW_PROCESS_GROUP)
+            self.assertEqual(men.get("creationflags"),
+                             sp.CREATE_NO_WINDOW | sp.CREATE_NEW_PROCESS_GROUP)
         else:
             self.assertEqual(men, {})
 

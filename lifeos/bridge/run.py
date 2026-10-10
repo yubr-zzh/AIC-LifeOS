@@ -391,7 +391,12 @@ def zhen_ben(a1: Path, a2: int) -> tuple[BridgeServer, dict[str, Any]]:
     # 时是 "local"**：未配对的 Bridge 也要能用，这是单人开发的默认形态。
     # 配对后 uid 变了要重启 Bridge 才生效——这不是缺陷：跑着的会话本来就
     # 已经按旧 uid 开了凭据目录，中途换目录等于让同一个会话的登录态凭空消失。
-    fu.env = pingju.huan_jing(yong)
+    #
+    # 隔离**默认关**（改动三，2026-10-10）：`env=None` 时 SDK 逐字继承本进程的
+    # os.environ，凭据走 `~/.claude`，harness 与用户自己开的终端同形。
+    # `huan_jing` 也整个不调——隔离开着时才建每用户目录，关着时一个字节
+    # 都不该落在 `~/.lifeos-bridge/users/` 下。`LIFEOS_GELI=1` 才回到旧形态。
+    fu.env = pingju.huan_jing(yong) if pingju.gel() else None
     # uid 原样留一份给 `/agents` 现场重试凭据目录（阶段 6 必修 3）。
     # 必须与上面**同一个** uid：那里拿不到 runtime.json，只能用注入的值。
     fu.yong_hu = yong
@@ -453,7 +458,9 @@ def _ban_ben(a1: str) -> str | None:
 
         try:
             out = subprocess.run(
-                ["claude", "--version"], capture_output=True, text=True, timeout=10
+                ["claude", "--version"], capture_output=True, text=True, timeout=10,
+                # Bridge 无控制台（DETACHED_PROCESS 拉起），不补此标志就闪窗。
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             ).stdout
         except (OSError, subprocess.SubprocessError):
             return None

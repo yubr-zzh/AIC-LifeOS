@@ -3,9 +3,11 @@ import {
   bridgeInfo,
   devices,
   pairCode,
+  pickFolder,
   setDelegation,
   startBridge,
   stopBridge,
+  trustFolder,
   unpair,
   type BridgeInfo,
   type DeviceRow,
@@ -41,6 +43,9 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   const [mode, setMode] = useState<PermissionMode>("manual");
   const [cai, setCai] = useState(true);
   const [acknowledgeNoApproval, setAcknowledgeNoApproval] = useState(false);
+  // 改动二：浏览选到信任根外的目录时记下路径，出黄字提示让用户确认。
+  // 手动改输入框就清掉——那条提示只对刚选的目录负责，不能追着用户的新输入瞎报警。
+  const [weiXin, setWeiXin] = useState<string | null>(null);
 
   // ---- 配对（spec 8.1 四步里的第 1 步，剩下三步在用户本机的 Bridge 上做）----
   const [sheBei, setSheBei] = useState<DeviceRow[]>([]);
@@ -78,6 +83,23 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
     }
   };
 
+  // ---- 改动二：原生目录选择 + 信任根确认 ----
+  const liulan = () =>
+    void tiao(async () => {
+      const r = await pickFolder(cwd.trim() || undefined);
+      if (r.path) {
+        setCwd(r.path);
+        setWeiXin(r.inTrustRoot ? null : r.path);
+      }
+    });
+
+  const xinRen = () =>
+    void tiao(async () => {
+      if (!weiXin) return;
+      await trustFolder(weiXin);
+      setWeiXin(null);
+    });
+
   useEffect(() => {
     void tiao(async () => {
       try {
@@ -110,7 +132,11 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   // 判据是 `=== false` 而不是 `!`：新前端连旧 Bridge 时这个键是 `undefined`，
   // `!undefined` 会凭空造出一次「凭据坏了」的假警报（`AgentsResponse` 的注释里
   // 有完整理由）。`undefined` = 不知道，就不响。
-  const credentialsBad = state.catalog?.credentialsReady === false;
+  const geli = state.catalog?.geli;
+  // 改动三：隔离关着（默认形态）时 `credentialsReady` 没有语义——harness
+  // 直用 `~/.claude`，根本没有凭据目录这回事。旧 Bridge（`geli === undefined`）
+  // 维持原判：三态诚实，不知道就不响，但知道要隔离就照旧管。
+  const credentialsBad = geli !== false && state.catalog?.credentialsReady === false;
 
   return (
     <div className="ags">
@@ -145,6 +171,14 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           LifeOS 负责规划，Bridge 负责在你选定的目录里执行。指令、审批和结果都留在本机，
           浏览器拿不到 Bridge 的任何凭据。
         </p>
+        {geli !== undefined ? (
+          <p className="ags-note">
+            运行形态：
+            {geli
+              ? "凭据隔离（每个 LifeOS 用户独立 CLAUDE_CONFIG_DIR，不加载本机配置）"
+              : "直用本机配置（与你手动开终端一致，读得到本地 skills、settings.json、CLAUDE.md）"}
+          </p>
+        ) : null}
         <div className="ags-facts">
           <Fact k="端口" v={info?.port ? String(info.port) : "—"} />
           <Fact k="进程" v={info?.pid ? String(info.pid) : "—"} />
@@ -302,20 +336,42 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
 
           <label className="ags-field">
             <span>工作目录</span>
-            <input
-              list="ags-dirs"
-              value={cwd}
-              placeholder="D:/Github本地/AIC-LifeOS"
-              onChange={(e) => setCwd(e.target.value)}
-            />
+            <div className="ags-cwd-row">
+              <input
+                list="ags-dirs"
+                value={cwd}
+                placeholder="D:/Github本地/AIC-LifeOS"
+                onChange={(e) => {
+                  setCwd(e.target.value);
+                  setWeiXin(null);
+                }}
+              />
+              <button
+                type="button"
+                className="btn-ghost sm"
+                disabled={busy}
+                title="弹本机目录选择窗"
+                onClick={liulan}
+              >
+                浏览…
+              </button>
+            </div>
             <datalist id="ags-dirs">
               {(state.catalog?.suggestedDirs ?? []).map((d) => (
                 <option key={d} value={d} />
               ))}
             </datalist>
             <small>
-              浏览器给不出原生目录选择器。这里的目录必须落在信任根内，否则 Bridge 直接拒绝。
+              点「浏览…」弹本机目录选择窗，也可以手动输入。目录须落在信任根内；信任根外的先出黄字，确认后放行。
             </small>
+            {weiXin ? (
+              <p className="ags-note warn">
+                该目录在信任根外，现在连接会被 Bridge 拒绝。{" "}
+                <button type="button" className="btn-ghost sm" disabled={busy} onClick={xinRen}>
+                  信任此目录
+                </button>
+              </p>
+            ) : null}
           </label>
 
           <label className="ags-field">

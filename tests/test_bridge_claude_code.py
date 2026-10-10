@@ -7,8 +7,10 @@
 
 import asyncio
 import json
+import os
 import sys
 import unittest
+from unittest import mock
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -251,6 +253,85 @@ class HuiLiuTests(unittest.TestCase):
         ad = ClaudeCodeAdapter(None, None)
         r = asyncio.run(ad._deng("Bash", {"command": "ls"}, _quan("t1")))
         self.assertIsInstance(r, PermissionResultDeny)
+
+
+class KaiShiGeLiTests(unittest.TestCase):
+    """改动三（2026-10-10）：`kaishi()` 的 `setting_sources` 随隔离开关分流。
+
+    两个形态都要钉死：关（默认）→ `["user", "project"]`，harness 读用户的
+    CLAUDE.md / skills / settings.json；开（`LIFEOS_GELI` 关名单外的值）→
+    `[]`，退回改动三之前的干净委派。断言打在**传给 `ClaudeSDKClient` 的
+    options 实参**上——自己 new 一个 options 再断言，生产代码怎么写都绿。
+    """
+
+    def _zhen(self, geli_zhi: str):
+        import lifeos.bridge.adapters.claude_code as cc
+        zhuo = []
+
+        class JiaKeHu:
+            def __init__(self, xz):
+                zhuo.append(xz)
+
+            async def connect(self):
+                pass
+
+        ad = ClaudeCodeAdapter(None, None)
+        with mock.patch.object(cc, "ClaudeSDKClient", JiaKeHu), \
+                mock.patch.dict(os.environ, {"LIFEOS_GELI": geli_zhi}):
+            asyncio.run(ad.kaishi({"cwd": "C:/x"}))
+        return zhuo[0]
+
+    def test_guan_ge_li_jia_zai_user_project(self):
+        """隔离关（默认形态）：加载 user + project 两级本机配置。"""
+        xz = self._zhen("")
+        self.assertEqual(xz.setting_sources, ["user", "project"])
+
+    def test_kai_ge_li_hui_dao_kong_lie_biao(self):
+        """隔离开：`LIFEOS_GELI=1` 退回空列表，不加载任何本机配置。"""
+        xz = self._zhen("1")
+        self.assertEqual(xz.setting_sources, [])
+
+
+class KaiShiEnvTests(unittest.TestCase):
+    """回归（2026-10-10）：`kaishi()` 传给 SDK 的 `env` 必须是 dict。
+
+    SDK 0.2.160 里 `ClaudeAgentOptions(env=None)` 会把 None 原样存下，
+    transport 构造子进程环境时 `{**inherited, **options.env}` 抛
+    `TypeError: 'NoneType' object is not a mapping`，被包成
+    `CLIConnectionError: Failed to start Claude Code: ...`——前端一开
+    会话必报的错。三种入参形态全部钉死：不传、传空、传值。
+    """
+
+    def _zhen(self, qing_qiu: dict):
+        import lifeos.bridge.adapters.claude_code as cc
+        zhuo = []
+
+        class JiaKeHu:
+            def __init__(self, xz):
+                zhuo.append(xz)
+
+            async def connect(self):
+                pass
+
+        ad = ClaudeCodeAdapter(None, None)
+        with mock.patch.object(cc, "ClaudeSDKClient", JiaKeHu):
+            asyncio.run(ad.kaishi(qing_qiu))
+        return zhuo[0]
+
+    def test_huan_jing_bu_chuan_ye_yao_dao_dict(self):
+        """请求体不带 env（前端默认形态）：SDK 收到空 dict，不是 None。"""
+        xz = self._zhen({"cwd": "C:/x"})
+        self.assertIsInstance(xz.env, dict)
+        self.assertEqual(xz.env, {})
+
+    def test_huan_jing_chuan_kong_dict(self):
+        xz = self._zhen({"cwd": "C:/x", "env": {}})
+        self.assertEqual(xz.env, {})
+
+    def test_huan_jing_chuan_zhi_yuan_yang_tou_di(self):
+        """增量语义不破：传了就原样给 SDK（SDK 负责叠加在 os.environ 上）。"""
+        xz = self._zhen({"cwd": "C:/x", "env": {"CLAUDE_CONFIG_DIR": "D:/cfg"}})
+        self.assertEqual(xz.env, {"CLAUDE_CONFIG_DIR": "D:/cfg"})
 
 
 class MoShiTests(unittest.TestCase):

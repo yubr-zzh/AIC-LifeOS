@@ -167,9 +167,12 @@ class ZiChengAdapter(AgentAdapter):
             return {"available": False, "version": None, "sdkVersion": None,
                     "error": f"本机找不到 {ming}"}
         try:
+            # 探测跑在请求线程，不走 `_qi_chi_cheng`，creationflags 要单独带
+            # （同 `_chuang_kong`：Bridge 无控制台，不带就闪窗）。
             chu = subprocess.run([lu] + list(self.CE_WU_TOU),
                                  capture_output=True, text=True, timeout=15,
-                                 encoding="utf-8", errors="replace")
+                                 encoding="utf-8", errors="replace",
+                                 creationflags=self._chuang_kong().get("creationflags", 0))
         except (OSError, subprocess.SubprocessError) as e:
             return {"available": False, "version": lu, "sdkVersion": None,
                     "error": f"{type(e).__name__}: {e}"}
@@ -302,11 +305,17 @@ class ZiChengAdapter(AgentAdapter):
 
         常量在 `subprocess` 里而不是 `asyncio.subprocess`——后者只是把前者
         re-export 了 `PIPE` / `STDOUT` 那几个，creationflags 没有。
+
+        `CREATE_NO_WINDOW`（2026-10-10 追加）：Bridge 由主服务以
+        `DETACHED_PROCESS` 拉起（`bridge_admin.py`），自身无控制台；子进程
+        继承不到控制台时会自开一个新窗口，跑完即关——网页上表现为连续闪现
+        的终端窗。加此标志后子进程拿一个不可见的控制台，窗口不再闪现；
+        它不影响进程组语义，kill 收整棵树的行为照旧。
         """
         import subprocess as sp
         import sys
         if sys.platform == "win32":
-            return {"creationflags": sp.CREATE_NEW_PROCESS_GROUP}
+            return {"creationflags": sp.CREATE_NO_WINDOW | sp.CREATE_NEW_PROCESS_GROUP}
         return {}
 
     async def _du_zhan(self) -> None:

@@ -383,6 +383,16 @@ export interface AgentsResponse {
    * 混起来会把「建不出目录」显示成「没装 claude」——给错提示比不给提示更糟。
    */
   credentialsReady?: boolean;
+  /**
+   * Bridge 的凭据/配置隔离开着吗（改动三，2026-10-10，`LIFEOS_GELI` 开关）。
+   *
+   * 同样**刻意可选**：新前端连旧 Bridge 时是 `undefined` = 不知道，
+   * 界面对它保持沉默（与 `credentialsReady` 同一个三态理由）。
+   * `false`（默认形态）时 harness 直用本机配置——读得到本地 skills、
+   * settings.json、CLAUDE.md——`credentialsReady` 对这种形态没有语义，
+   * 前端**不许**再为它弹「重新登录」的警报；`true` 才回到隔离形态。
+   */
+  geli?: boolean;
   versionGate: VersionGate;
 }
 

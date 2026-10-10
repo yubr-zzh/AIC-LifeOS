@@ -156,6 +156,23 @@ export const unpair = (deviceId: string) =>
 export const devices = () =>
   xinMa().then((c) => get2<{ devices: DeviceRow[] }>("/api/bridge/devices", c));
 
+// ---- 改动二（2026-10-10）：原生目录选择 + 信任根确认 ----
+
+export interface PickFolderResult {
+  /** 所选目录；null = 用户取消了对话框（此时输入框不动）。 */
+  path: string | null;
+  /** 只在 path 非 null 时有意义：所选目录是否已落在信任根内。 */
+  inTrustRoot: boolean;
+}
+
+/** 弹本机原生「选择文件夹」对话框。Bridge 侧弹，请求会挂到对话框关闭才返回。 */
+export const pickFolder = (startIn?: string) =>
+  post<PickFolderResult>("/pick-folder", { startIn: startIn || undefined });
+
+/** 用户确认后，把信任根外的目录追加进 Bridge 的信任根（闸门 3 的白名单）。 */
+export const trustFolder = (path: string) =>
+  post<{ ok: boolean; path: string }>("/trust-folder", { path });
+
 export const health = () =>
   get<{ ok: boolean; pid: number; uptimeSec: number; version: string; instanceId: string }>("/health");
 

@@ -39,6 +39,29 @@ from claude_agent_sdk import (
 )
 
 from lifeos.bridge.adapters.base import AgentAdapter
+from lifeos.bridge.pingju import gel as _ge_li
+
+# **SDK 子进程窗口闪现的修补（2026-10-10）。**
+# Bridge 由主服务以 `DETACHED_PROCESS` 拉起，自身无控制台；SDK 经
+# `anyio.open_process` spawn 的 claude CLI 继承不到控制台就自开一个新窗口，
+# 跑完即关——网页上表现为闪现的终端窗。SDK 不暴露 creationflags，故在
+# 模块加载时对 `anyio.open_process` 做一次性包装：win32 上补
+# `CREATE_NO_WINDOW`，其余平台原样透传。只影响本进程，不改 SDK 文件。
+# 依据：anyio 的 asyncio 后端把多余 kwargs 透传给
+# `asyncio.create_subprocess_exec`，与 SDK 调用处的参数不冲突。
+import anyio as _anyio
+import sys as _sys
+
+_yuan_open_process = _anyio.open_process
+
+
+def _open_process(*a: Any, **kw: Any) -> Any:
+    if _sys.platform == "win32":
+        kw["creationflags"] = kw.get("creationflags", 0) | 0x08000000  # CREATE_NO_WINDOW
+    return _yuan_open_process(*a, **kw)
+
+
+_anyio.open_process = _open_process
 
 # 方案 9.3：max_turns 取 200。单条委派指令是「有明确终点的任务」，
 # 200 轮足够；再高说明指令拆分本身有问题。
@@ -142,8 +165,13 @@ class ClaudeCodeAdapter(AgentAdapter):
         except md.PackageNotFoundError:
             pass
         try:
+            kw: dict[str, Any] = {}
+            if _sys.platform == "win32":
+                # Bridge 无控制台（DETACHED_PROCESS 拉起），探测子进程不补
+                # CREATE_NO_WINDOW 就会在桌面闪现终端窗。
+                kw["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
             chu = subprocess.run(["claude", "--version"], capture_output=True,
-                                 text=True, timeout=10)
+                                 text=True, timeout=10, **kw)
             m = _re.search(r"(\d+\.\d+\.\d+)", chu.stdout or "")
             cli = m.group(1) if m else None
         except (OSError, subprocess.SubprocessError):
@@ -170,16 +198,24 @@ class ClaudeCodeAdapter(AgentAdapter):
             # `ZHUAN_SHANG` 下面那段）：不下发这个参数 → `ClaudeAgentOptions`
             # 用它自己的默认 `None` → SDK 不往 CLI 塞 `--max-budget-usd`。
             # 请求体里的 `maxBudgetUsd` 也**故意不读**——详见顶部那段。
-            # 空列表：不加载用户的 CLAUDE.md / skills / plugins / hooks。
-            # 实测（spike 报告第 2 节）不丢上下文，收益是委派环境干净可预测。
-            setting_sources=[],
+            # 改动三（2026-10-10）：隔离关（默认）时加载 user + project 两级——
+            # CLAUDE.md、skills、settings.json 全部生效，harness 表现得像用户
+            # 自己开的终端。只有 `LIFEOS_GELI=1` 回到空列表：不加载用户的
+            # 任何本机配置（spike 报告第 2 节实测不丢上下文），委派环境干净
+            # 可预测——多人共用一台机器时才值得付这个代价。
+            setting_sources=[] if _ge_li() else ["user", "project"],
             resume=a1.get("resume"),
             # 凭据隔离（spec 11.2）。不传时 SDK 走 `~/.claude`，多人共用一台
             # 机器就是共用凭据（15.5 点名的风险）。传的是**增量**：SDK 把
             # options.env 展开在继承来的 os.environ 之后（只覆盖同名键），
             # 所以只给 CLAUDE_CONFIG_DIR 不会把 SYSTEMROOT/PATH 抹掉。
-            # `or None` 是为了让「没传」与「传空」在日志里长得一样。
-            env=a1.get("env") or None,
+            # **必须归一成 dict，绝不能传 None。** SDK 0.2.160 的
+            # `ClaudeAgentOptions.env` 默认是空 dict，但显式传 None 会被
+            # dataclass 原样存下；transport 里 `{**inherited, **options.env}`
+            # 随即 `TypeError: 'NoneType' object is not a mapping`，被包成
+            # `CLIConnectionError: Failed to start Claude Code` —— 前端连
+            # 后端一开会话就报的那个错（2026-10-10 实测复现）。
+            env=a1.get("env") or {},
         ))
         await self.kehu.connect()
         self.guan_le = False
