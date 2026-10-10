@@ -42,3 +42,9 @@ venv/
 *.temp
 ~$*.pptx
 .lifeos/
+
+# CodeGraph index
+.codegraph/
+
+# OMC / agent session runtime state
+.omc/

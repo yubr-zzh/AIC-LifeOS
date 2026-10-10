@@ -209,8 +209,13 @@ class ClaudeCodeAdapter(AgentAdapter):
             # 机器就是共用凭据（15.5 点名的风险）。传的是**增量**：SDK 把
             # options.env 展开在继承来的 os.environ 之后（只覆盖同名键），
             # 所以只给 CLAUDE_CONFIG_DIR 不会把 SYSTEMROOT/PATH 抹掉。
-            # `or None` 是为了让「没传」与「传空」在日志里长得一样。
-            env=a1.get("env") or None,
+            # **必须归一成 dict，绝不能传 None。** SDK 0.2.160 的
+            # `ClaudeAgentOptions.env` 默认是空 dict，但显式传 None 会被
+            # dataclass 原样存下；transport 里 `{**inherited, **options.env}`
+            # 随即 `TypeError: 'NoneType' object is not a mapping`，被包成
+            # `CLIConnectionError: Failed to start Claude Code` —— 前端连
+            # 后端一开会话就报的那个错（2026-10-10 实测复现）。
+            env=a1.get("env") or {},
         ))
         await self.kehu.connect()
         self.guan_le = False

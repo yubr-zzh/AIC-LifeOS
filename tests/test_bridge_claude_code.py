@@ -292,6 +292,48 @@ class KaiShiGeLiTests(unittest.TestCase):
         self.assertEqual(xz.setting_sources, [])
 
 
+class KaiShiEnvTests(unittest.TestCase):
+    """回归（2026-10-10）：`kaishi()` 传给 SDK 的 `env` 必须是 dict。
+
+    SDK 0.2.160 里 `ClaudeAgentOptions(env=None)` 会把 None 原样存下，
+    transport 构造子进程环境时 `{**inherited, **options.env}` 抛
+    `TypeError: 'NoneType' object is not a mapping`，被包成
+    `CLIConnectionError: Failed to start Claude Code: ...`——前端一开
+    会话必报的错。三种入参形态全部钉死：不传、传空、传值。
+    """
+
+    def _zhen(self, qing_qiu: dict):
+        import lifeos.bridge.adapters.claude_code as cc
+        zhuo = []
+
+        class JiaKeHu:
+            def __init__(self, xz):
+                zhuo.append(xz)
+
+            async def connect(self):
+                pass
+
+        ad = ClaudeCodeAdapter(None, None)
+        with mock.patch.object(cc, "ClaudeSDKClient", JiaKeHu):
+            asyncio.run(ad.kaishi(qing_qiu))
+        return zhuo[0]
+
+    def test_huan_jing_bu_chuan_ye_yao_dao_dict(self):
+        """请求体不带 env（前端默认形态）：SDK 收到空 dict，不是 None。"""
+        xz = self._zhen({"cwd": "C:/x"})
+        self.assertIsInstance(xz.env, dict)
+        self.assertEqual(xz.env, {})
+
+    def test_huan_jing_chuan_kong_dict(self):
+        xz = self._zhen({"cwd": "C:/x", "env": {}})
+        self.assertEqual(xz.env, {})
+
+    def test_huan_jing_chuan_zhi_yuan_yang_tou_di(self):
+        """增量语义不破：传了就原样给 SDK（SDK 负责叠加在 os.environ 上）。"""
+        xz = self._zhen({"cwd": "C:/x", "env": {"CLAUDE_CONFIG_DIR": "D:/cfg"}})
+        self.assertEqual(xz.env, {"CLAUDE_CONFIG_DIR": "D:/cfg"})
+
+
 class MoShiTests(unittest.TestCase):
     """3.5：模式映射与白名单。"""
 

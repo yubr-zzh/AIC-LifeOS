@@ -365,9 +365,12 @@ class ZhuangPeiTest(unittest.TestCase):
             loop.run_until_complete(_pao({"cwd": "."}))
         finally:
             loop.close()
-        # 不传时必须是 None 而不是 {}：{} 在 SDK 的 process_env 展开里
-        # 与 None 等价，但 None 同时是「调用方没意见」的诚实表示。
-        self.assertIsNone(kan.get("env"))
+        # 不传时归一为空 dict。旧断言 None 是 bug 现场：SDK 0.2.160 的
+        # transport 在 `{**inherited, **options.env}` 处对 None 抛
+        # `TypeError: 'NoneType' object is not a mapping`，被包成
+        # `CLIConnectionError: Failed to start Claude Code`——
+        # 前端连后端一开会话必报（2026-10-10 实锤）。
+        self.assertEqual(kan.get("env"), {})
 
 
 class RunTest(unittest.TestCase):
