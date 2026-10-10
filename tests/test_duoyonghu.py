@@ -724,6 +724,10 @@ class GeLiTest(unittest.TestCase):
     凭据目录按 `pingju.huan_jing(uid)` 建，归属按 `_yong()` 读
     `BridgeServer.yong_hu` 判。两者是**两个独立字段**，分叉了不会有人报错：
     现象是「alice 的会话用 bob 的凭据跑」，而隔离与归属**各自都绿**。
+
+    改动三（2026-10-10）后隔离**默认关**：本类凭据侧用例默认在
+    `LIFEOS_GELI=1` 下跑（钉被原样保留的隔离形态），默认关的注入形态由
+    `test_guan_ge_li_shi_env_wei_None_dan_yong_hu_reng_zhu_ru` 钉。
     """
 
     @classmethod
@@ -737,11 +741,20 @@ class GeLiTest(unittest.TestCase):
         cls.duan = _qi()
         cls.fu = BridgeServer(("127.0.0.1", cls.duan), cls.z, cls.h, cls.g, cls.token)
         cls.fu.yong_hu = "alice"
+        # 注册表削到只剩 echo（本类所有 /sessions 也只用 echo）。`/agents` 本会
+        # 串行探测全部真 CLI——本机实测一轮 ≈9 秒（hermes 一项就 4 秒+），而
+        # 本类 /agents 用例断言的 credentialsReady / 目录归属与本机装了什么
+        # CLI 无关；真探测只会让 5 秒的客户端超时在机器一忙时随机炸。
+        from lifeos.bridge.adapters.echo import EchoAdapter
+        from lifeos.bridge.http import ZHU_CE_QI
+        cls._zhuce = mock.patch.dict(ZHU_CE_QI, {"echo": EchoAdapter}, clear=True)
+        cls._zhuce.start()
         threading.Thread(target=cls.fu.serve_forever, daemon=True).start()
         deng_dai(lambda: duan_ke(cls.duan), chao=5.0, msg=f"端口 {cls.duan} 连不上")
 
     @classmethod
     def tearDownClass(cls):
+        cls._zhuce.stop()
         cls.fu.shutdown()
         cls.fu.server_close()
 
@@ -783,8 +796,12 @@ class GeLiTest(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read().decode("utf-8"))
 
-    def _zhen(self, a1: dict):
+    def _zhen(self, a1: dict, ge_li: bool = True):
         """真跑一遍 `run.zhen_ben`，返回它建出来的 BridgeServer。
+
+        `ge_li`：在 `LIFEOS_GELI=1`（隔离开，改动三前的旧形态）还是关名单值
+        `""`（改动三后的默认形态）下跑。关形态必须**显式**设关名单值而不是
+        「不设」——外层环境可能残留 `LIFEOS_GELI`，只有钉一个值进去才测得死。
 
         **要真跑而不是自己拼一个 server 赋值**：这层护栏守的正是
         `run.py:327-330` 那两行。手工 new 一个 server、把同一个字面量赋给
@@ -817,7 +834,9 @@ class GeLiTest(unittest.TestCase):
         for n in ("zong", "hua", "shen", "token", "shen_qing", "ri"):
             self.addCleanup(setattr, BridgeHandler, n, getattr(BridgeHandler, n))
             setattr(BridgeHandler, n, None)
+        huan = {"LIFEOS_GELI": "1"} if ge_li else {"LIFEOS_GELI": ""}
         with mock.patch.object(run, "DK", 0), \
+                mock.patch.dict(os.environ, huan), \
                 mock.patch.object(pingju, "PINGJU_GEN", gen / "users"):
             fu, _ = run.zhen_ben(gen, 0)
         self.addCleanup(fu.server_close)
@@ -887,6 +906,16 @@ class GeLiTest(unittest.TestCase):
                     gen / pingju.mu_lu_ming(fu.yong_hu),
                     f"runtime.json={xian} 时 env 与 yong_hu 不同源")
                 fu.server_close()
+
+    def test_guan_ge_li_shi_env_wei_None_dan_yong_hu_reng_zhu_ru(self):
+        """改动三：隔离关（默认）时 `fu.env` 是 None——SDK 逐字继承本进程
+        os.environ，CLI 直用 `~/.claude`；但 `yong_hu` 照旧注入（懒恢复的
+        归属迁移靠它，与凭据无关），且 `users/` 根下一个目录都不建。"""
+        fu, gen = self._zhen({"userId": "alice"}, ge_li=False)
+        self.assertIsNone(fu.env)
+        self.assertEqual(fu.yong_hu, "alice",
+                         "去隔离形态下 uid 仍要注入：归属与懒恢复还靠它")
+        self.assertFalse(gen.exists(), "隔离关着时 users/ 下不该落任何目录")
 
     # ---- 衔接 2：Bridge 侧身份来自 runtime.json，不是 LIFEOS_USER ----
     def test_shen_fen_lai_zi_yun_xing_shi_bu_shi_huan_jing(self):
@@ -1042,7 +1071,8 @@ class GeLiTest(unittest.TestCase):
         标志修回来」，补丁不包住它就验不到重试。
         """
         gen = Path(self.mu.name)
-        with mock.patch.object(pingju, "PINGJU_GEN", gen):
+        with mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"}), \
+                mock.patch.object(pingju, "PINGJU_GEN", gen):
             s, d = self._get("/agents", {"token": self.token})
             self.assertEqual(s, 200, d)
             self.assertIs(d["credentialsReady"], True, d)
@@ -1071,7 +1101,8 @@ class GeLiTest(unittest.TestCase):
         """
         self.fu.yong_hu = "bob"
         gen = Path(self.mu.name)
-        with mock.patch.object(pingju, "PINGJU_GEN", gen):
+        with mock.patch.dict(os.environ, {"LIFEOS_GELI": "1"}), \
+                mock.patch.object(pingju, "PINGJU_GEN", gen):
             s, d = self._get("/agents", {"token": self.token})
         self.assertEqual(s, 200, d)
         self.assertTrue((gen / pingju.mu_lu_ming("bob")).is_dir(),

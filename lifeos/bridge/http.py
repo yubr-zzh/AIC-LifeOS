@@ -432,7 +432,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         混进 `available` 会让前端把「建不出凭据目录」显示成「没装 claude」——
         两者的处置完全不同（装软件 vs 改磁盘权限），给错提示比不给提示更糟。
 
-        **每次请求现场重跑一次 `huan_jing`**（阶段 6 必修 3）。不重试的话这个
+        **每次请求现场重跑一次 `huan_jing`**（阶段 6 必修 3）——**仅在隔离开时**
+        （改动三，2026-10-10）：`gel()` 为 False 时 `huan_jing` 整个不调，
+        `~/.lifeos-bridge/users/` 下一个字节都不落，`JIAN_BING_CHENG_GONG`
+        保持默认 True。不重试的话这个
         标志是**启动那一刻的快照**，缺陷双向：启动时磁盘满 → 用户腾完空间、
         Bridge 没重启，告警永远挂着；反过来运行中目录被删 → 标志仍为 true，
         界面一声不吭，用户照样落到空库、重新登录——正是要消灭的症状。
@@ -442,8 +445,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         （`AgentsSection` 里唯一的 `setInterval` 是那行 1 秒的倒计时）；而这个
         端点本来每次就起一个 `claude --version` 子进程（`tanjian()`），多一个
         幂等的 `mkdir(exist_ok=True)` 与零到一次 icacls/chmod 不改变量级。
+
+        响应新增 `geli` 字段（改动三）：前端据此决定要不要关心
+        `credentialsReady`——隔离关着时它没有语义，前端不许再为它报警。
         """
-        pingju.huan_jing(self.server.yong_hu)
+        geli = pingju.gel()
+        if geli:
+            pingju.huan_jing(self.server.yong_hu)
         out = []
         for agentId, cls in ZHU_CE_QI.items():
             if agentId == "echo":
@@ -478,6 +486,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             }
             out.append(xian)
         self._json({"agents": out, "suggestedDirs": [str(self.shen.gen)],
+                    "geli": geli,
                     "credentialsReady": pingju.JIAN_BING_CHENG_GONG,
                     "versionGate": self.server.ren_men()})
 

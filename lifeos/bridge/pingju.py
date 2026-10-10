@@ -60,6 +60,24 @@ _LOG = logging.getLogger("bridge.pingju")
 # **默认 True**：没跑过 `huan_jing` 时（单测直接 new BridgeServer）不该报故障。
 JIAN_BING_CHENG_GONG = True
 
+# 隔离开关的「关」名单（改动三，2026-10-10）。**默认就是关**：改动三要的是
+# harness 像用户自己开的终端一样直用本机配置——读得到本地 skills、
+# settings.json、CLAUDE.md，凭据也直接走 `~/.claude`，不再建每用户目录。
+# 名单外的任何非空值都算「开」——解析从宽：用户拼错成 `ture` 时宁可
+# 多隔离（行为退回改动三之前），也不能悄悄裸跑。
+GE_LIE_WAI = {"", "0", "false", "no", "off"}
+
+
+def gel() -> bool:
+    """凭据/配置隔离开着吗（改动三）。
+
+    唯一来源是环境变量 `LIFEOS_GELI`：不设或设成关名单里的值 → 关（默认）；
+    其余非空值 → 开，整个 Bridge 退回 11.2 的旧形态（每用户
+    `CLAUDE_CONFIG_DIR` + 不加载用户本机配置）。`run.py`、`http.py`
+    与 claude_code 适配器都只认这一个函数，别处不得复读环境变量。
+    """
+    return (os.environ.get("LIFEOS_GELI") or "").strip().lower() not in GE_LIE_WAI
+
 
 def jie_shang() -> None:
     """把 `bridge.pingju` 挂到 `bridge.access` 的 handler 上。

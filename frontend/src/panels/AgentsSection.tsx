@@ -132,7 +132,11 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   // 判据是 `=== false` 而不是 `!`：新前端连旧 Bridge 时这个键是 `undefined`，
   // `!undefined` 会凭空造出一次「凭据坏了」的假警报（`AgentsResponse` 的注释里
   // 有完整理由）。`undefined` = 不知道，就不响。
-  const credentialsBad = state.catalog?.credentialsReady === false;
+  const geli = state.catalog?.geli;
+  // 改动三：隔离关着（默认形态）时 `credentialsReady` 没有语义——harness
+  // 直用 `~/.claude`，根本没有凭据目录这回事。旧 Bridge（`geli === undefined`）
+  // 维持原判：三态诚实，不知道就不响，但知道要隔离就照旧管。
+  const credentialsBad = geli !== false && state.catalog?.credentialsReady === false;
 
   return (
     <div className="ags">
@@ -167,6 +171,14 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           LifeOS 负责规划，Bridge 负责在你选定的目录里执行。指令、审批和结果都留在本机，
           浏览器拿不到 Bridge 的任何凭据。
         </p>
+        {geli !== undefined ? (
+          <p className="ags-note">
+            运行形态：
+            {geli
+              ? "凭据隔离（每个 LifeOS 用户独立 CLAUDE_CONFIG_DIR，不加载本机配置）"
+              : "直用本机配置（与你手动开终端一致，读得到本地 skills、settings.json、CLAUDE.md）"}
+          </p>
+        ) : null}
         <div className="ags-facts">
           <Fact k="端口" v={info?.port ? String(info.port) : "—"} />
           <Fact k="进程" v={info?.pid ? String(info.pid) : "—"} />

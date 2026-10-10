@@ -39,6 +39,7 @@ from claude_agent_sdk import (
 )
 
 from lifeos.bridge.adapters.base import AgentAdapter
+from lifeos.bridge.pingju import gel as _ge_li
 
 # **SDK 子进程窗口闪现的修补（2026-10-10）。**
 # Bridge 由主服务以 `DETACHED_PROCESS` 拉起，自身无控制台；SDK 经
@@ -197,9 +198,12 @@ class ClaudeCodeAdapter(AgentAdapter):
             # `ZHUAN_SHANG` 下面那段）：不下发这个参数 → `ClaudeAgentOptions`
             # 用它自己的默认 `None` → SDK 不往 CLI 塞 `--max-budget-usd`。
             # 请求体里的 `maxBudgetUsd` 也**故意不读**——详见顶部那段。
-            # 空列表：不加载用户的 CLAUDE.md / skills / plugins / hooks。
-            # 实测（spike 报告第 2 节）不丢上下文，收益是委派环境干净可预测。
-            setting_sources=[],
+            # 改动三（2026-10-10）：隔离关（默认）时加载 user + project 两级——
+            # CLAUDE.md、skills、settings.json 全部生效，harness 表现得像用户
+            # 自己开的终端。只有 `LIFEOS_GELI=1` 回到空列表：不加载用户的
+            # 任何本机配置（spike 报告第 2 节实测不丢上下文），委派环境干净
+            # 可预测——多人共用一台机器时才值得付这个代价。
+            setting_sources=[] if _ge_li() else ["user", "project"],
             resume=a1.get("resume"),
             # 凭据隔离（spec 11.2）。不传时 SDK 走 `~/.claude`，多人共用一台
             # 机器就是共用凭据（15.5 点名的风险）。传的是**增量**：SDK 把

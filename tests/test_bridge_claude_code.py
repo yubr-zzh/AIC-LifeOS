@@ -7,8 +7,10 @@
 
 import asyncio
 import json
+import os
 import sys
 import unittest
+from unittest import mock
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -251,6 +253,43 @@ class HuiLiuTests(unittest.TestCase):
         ad = ClaudeCodeAdapter(None, None)
         r = asyncio.run(ad._deng("Bash", {"command": "ls"}, _quan("t1")))
         self.assertIsInstance(r, PermissionResultDeny)
+
+
+class KaiShiGeLiTests(unittest.TestCase):
+    """改动三（2026-10-10）：`kaishi()` 的 `setting_sources` 随隔离开关分流。
+
+    两个形态都要钉死：关（默认）→ `["user", "project"]`，harness 读用户的
+    CLAUDE.md / skills / settings.json；开（`LIFEOS_GELI` 关名单外的值）→
+    `[]`，退回改动三之前的干净委派。断言打在**传给 `ClaudeSDKClient` 的
+    options 实参**上——自己 new 一个 options 再断言，生产代码怎么写都绿。
+    """
+
+    def _zhen(self, geli_zhi: str):
+        import lifeos.bridge.adapters.claude_code as cc
+        zhuo = []
+
+        class JiaKeHu:
+            def __init__(self, xz):
+                zhuo.append(xz)
+
+            async def connect(self):
+                pass
+
+        ad = ClaudeCodeAdapter(None, None)
+        with mock.patch.object(cc, "ClaudeSDKClient", JiaKeHu), \
+                mock.patch.dict(os.environ, {"LIFEOS_GELI": geli_zhi}):
+            asyncio.run(ad.kaishi({"cwd": "C:/x"}))
+        return zhuo[0]
+
+    def test_guan_ge_li_jia_zai_user_project(self):
+        """隔离关（默认形态）：加载 user + project 两级本机配置。"""
+        xz = self._zhen("")
+        self.assertEqual(xz.setting_sources, ["user", "project"])
+
+    def test_kai_ge_li_hui_dao_kong_lie_biao(self):
+        """隔离开：`LIFEOS_GELI=1` 退回空列表，不加载任何本机配置。"""
+        xz = self._zhen("1")
+        self.assertEqual(xz.setting_sources, [])
 
 
 class MoShiTests(unittest.TestCase):
