@@ -453,7 +453,9 @@ def _ban_ben(a1: str) -> str | None:
 
         try:
             out = subprocess.run(
-                ["claude", "--version"], capture_output=True, text=True, timeout=10
+                ["claude", "--version"], capture_output=True, text=True, timeout=10,
+                # Bridge 无控制台（DETACHED_PROCESS 拉起），不补此标志就闪窗。
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             ).stdout
         except (OSError, subprocess.SubprocessError):
             return None

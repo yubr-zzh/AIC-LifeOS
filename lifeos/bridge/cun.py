@@ -71,6 +71,8 @@ def shou_quan(a1: Path) -> None:
         r = subprocess.run(
             ["icacls", str(a1), "/inheritance:r", "/grant:r", f"{user}:M"],
             capture_output=True, timeout=10, check=False,
+            # Bridge 无控制台（DETACHED_PROCESS 拉起），不补此标志就闪窗。
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if r.returncode != 0:
             # icacls 在中文 Windows 上输出 GBK，按 UTF-8 解出来是乱码；

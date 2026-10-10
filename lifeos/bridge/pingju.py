@@ -166,7 +166,9 @@ def _shou_quan(a1: Path) -> None:
         return
     r = subprocess.run(
         ["icacls", str(a1), "/inheritance:r", "/grant:r", f"{user}:(OI)(CI)M"],
-        capture_output=True, timeout=SHI_XIAN, check=False)
+        capture_output=True, timeout=SHI_XIAN, check=False,
+        # Bridge 无控制台（DETACHED_PROCESS 拉起），不补此标志就闪窗。
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if r.returncode != 0:
         # icacls 在中文 Windows 上输出 GBK，按 UTF-8 解出来是乱码；
         # 而这条告警的全部价值就是让人看懂为什么没收紧。

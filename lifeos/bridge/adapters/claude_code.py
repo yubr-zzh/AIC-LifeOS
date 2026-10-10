@@ -40,6 +40,28 @@ from claude_agent_sdk import (
 
 from lifeos.bridge.adapters.base import AgentAdapter
 
+# **SDK 子进程窗口闪现的修补（2026-10-10）。**
+# Bridge 由主服务以 `DETACHED_PROCESS` 拉起，自身无控制台；SDK 经
+# `anyio.open_process` spawn 的 claude CLI 继承不到控制台就自开一个新窗口，
+# 跑完即关——网页上表现为闪现的终端窗。SDK 不暴露 creationflags，故在
+# 模块加载时对 `anyio.open_process` 做一次性包装：win32 上补
+# `CREATE_NO_WINDOW`，其余平台原样透传。只影响本进程，不改 SDK 文件。
+# 依据：anyio 的 asyncio 后端把多余 kwargs 透传给
+# `asyncio.create_subprocess_exec`，与 SDK 调用处的参数不冲突。
+import anyio as _anyio
+import sys as _sys
+
+_yuan_open_process = _anyio.open_process
+
+
+def _open_process(*a: Any, **kw: Any) -> Any:
+    if _sys.platform == "win32":
+        kw["creationflags"] = kw.get("creationflags", 0) | 0x08000000  # CREATE_NO_WINDOW
+    return _yuan_open_process(*a, **kw)
+
+
+_anyio.open_process = _open_process
+
 # 方案 9.3：max_turns 取 200。单条委派指令是「有明确终点的任务」，
 # 200 轮足够；再高说明指令拆分本身有问题。
 ZHUAN_SHANG = 200
@@ -142,8 +164,13 @@ class ClaudeCodeAdapter(AgentAdapter):
         except md.PackageNotFoundError:
             pass
         try:
+            kw: dict[str, Any] = {}
+            if _sys.platform == "win32":
+                # Bridge 无控制台（DETACHED_PROCESS 拉起），探测子进程不补
+                # CREATE_NO_WINDOW 就会在桌面闪现终端窗。
+                kw["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
             chu = subprocess.run(["claude", "--version"], capture_output=True,
-                                 text=True, timeout=10)
+                                 text=True, timeout=10, **kw)
             m = _re.search(r"(\d+\.\d+\.\d+)", chu.stdout or "")
             cli = m.group(1) if m else None
         except (OSError, subprocess.SubprocessError):
