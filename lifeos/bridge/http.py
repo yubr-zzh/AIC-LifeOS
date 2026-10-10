@@ -68,6 +68,105 @@ HTML_PEI = """<!doctype html>
 """
 
 
+def xuan_mulu_tk(qi: str | None) -> str | None:
+    """Windows 原生「选择文件夹」对话框，返回所选目录或 None（取消/失败）。
+
+    纯 ctypes 直调 IFileDialog（FOS_PICKFOLDERS），不引新依赖。
+    不用 tkinter：它的 askdirectory 在非主线程弹窗不可靠，而这里
+    永远跑在 HTTPServer 的请求线程上。任何一步 COM 出错或用户取消
+    都静默返回 None——调用方在请求线程里，这里抛异常就是 500。
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        import uuid as _uuid
+        from ctypes import POINTER, WINFUNCTYPE, Structure, byref, c_ubyte, c_void_p, c_wchar_p
+        from ctypes import wintypes
+
+        class _GUID(Structure):
+            _fields_ = [("d1", wintypes.DWORD), ("d2", wintypes.WORD),
+                        ("d3", wintypes.WORD), ("d4", c_ubyte * 8)]
+
+        def _guid(s: str) -> _GUID:
+            b = _uuid.UUID(s).bytes
+            # Data1-3 是小端整型，Data4 是原样字节——与 UUID 字符串布局一致
+            return _GUID(int.from_bytes(b[0:4], "little"),
+                         int.from_bytes(b[4:6], "little"),
+                         int.from_bytes(b[6:8], "little"),
+                         (c_ubyte * 8).from_buffer_copy(b[8:]))
+
+        ole32 = ctypes.WinDLL("ole32")
+        shell32 = ctypes.WinDLL("shell32")
+
+        def _fa(p, i, restype, *args):
+            """取 COM 对象 vtable 第 i 个方法指针。COM 传参按 stdcall（x64 下同形）。"""
+            ft = WINFUNCTYPE(restype, *args)
+            return ft(ctypes.cast(p, POINTER(c_void_p))[i])
+
+        CLSCTX_INPROC_SERVER = 1
+        FOS_PICKFOLDERS = 0x20
+        FOS_FORCEFILESYSTEM = 0x40
+        SIGDN_FILESYSPATH = 0x80058000
+        COINIT_APARTMENTTHREADED = 0x2
+        RPC_E_CHANGED_MODE = 0x80010106
+
+        hr = ole32.CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+        # RPC_E_CHANGED_MODE：线程已被初始化成 MTA，照样能用，只是不该再 Uninit
+        chu = hr == 0
+        if hr != 0 and hr != RPC_E_CHANGED_MODE:
+            return None
+        try:
+            dlg = c_void_p()
+            hr = ole32.CoCreateInstance(
+                byref(_guid("{DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7}")), None,
+                CLSCTX_INPROC_SERVER,
+                byref(_guid("{D57C7288-D4AD-4768-BE02-9D969532D960}")), byref(dlg))
+            if hr != 0 or not dlg:
+                return None
+            try:
+                SetOptions = _fa(dlg, 9, ctypes.HRESULT, c_void_p, wintypes.DWORD)
+                if SetOptions(dlg, FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM) != 0:
+                    return None
+                if qi:
+                    item = c_void_p()
+                    hr = shell32.SHCreateItemFromParsingName(
+                        c_wchar_p(qi), None,
+                        byref(_guid("{43826D1E-E718-42EE-BC55-A1E261C37BFE}")),
+                        byref(item))
+                    if hr == 0 and item:
+                        _fa(dlg, 11, ctypes.HRESULT, c_void_p, c_void_p)(dlg, item)
+                        _fa(item, 2, wintypes.ULONG, c_void_p)(item)  # Release
+                # Show 挂起请求线程直到对话框关掉——这正是「弹原生窗口」的语义
+                if _fa(dlg, 3, ctypes.HRESULT, c_void_p, c_void_p)(dlg, None) != 0:
+                    return None  # 用户取消是 0x800704C7，统一按未选处理
+                res = c_void_p()
+                GetResult = _fa(dlg, 16, ctypes.HRESULT, c_void_p, POINTER(c_void_p))
+                if GetResult(dlg, byref(res)) != 0 or not res:
+                    return None
+                try:
+                    name = c_wchar_p()
+                    GetDisplayName = _fa(res, 5, ctypes.HRESULT, c_void_p,
+                                         wintypes.DWORD, POINTER(c_wchar_p))
+                    if GetDisplayName(res, SIGDN_FILESYSPATH, byref(name)) != 0:
+                        return None
+                    v = name.value
+                    if not v:
+                        return None
+                    return os.path.normpath(v)
+                finally:
+                    if name:
+                        ole32.CoTaskMemFree(ctypes.cast(name, c_void_p))
+                    _fa(res, 2, wintypes.ULONG, c_void_p)(res)  # Release
+            finally:
+                _fa(dlg, 2, wintypes.ULONG, c_void_p)(dlg)  # Release
+        finally:
+            if chu:
+                ole32.CoUninitialize()
+    except Exception:
+        return None
+
+
 class YiWu(Exception):
     """协议级错误，直接映射成 HTTP 响应。"""
 
@@ -246,6 +345,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return self._gai_moshi(bu[1])
             if path == "/bridge/stop":
                 return self._ting_zhong()
+            if path == "/pick-folder":
+                return self._xuan_mulu()
+            if path == "/trust-folder":
+                return self._xin_ren()
             if len(bu) == 2 and bu[0] == "permissions":
                 return self._jue_ding(bu[1])
             if len(bu) == 2 and bu[0] == "questions":
@@ -545,6 +648,38 @@ class BridgeHandler(BaseHTTPRequestHandler):
         # 进程会在 handle_one_request 把 wfile flush 出去之前退出，
         # 调用方看到的是超时——而 Bridge 其实已经停了（「点了停止却报错」）。
         threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+    # ---------- 改动二（2026-10-10）：原生目录选择 + 信任根确认 ----------
+    def _xuan_mulu(self):
+        """弹本机原生「选择文件夹」对话框，返回所选目录。
+
+        浏览器开不了 OS 对话框，但 Bridge 就是本机 Python 进程——由它弹。
+        `startIn` 是对话框的初始目录（前端传当前 cwd），非法/不存在就忽略。
+        用户取消返回 `{"path": null}`；选到的目录带 `inTrustRoot` 标记，
+        是否信任由用户在网页上决定（`/trust-folder`），这里不代做决定。
+        """
+        shu = self._du_json()
+        qi = shu.get("startIn")
+        qi = qi.strip() if isinstance(qi, str) else None
+        if qi and not os.path.isdir(qi):
+            qi = None
+        lu = xuan_mulu_tk(qi)
+        if lu is None:
+            return self._json({"path": None, "inTrustRoot": False})
+        return self._json({"path": lu, "inTrustRoot": self.server.shen.han(lu)})
+
+    def _xin_ren(self):
+        """用户确认后把一个目录追加进信任根（闸门 3 的白名单），原子落盘。
+
+        闸门不静默拆：越界目录必须由用户显式点一次「信任此目录」才放行。
+        """
+        shu = self._du_json()
+        lu = shu.get("path")
+        if not isinstance(lu, str) or not lu.strip():
+            raise YiWu(400, "invalid_request", "path 不能为空")
+        zheng = self.server.shen.jia_xinren(lu)
+        self._json({"ok": True, "path": zheng})
+
     def _jue_ding(self, a1: str):
         body = self._du_json()
         fen = body.get("decision")

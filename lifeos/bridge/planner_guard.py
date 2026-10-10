@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -41,15 +42,66 @@ MIMI_WEN = [".credentials.json", ".claude.json", "id_rsa", "id_ed25519"]
 
 
 class ShenKa:
-    """三道闸门。信任根可通过 mizhu 传入，默认是 LifeOS 项目根 + 用户主目录。"""
+    """三道闸门。信任根可通过 mizhu 传入，默认是 LifeOS 项目根 + 用户主目录。
+
+    默认根可被环境变量 `LIFEOS_XINREN_GEN` 覆盖（分号分隔多个根）；再叠加
+    `trust.json` 里用户在网页上点过「信任此目录」确认的目录（改动二，2026-10-10）。
+    """
 
     def __init__(self, a1: list[str] | None = None) -> None:
         self.gen = Path(__file__).resolve().parent.parent.parent
         self.roots = [self._zhunxi(p) for p in (a1 if a1 else self._moren())]
 
     def _moren(self) -> list[str]:
-        """默认信任根：项目根 + 用户主目录。"""
-        return [str(self.gen), str(Path.home())]
+        """默认信任根：项目根 + 用户主目录，可被 LIFEOS_XINREN_GEN 覆盖。
+
+        **覆盖是整体替换，不是追加**——设了这个变量还想要原有两个根，就把它
+        们一起写进变量里。trust.json 的追加根永远生效（用户确认过的选择，
+        不该被环境变量悄悄抹掉）。
+        """
+        huan = (os.environ.get("LIFEOS_XINREN_GEN") or "").strip()
+        if huan:
+            gen = [x.strip() for x in huan.split(";") if x.strip()]
+        else:
+            gen = [str(self.gen), str(Path.home())]
+        return gen + self._xie_ding()
+
+    @property
+    def xinren_wen(self) -> Path:
+        """用户确认过的额外信任根落在这里（`.lifeos/bridge/trust.json`）。"""
+        return self.gen / ".lifeos" / "bridge" / "trust.json"
+
+    def _xie_ding(self) -> list[str]:
+        """读 trust.json 的追加根。读失败按空处理——与 cun 同一条纪律：
+        这个文件坏了不能让 Bridge 起不来，代价只是用户重新确认一次。"""
+        try:
+            shu = json.loads(self.xinren_wen.read_text(encoding="utf-8"))
+            gen = shu.get("roots") if isinstance(shu, dict) else None
+            if isinstance(gen, list):
+                return [str(p) for p in gen if isinstance(p, str) and p.strip()]
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+        return []
+
+    def jia_xinren(self, a1: str) -> str:
+        """把一个目录追加为信任根（`/trust-folder` 端点背后）。
+
+        热更新 `self.roots`（Handler 与 Server 共享同一个实例），再原子写盘，
+        下次启动由 `_moren()` 灌回来。返回规范化后的路径。
+        """
+        lu = self._zhunxi(a1)
+        if not os.path.isdir(lu):
+            raise JuDuan("cwd_forbidden", f"目录不存在：{lu}")
+        if lu in self.roots:
+            return lu
+        self.roots.append(lu)
+        xian = self._xie_ding()
+        if lu not in (self._zhunxi(p) for p in xian):
+            xian.append(lu)
+        self.xinren_wen.parent.mkdir(parents=True, exist_ok=True)
+        from lifeos.storage.atomic import write_json
+        write_json(self.xinren_wen, {"roots": xian})
+        return lu
 
     @staticmethod
     def _zhunxi(a1: str) -> str:
@@ -81,6 +133,14 @@ class ShenKa:
         return a1
 
     # ---- 闸门 3 ----
+    def han(self, a1: str) -> bool:
+        """目录是否已在信任根内（不抛异常，`/pick-folder` 用它出 `inTrustRoot`）。"""
+        try:
+            lu = self._zhunxi(a1)
+        except (OSError, ValueError):
+            return False
+        return any(lu == g or lu.startswith(g + os.sep) for g in self.roots)
+
     def cwd(self, a1: str) -> str:
         """校验工作目录。越界 → 400 cwd_forbidden。返回规范化后的绝对路径。"""
         if not a1 or not str(a1).strip():
