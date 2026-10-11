@@ -37,8 +37,8 @@ WEN_JIA = "bridge/runtime.json"
 
 def shu_ju_gen(a1: Path) -> Path:
     """Bridge 的数据根（方案 4.2.3）。LIFEOS_HOME 的值**本身就是根**
-    （桌面壳传 `%LOCALAPPDATA%\\LifeOS`），不再往下拼 `.lifeos`；
-    缺省回落 `<root>/.lifeos`，与开发形态逐字节一致。"""
+    （桌面壳传 `%LOCALAPPDATA%\\.lifeOS`），不再往下拼子目录；
+    缺省回落 `<root>/.lifeOS`，与开发形态一致。"""
     home = os.environ.get("LIFEOS_HOME")
     return Path(home) if home else a1 / SHI_JU
 

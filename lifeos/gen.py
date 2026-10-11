@@ -4,9 +4,10 @@
 相对 CWD 的 `.lifeos` 会把数据写进安装目录——普通用户无写权限，直接翻车。
 所以全仓的根解析收口到这里：
 
-1. `LIFEOS_HOME` 环境变量优先（桌面壳启动时指向 `%LOCALAPPDATA%\\LifeOS`，
+1. `LIFEOS_HOME` 环境变量优先（桌面壳启动时指向 `%LOCALAPPDATA%\\.lifeOS`，
    双栈并存时也可各自指一个根）；
-2. 缺省回落 `./.lifeos`（开发形态，行为与历史版本完全一致）。
+2. 缺省回落 `./.lifeOS`（开发形态；Windows 大小写不敏感，与历史 `.lifeos`
+   同一目录，行为不变）。
 
 **新代码一律 import 这里，不许再写死 `.lifeos` 字面量**；旧代码里带参数
 默认值的（memory/sqlite/skills 等）在打包装配点显式传参，不在各默认值处
@@ -24,7 +25,7 @@ def gen_mulu() -> Path:
     home = os.environ.get("LIFEOS_HOME")
     if home:
         return Path(home)
-    return Path(".") / ".lifeos"
+    return Path(".") / ".lifeOS"
 
 
 def qiao_gen(a1: str | Path | None = None) -> Path:

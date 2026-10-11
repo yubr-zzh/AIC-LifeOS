@@ -115,12 +115,33 @@ class ZhuoMianApi:
         os.startfile(str(mu))  # noqa: S606 - 仅本机、固定指向自己的数据根
 
 
+JIU_GEN_MING = "LifeOS"   # v1.0 的旧数据根名，首启整体迁移到 .lifeOS
+
+
 def _shu_ju_gen() -> Path:
     """数据根。main() 之外也要用（日志重定向先于 main 跑），单独抽出来。"""
     if not os.environ.get("LIFEOS_HOME"):
-        os.environ["LIFEOS_HOME"] = str(
-            Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "LifeOS")
+        gen = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".lifeOS"
+        _qian_yi_jiu_gen(gen)
+        os.environ["LIFEOS_HOME"] = str(gen)
     return Path(os.environ["LIFEOS_HOME"])
+
+
+def _qian_yi_jiu_gen(xin: Path) -> None:
+    """v1.0 数据根 `%LOCALAPPDATA%\\LifeOS` → `%LOCALAPPDATA%\\.lifeOS`。
+
+    新根不存在且旧根存在时整目录改名——原子操作，账户、记忆、bridge
+    信任根一个字节不动。LIFEOS_HOME 已显式指定（双栈并存）则不动。
+    改名失败不阻断启动：数据留在旧根，下次启动再试。
+    """
+    if xin.exists():
+        return
+    jiu = xin.parent / JIU_GEN_MING
+    if jiu.is_dir():
+        try:
+            os.rename(jiu, xin)
+        except OSError:
+            print(f"[lifeos] 数据目录迁移失败：{jiu} → {xin}", file=sys.stderr)
 
 
 def _ri_zhi_chong_ding_xiang() -> None:
@@ -165,8 +186,9 @@ def main() -> int:
     if "--lifeos-bridge" in sys.argv[1:]:
         return _pao_bridge_gong()
     _dan_shi_li()
-    # 数据根：桌面态默认 %LOCALAPPDATA%\LifeOS（方案 4.2.3）。必须在
+    # 数据根：桌面态默认 %LOCALAPPDATA%\.lifeOS（方案 4.2.3）。必须在
     # import server 之前定死——server 模块导入时就要解析存储根。
+    # 首次初始化在这里就建好 .lifeOS，后续所有用户信息与记忆都落在其中。
     gen = _shu_ju_gen()
     gen.mkdir(parents=True, exist_ok=True)
     # 端口：主服务 8765 起向上探测（方案 5.2 的「8765 被占最 low 翻车」预防）；

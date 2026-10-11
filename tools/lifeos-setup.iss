@@ -1,12 +1,12 @@
 ﻿; LifeOS 安装器（方案 4.1 阶段四）。Inno Setup 6 编译：
 ;   ISCC.exe tools\lifeos-setup.iss
 ; 前置：tools\build_exe.ps1 已跑完（dist\LifeOS\ 存在）。
-; 数据目录 %LOCALAPPDATA%\LifeOS 含用户记忆数据，卸载时询问、默认保留。
+; 数据目录 %LOCALAPPDATA%\.lifeOS 含用户记忆数据，卸载时询问、默认保留。
 
 #define MyAppName "LifeOS"
 #define MyAppVersion "0.1.0"
 #define MyAppExeName "LifeOS.exe"
-#define MyAppDataName "LifeOS"
+#define MyAppDataName ".lifeOS"
 
 [Setup]
 AppId={{8A6C2F10-4E2B-4A9B-9C3D-LIFEOS0000001}

@@ -24,7 +24,7 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 
 ## 快速使用
 
-- **安装器**：运行 `LifeOS-Setup-x.x.exe`（Inno Setup 产物），装后从开始菜单/桌面启动；用户数据在 `%LOCALAPPDATA%\LifeOS`，卸载时可选保留。
+- **安装器**：运行 `LifeOS-Setup-x.x.exe`（Inno Setup 产物），装后从开始菜单/桌面启动；用户数据在 `%LOCALAPPDATA%\.lifeOS`（v1.0 旧目录 `LifeOS` 首启自动改名迁移，数据不丢），卸载时可选保留。
 - **免安装**：直接运行 `dist\LifeOS\LifeOS.exe`。
 
 ## 从源码构建
@@ -112,6 +112,6 @@ docs/               # 架构与 API 文档
 
 ## 注意事项
 
-- 运行时数据写入 `.lifeos/`（仓库内开发态）或 `%LOCALAPPDATA%\LifeOS`（打包态），均已忽略/不随安装目录。
+- 运行时数据（用户信息与记忆）统一写入数据根 `.lifeOS`：开发态在仓库内 `./.lifeOS/`，打包态在 `%LOCALAPPDATA%\.lifeOS`；目录在软件第一次初始化时创建，均已忽略/不随安装目录。
 - 打包若未捆绑 claude.exe，运行时从 PATH 探测；npm 安装的 `.cmd` 垫片会被 SDK 拒绝，务必用原生 exe。
 - 主服务默认 8765，被占时向上探测至 8790；测试残留的 bridge 进程可能占住 8766-8770，可结束 `python -m lifeos.bridge.run` 进程清理。

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import tempfile
 import threading
@@ -19,7 +20,7 @@ from unittest import mock
 from lifeos.api import bridge_admin
 from lifeos.api import kanmen
 from lifeos.bridge.adapters.claude_code import resolve_claude_runtime
-from lifeos.desktop.main import _kong_kou
+from lifeos.desktop.main import _kong_kou, _shu_ju_gen
 
 
 class KanMenTest(unittest.TestCase):
@@ -242,6 +243,48 @@ class ZhuoMianZhiLianTest(unittest.TestCase):
             zi, xiang = self._fa("/agent-api/agents")
             self.assertEqual(zi, 502)
             self.assertEqual(xiang["error"]["code"], "agent_unavailable")
+
+
+class ShuJuGenQianYiTest(unittest.TestCase):
+    """数据根统一为 .lifeOS：v1.0 旧根 %LOCALAPPDATA%\\LifeOS 首启整目录改名，
+    用户信息与记忆一个字节不丢。"""
+
+    def test_jiu_gen_geng_ming_qian_yi(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jiu = Path(tmp) / "LifeOS"
+            jiu.mkdir()
+            (jiu / "accounts.json").write_text("{}", encoding="utf-8")
+            # LIFEOS_HOME 置空串视为未设，patch.dict 收尾会还原真实环境
+            with mock.patch.dict(os.environ,
+                                 {"LOCALAPPDATA": tmp, "LIFEOS_HOME": ""}):
+                gen = _shu_ju_gen()
+            self.assertEqual(gen, Path(tmp) / ".lifeOS")
+            self.assertTrue((gen / "accounts.json").is_file())
+            self.assertFalse(jiu.exists())
+
+    def test_xin_gen_yi_cun_zai_bu_dong_jiu_gen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            xin = Path(tmp) / ".lifeOS"
+            xin.mkdir()
+            jiu = Path(tmp) / "LifeOS"
+            jiu.mkdir()
+            (jiu / "old.txt").write_text("x", encoding="utf-8")
+            with mock.patch.dict(os.environ,
+                                 {"LOCALAPPDATA": tmp, "LIFEOS_HOME": ""}):
+                gen = _shu_ju_gen()
+            self.assertEqual(gen, xin)
+            self.assertTrue((jiu / "old.txt").is_file())
+            self.assertFalse((xin / "old.txt").exists())
+
+    def test_xian_shi_zhi_ding_huan_jing_bu_qian_yi(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ding = Path(tmp) / "zidingyi"
+            jiu = Path(tmp) / "LifeOS"
+            jiu.mkdir()
+            with mock.patch.dict(os.environ, {"LIFEOS_HOME": str(ding)}):
+                gen = _shu_ju_gen()
+            self.assertEqual(gen, ding)
+            self.assertTrue(jiu.is_dir())
 
 
 if __name__ == "__main__":

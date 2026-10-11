@@ -1778,8 +1778,11 @@ def zhuang_fu(host="127.0.0.1", port=8765) -> tuple["LiAnHTTPServer", TunnelGw]:
     if "LIFEOS_ROOT" not in os.environ:
         gen = gen_mulu() / "bridge"
     # 账户与会话的根：统一走 gen_mulu()（方案 4.2.3——LIFEOS_HOME 优先，
-    # 桌面壳指向 %LOCALAPPDATA%\LifeOS；开发态回落仓库 .lifeos）。
+    # 桌面壳指向 %LOCALAPPDATA%\.lifeOS；开发态回落 ./.lifeOS）。
+    # 装配即初始化：第一次起服务就把 .lifeOS 建出来，用户信息与记忆
+    # 从此全部落在这个根里。
     jia = gen_mulu()
+    jia.mkdir(parents=True, exist_ok=True)
     yonghu.zhuang(yonghu.ZhangHuBiao(jia / "accounts.json"),
                   yonghu.HuiHuaBiao(jia / "sessions"))
     # 静态托管根（方案 4.2.1）：LIFEOS_STATIC 显式指定；否则仓库 frontend/dist
