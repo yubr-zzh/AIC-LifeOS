@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import mimetypes
 import os
 import sys
 import threading
@@ -14,6 +15,8 @@ from lifeos.api.dangqian import dang_qian_yong_hu
 from lifeos.api.devices import SheBiao
 from lifeos.api import yonghu
 from lifeos.api.tunnel_gw import TunnelGw, WuDui, he_cheng_zhen, xie_zhen
+from lifeos.bridge import auth as bridge_auth
+from lifeos.gen import gen_mulu
 from lifeos.llm.client import LLMClient, LLMRequestError
 from lifeos.llm.profiles import ModelManager, ModelProfileStore
 from lifeos.storage.sqlite import StructuredStore
@@ -52,12 +55,30 @@ DAI_LIU_CHONG_LIAN = 5
 
 # `Origin` 白名单（10.2 的四个同源端口）。**`_fangxing()` 与 `_pan_yuan()` 共用**
 # ——同一个服务器上两套分叉的同源判据、其中一套更弱，正是日后变成漏洞的形状。
-YUAN_BAI = ("http://127.0.0.1:5173", "http://localhost:5173",
-            "http://127.0.0.1:4173", "http://localhost:4173")
+# **可运行时注入**（方案 4.2.4）：打包态前端与主服务同源，Origin 是
+# `http://127.0.0.1:<动态端口>`，模块常量表达不到——装配点调 `jia_yuan()`。
+YUAN_BAI = ["http://127.0.0.1:5173", "http://localhost:5173",
+            "http://127.0.0.1:4173", "http://localhost:4173"]
+
+
+def jia_yuan(a1: str) -> None:
+    """追加一条可信 Origin。与 bridge/auth.zhu_yuan 成对使用——两边共用
+    一份注入，不存在「主服务认了、Bridge 不认」的半闸。"""
+    if a1:
+        YUAN_BAI.append(a1)
+        bridge_auth.zhu_yuan(a1)
 
 # 可信的 `Sec-Fetch-Site` 取值。`none` 是用户直接敲地址/书签，同样是浏览器；
 # `cross-site` 是唯一不可信的——它意味着发起请求的页面在别的源上（CSRF 的形状）。
 KE_XIN = ("same-origin", "same-site", "none")
+
+
+# 静态托管不碰的路径前缀（方案 4.2.1）。这些是既有的 API/数据端点——
+# 静态兜底与登录闸豁免都以「不在这些前缀里」为静态候选判据，两处共用
+# 一张表，不存在「闸认成静态、路由认成 API」的分叉。
+FEI_JING_TAI = ("/api/", "/agent-api", "/models", "/events", "/memory",
+                "/agent/", "/skills", "/permissions", "/traces/", "/entries",
+                "/chat", "/feedback", "/background/")
 
 
 def guo_lu2(a1: str, a2: dict) -> tuple[dict, int]:
@@ -72,9 +93,13 @@ def guo_lu2(a1: str, a2: dict) -> tuple[dict, int]:
 
 def create_agent():
     # 10.1：环境变量是服务端硬关，用于线上应急。默认开着。
-    model_store = ModelProfileStore(".lifeos/models.json")
+    # 存储根一律经 gen_mulu()（方案 4.2.3）：打包态 CWD 不可控，
+    # 相对 `.lifeos` 会把数据写进安装目录。
+    gen = str(gen_mulu())
+    model_store = ModelProfileStore(f"{gen}/models.json")
     agent = LifeOSAgent(
         ModelManager(model_store, fallback=LLMClient()),
+        storage_dir=gen,
         delegation_enabled=os.environ.get("LIFEOS_DELEGATION", "on") != "off",
     )
     agent.model_store = model_store
@@ -93,7 +118,11 @@ class LiAnHTTPServer(ThreadingHTTPServer):
 
 class LifeOSRequestHandler(BaseHTTPRequestHandler):
     agent = create_agent()
-    structured_store = StructuredStore()
+    structured_store = StructuredStore(gen_mulu() / "lifeos.db")
+
+    # 静态托管根（方案 4.2.1）。None = 不托管（老形态，只做 API）。
+    # run() 在装配时设：打包态指向包内 dist，开发态指向仓库 frontend/dist。
+    JING_TAI: Path | None = None
 
     # **不要在类上写 protocol_version。** 全局 HTTP/1.1 会打断
     # test_pipei::DuanDianTest::test_pai_code_dai_body_bu_duan_lian_jie 守的 RST 回归：
@@ -211,6 +240,8 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/auth/sessions":
             self._handle_auth_sessions()
+            return
+        if self._jing_tai(parsed.path):
             return
         self.send_error(404, "not found")
 
@@ -781,6 +812,47 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
 
     # ---- 登录体系（方案 6.1/6.2）----
 
+    def _jing_tai(self, a1: str) -> bool:
+        """静态文件服务（方案 4.2.1）。返回 False 表示这条路不管（继续 404）。
+
+        SPA fallback 只给**无扩展名**的路径回落 index.html；带扩展名的找不到
+        就 404——把打错的 API 路由伪装成页面，会掩盖真正的路由回归。
+        """
+        gen = self.JING_TAI
+        if gen is None or a1.startswith(FEI_JING_TAI):
+            return False
+        try:
+            lu = (gen / a1.lstrip("/")).resolve()
+            # 路径穿越闸：resolve 之后必须仍在静态根下。
+            lu.relative_to(gen.resolve())
+        except (ValueError, OSError):
+            return False
+        if lu.is_dir():
+            lu = lu / "index.html"
+        if not lu.is_file():
+            mo = a1.rsplit("/", 1)[-1]
+            if "." in mo:
+                return False
+            lu = gen / "index.html"
+        if not lu.is_file():
+            return False
+        try:
+            shu = lu.read_bytes()
+        except OSError:
+            return False
+        leixing = mimetypes.guess_type(str(lu))[0] or "application/octet-stream"
+        if leixing.startswith("text/") or leixing in (
+                "application/javascript", "application/json"):
+            leixing += "; charset=utf-8"
+        self.send_response(200)
+        self.send_header("content-type", leixing)
+        self.send_header("content-length", str(len(shu)))
+        # 本地应用无 CDN 诉求，一律不缓存（方案 4.2.1）。
+        self.send_header("cache-control", "no-cache")
+        self.end_headers()
+        self.wfile.write(shu)
+        return True
+
     def _xu_yao_deng_lu(self, a1) -> bool:
         """登录闸（方案 6.2 中间件收口）。返回 False 表示已回过 401。
 
@@ -798,6 +870,10 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if lu.startswith("/api/auth/") or lu == "/api/health":
             return True
         if lu in ("/api/bridge/pair", "/api/agent-events"):
+            return True
+        if self.JING_TAI is not None and not lu.startswith(FEI_JING_TAI):
+            # 静态资源豁免（方案 6.2 第 2 条）：页面壳必须能加载出来，
+            # 浏览器才渲染得出登录页。
             return True
         if self._hui_hua() is None:
             self._send_json({"error": {"code": "unauthorized", "message": "需要登录"}}, status=401)
@@ -1510,11 +1586,26 @@ def run(host="127.0.0.1", port=None):
     # 设备表与隧道网关（公网形态的入口）。与 runtime.json 同级（spec 8.2）。
     # `LIFEOS_ROOT` 给了别的根就跟着走——两套栈共用 `.lifeos/` 会撞车。
     gen = Path(os.environ.get("LIFEOS_ROOT") or ".") / ".lifeos" / "bridge"
-    # 账户与会话的根：LIFEOS_HOME 优先（打包态指向 %LOCALAPPDATA%\LifeOS），
-    # 开发态回落到仓库 .lifeos（方案 4.2.3，阶段二把默认根切到数据目录）。
-    jia = Path(os.environ.get("LIFEOS_HOME") or ".") / ".lifeos"
+    if "LIFEOS_ROOT" not in os.environ:
+        gen = gen_mulu() / "bridge"
+    # 账户与会话的根：统一走 gen_mulu()（方案 4.2.3——LIFEOS_HOME 优先，
+    # 桌面壳指向 %LOCALAPPDATA%\LifeOS；开发态回落仓库 .lifeos）。
+    jia = gen_mulu()
     yonghu.zhuang(yonghu.ZhangHuBiao(jia / "accounts.json"),
                   yonghu.HuiHuaBiao(jia / "sessions"))
+    # 静态托管根（方案 4.2.1）：LIFEOS_STATIC 显式指定；否则仓库 frontend/dist
+    # 存在即托管（`npm run build && python -m lifeos.api.server` 单端口全功能）。
+    jing = os.environ.get("LIFEOS_STATIC")
+    if jing:
+        LifeOSRequestHandler.JING_TAI = Path(jing)
+    else:
+        mo = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+        if (mo / "index.html").is_file():
+            LifeOSRequestHandler.JING_TAI = mo
+    # 打包态前后端同源，Origin 就是本服务的地址（方案 4.2.4）。开发态加
+    # 这两条也无害——5173/4173 仍在白名单里。
+    jia_yuan(f"http://127.0.0.1:{port}")
+    jia_yuan(f"http://localhost:{port}")
     biao = SheBiao(gen / "devices.json")
     gw = TunnelGw(biao, "127.0.0.1", int(os.environ.get("LIFEOS_GW_PORT") or 8771))
     try:

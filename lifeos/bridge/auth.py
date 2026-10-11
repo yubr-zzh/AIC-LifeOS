@@ -18,6 +18,23 @@ YUANDI = {
     "http://127.0.0.1:4173", "http://localhost:4173",
 }
 
+# 運行時注入的額外來源（方案 4.2.4）。打包態前端與主服務同源，Origin 是
+# `http://127.0.0.1:<port>`——端口動態，模組常量表達不了，必須在裝配點
+# （server.run / 桌面殼）調 `zhu_yuan()` 加進來。模組級集合而非換新表：
+# `yuanbai()` 的既有調用點（http.py、測試）一行不用改。
+E_WAI: set[str] = set()
+
+
+def zhu_yuan(a1: str) -> None:
+    """追加一條可信 Origin。打包態同源注入的唯一入口。"""
+    if a1:
+        E_WAI.add(a1)
+
+
+def huo_yuan_bai() -> set[str]:
+    """當前生效的白名單：開發期常量 + 運行時注入。"""
+    return YUANDI | E_WAI
+
 
 class WeiQuan(Exception):
     """認證失敗。code 區分 401 與 403。"""
@@ -46,7 +63,7 @@ def yuanbai(a1: str | None, a2: set[str] | None = None) -> None:
     有 Origin 卻不在白名單裡一律 403。"""
     if not a1:
         return
-    bai = a2 if a2 is not None else YUANDI
+    bai = a2 if a2 is not None else huo_yuan_bai()
     if a1 not in bai:
         raise WeiQuan("forbidden", f"Origin 不在白名單內：{a1}")
 

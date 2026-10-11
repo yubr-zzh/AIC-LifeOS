@@ -35,6 +35,14 @@ SHI_JU = ".lifeos"
 WEN_JIA = "bridge/runtime.json"
 
 
+def shu_ju_gen(a1: Path) -> Path:
+    """Bridge 的数据根（方案 4.2.3）。LIFEOS_HOME 的值**本身就是根**
+    （桌面壳传 `%LOCALAPPDATA%\\LifeOS`），不再往下拼 `.lifeos`；
+    缺省回落 `<root>/.lifeos`，与开发形态逐字节一致。"""
+    home = os.environ.get("LIFEOS_HOME")
+    return Path(home) if home else a1 / SHI_JU
+
+
 def cun_zhen(a1: int) -> bool:
     """判断进程是否存活。
 
@@ -139,7 +147,7 @@ def wang_url() -> str:
 
 
 def wen_jia_ming(a1: Path) -> Path:
-    return a1 / SHI_JU / WEN_JIA
+    return shu_ju_gen(a1) / WEN_JIA
 
 
 def duan_runtime(a1: Path) -> dict[str, Any]:
@@ -222,7 +230,7 @@ def zhu_ri(a1: Path) -> logging.Logger:
     ri = logging.getLogger("bridge.access")
     ri.setLevel(logging.INFO)
     ri.propagate = False
-    p = a1 / SHI_JU / "bridge" / "bridge.log"
+    p = shu_ju_gen(a1) / "bridge" / "bridge.log"
     # 幂等判据必须精确到「指向同一个文件的、自己建的那个 handler」。
     # 只看 `ri.handlers` 是否非空是错的：任何宿主进程都可能给这个 logger
     # 挂过自己的 handler（pytest 的 LogCaptureHandler、主服务的日志框架），
@@ -368,7 +376,7 @@ def zhen_ben(a1: Path, a2: int) -> tuple[BridgeServer, dict[str, Any]]:
     # 「这个 uid 落到空凭据库、要重新登录」的唯一告警会直接进 DEVNULL，
     # 谁都看不见，用户看到的只是「怎么又要登录一次」。
     pingju.jie_shang()
-    cun = Cun(a1 / SHI_JU / "bridge", logging.getLogger("bridge.cun"))
+    cun = Cun(shu_ju_gen(a1) / "bridge", logging.getLogger("bridge.cun"))
     hua.cun = cun
     # 懒恢复。必须在 BridgeServer 起看门狗之前灌完，且 sessions 的
     # updatedAt 已被重置，否则恢复出来的会话会被闲置超时立刻关掉。

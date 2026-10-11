@@ -25,9 +25,15 @@ from typing import Any
 
 from lifeos.api.dangqian import dang_qian_yong_hu
 from lifeos.api.devices import PeiMa, SheBiao
+from lifeos.gen import gen_mulu
 
 XIANG = Path(__file__).resolve().parent.parent.parent
-WEN_JIA = XIANG / ".lifeos" / "bridge" / "runtime.json"
+
+
+def yun_wen() -> Path:
+    """runtime.json 的位置。经 `gen_mulu()` 解析（方案 4.2.3）——打包态
+    CWD 不可控，写死 `<仓库>/.lifeos` 会指向安装目录。"""
+    return gen_mulu() / "bridge" / "runtime.json"
 
 # 设备表与隧道网关由主服务在 run() 时注入。没有网关（本地直连形态）时
 # 隧道相关端点仍可用，只是 unpair 断不开任何东西。
@@ -132,7 +138,7 @@ def du_she() -> dict[str, Any] | None:
 def du_yunxing() -> dict[str, Any]:
     """读 runtime.json。读不到就是「没注册」，一律按离线处理。"""
     try:
-        return json.loads(WEN_JIA.read_text(encoding="utf-8"))
+        return json.loads(yun_wen().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 
