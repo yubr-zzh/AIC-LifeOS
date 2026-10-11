@@ -89,9 +89,10 @@ without an explicit ID list.
 
 ## Visual direction
 
-Dark industrial agent-console. Deep graphite background with a
-subtle grid texture (no marketing blobs / gradients). Status colors
-match the existing backend event states:
+Claude-style warm cream workspace: #faf9f5 surfaces, #141413 ink,
+#d97757 accent, Poppins display + Lora body, subtle grid texture
+(no marketing blobs / gradients). Status colors match the existing
+backend event states:
 
 - pending — amber
 - processing — blue
