@@ -17,6 +17,7 @@ import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
 import { SettingsPage } from "./panels/SettingsPage";
 import { WorkCalendar } from "./components/WorkCalendar";
+import { AccountMenu, AuthGate } from "./components/AuthGate";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
@@ -124,7 +125,9 @@ export default function App() {
     setSettingsOpen(false);
   };
 
+  // 登录闸（方案 6.4）：未登录渲染登录页/首启向导，任何 401 都会被切回来。
   return (
+    <AuthGate>
     <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="side-nav">
@@ -173,7 +176,7 @@ export default function App() {
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
             <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
             <button className="header-icon-button" onClick={() => { setSettingsOpen(false); select("settings"); }} title="设置" aria-label="设置" aria-expanded={active === "settings"}><IconSettings size={16} /></button>
-            <div className="avatar">Z</div>
+            <AccountMenu />
           </div>
           {settingsOpen ? (
             <div className="settings-popover">
@@ -197,6 +200,7 @@ export default function App() {
         </main>
       </div>
     </div>
+    </AuthGate>
   );
 }
 

@@ -21,6 +21,10 @@ const BASE = "/agent-api";
 const STREAM = `${BASE}/stream`;
 
 async function duError(res: Response): Promise<BridgeError> {
+  // 401 拦截（方案 6.4）：会话失效时广播，AuthGate 收到后切登录页。
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("lifeos:unauthorized"));
+  }
   let code = "internal";
   let message = `HTTP ${res.status}`;
   let payload: Record<string, unknown> = {};

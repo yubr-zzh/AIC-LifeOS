@@ -12,6 +12,7 @@ from lifeos.agent.runtime import LifeOSAgent
 from lifeos.api import bridge_admin
 from lifeos.api.dangqian import dang_qian_yong_hu
 from lifeos.api.devices import SheBiao
+from lifeos.api import yonghu
 from lifeos.api.tunnel_gw import TunnelGw, WuDui, he_cheng_zhen, xie_zhen
 from lifeos.llm.client import LLMClient, LLMRequestError
 from lifeos.llm.profiles import ModelManager, ModelProfileStore
@@ -148,6 +149,8 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         # 都只消费缓存，不会重读 rfile。
         self._du_wan()
         parsed = urlparse(self.path)
+        if not self._xu_yao_deng_lu(parsed):
+            return
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "GET")
             return
@@ -200,6 +203,15 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/settings/delegation":
             self._send_json({"enabled": self.agent.chat.delegation_enabled})
             return
+        if parsed.path == "/api/health":
+            self._send_json({"ok": True})
+            return
+        if parsed.path == "/api/auth/status":
+            self._handle_auth_status()
+            return
+        if parsed.path == "/api/auth/sessions":
+            self._handle_auth_sessions()
+            return
         self.send_error(404, "not found")
 
     def do_POST(self):
@@ -209,6 +221,8 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         # 被读完之后才回响应，所以读在入口、分支各自再读就多余了。
         self._du_wan()
         parsed = urlparse(self.path)
+        if not self._xu_yao_deng_lu(parsed):
+            return
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "POST")
             return
@@ -290,6 +304,15 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/settings/delegation":
             self._handle_delegation_setting()
             return
+        if parsed.path == "/api/auth/setup":
+            self._handle_auth_setup()
+            return
+        if parsed.path == "/api/auth/login":
+            self._handle_auth_login()
+            return
+        if parsed.path == "/api/auth/logout":
+            self._handle_auth_logout()
+            return
         self.send_error(404, "not found")
 
     def do_PUT(self):
@@ -301,6 +324,8 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         # 读在入口之后，`_read_json`（/entries/*）与 `_ti_zi()` 都走缓存，不会重读。
         self._du_wan()
         parsed = urlparse(self.path)
+        if not self._xu_yao_deng_lu(parsed):
+            return
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "PUT")
             return
@@ -308,6 +333,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
             if self._fangxing():
                 self._handle_update_model_profile(unquote(parts[2]))
+            return
+        if parsed.path == "/api/auth/password":
+            self._handle_auth_password()
             return
         if parsed.path.startswith("/entries/"):
             self._handle_update_entry(unquote(parsed.path.rsplit("/", 1)[-1]))
@@ -317,6 +345,8 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self._du_wan()
         parsed = urlparse(self.path)
+        if not self._xu_yao_deng_lu(parsed):
+            return
         if self._shi_fou_dai_li(parsed):
             self._dai_li(parsed, "DELETE")
             return
@@ -324,6 +354,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["models", "profiles"]:
             if self._fangxing():
                 self._handle_delete_model_profile(unquote(parts[2]))
+            return
+        if parsed.path == "/api/auth/sessions":
+            self._handle_auth_revoke()
             return
         self.send_error(404, "not found")
 
@@ -716,24 +749,207 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     # 是简单请求，不触发预检。没有这两道校验主服务就直接执行 → Bridge 退出 →
     # 连带杀掉 agent 子进程 → 用户正在做的任务和待审批的请求一起消失，界面上还没有任何解释。
 
-    def _fangxing(self) -> bool:
+    def _ben_ji_yuan(self) -> bool:
+        """回环来源 + Origin 白名单 + `Sec-Fetch-Site`。返回 False 表示已回过错误。
+
+        从 `_fangxing()` 拆出来：登录/登出这类「会话本身」的端点要同源检查，
+        但**拿不到 CSRF token**——会话还没建立（登录）或正在销毁（登出），
+        而一次性 CSRF 机制需要一个已登录的前端来取。拆开之后 `_fangxing()`
+        仍原样是「同源 + CSRF」两道，语义不弱化。
+        """
         host = self.client_address[0] if self.client_address else ""
         if host not in ("127.0.0.1", "::1"):
             self._send_json({"error": {"code": "forbidden", "message": "仅限本机"}}, status=403)
             return False
         yuan = self.headers.get("Origin")
-        # 缺 Origin 放行：本地 curl 与服务端自调没有 Origin，
-        # 而那条路径上 CSRF token 仍然要过。
+        # 缺 Origin 放行：本地 curl 与服务端自调没有 Origin。
         if yuan and yuan not in YUAN_BAI:
             self._send_json({"error": {"code": "forbidden", "message": f"Origin 不在白名单：{yuan}"}}, status=403)
             return False
         if self.headers.get("Sec-Fetch-Site") == "cross-site":
             self._send_json({"error": {"code": "forbidden", "message": "跨站请求"}}, status=403)
             return False
+        return True
+
+    def _fangxing(self) -> bool:
+        if not self._ben_ji_yuan():
+            return False
         if not bridge_admin.yong_ma(self.headers.get("X-LifeOS-CSRF")):
             self._send_json({"error": {"code": "forbidden", "message": "CSRF token 无效或已用过"}}, status=403)
             return False
         return True
+
+    # ---- 登录体系（方案 6.1/6.2）----
+
+    def _xu_yao_deng_lu(self, a1) -> bool:
+        """登录闸（方案 6.2 中间件收口）。返回 False 表示已回过 401。
+
+        **未初始化（无账户）不设闸**：闸由「首启向导建了第一个账户」这个动作
+        落下，本地开发形态与既有测试一行不改。豁免三类：
+        1. `/api/auth/*` 与 `/api/health`——登录本身与健康检查；
+        2. `/api/bridge/pair`、`/api/agent-events`——**服务端间回调**（本机
+           Bridge 拿配对码换凭据、回写决策回路），已有回环来源校验，浏览器
+           会话对它们无意义；
+        3. 静态资源（阶段二引入静态托管时再豁免）。
+        """
+        if not yonghu.yi_qi_yong():
+            return True
+        lu = a1.path
+        if lu.startswith("/api/auth/") or lu == "/api/health":
+            return True
+        if lu in ("/api/bridge/pair", "/api/agent-events"):
+            return True
+        if self._hui_hua() is None:
+            self._send_json({"error": {"code": "unauthorized", "message": "需要登录"}}, status=401)
+            return False
+        return True
+
+    def _hui_ling(self) -> str | None:
+        """从 Cookie 头取会话 token。"""
+        raw = self.headers.get("Cookie")
+        if not raw:
+            return None
+        for kuai in raw.split(";"):
+            ming, _, zhi = kuai.strip().partition("=")
+            if ming == yonghu.COOKIES_MING:
+                return zhi or None
+        return None
+
+    def _hui_hua(self):
+        return yonghu.HH.zhao(self._hui_ling()) if yonghu.HH else None
+
+    @staticmethod
+    def _fa_cookie(a1: str | None, a2: bool = False) -> dict[str, str]:
+        """Set-Cookie 头。a1=None 即清除。HttpOnly + SameSite=Strict（方案 6.1）；
+        回环 HTTP 下 Secure 无效，靠绑定 127.0.0.1 收口。"""
+        if a1 is None:
+            zhi = f"{yonghu.COOKIES_MING}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+        elif a2:
+            zhi = (f"{yonghu.COOKIES_MING}={a1}; Path=/; HttpOnly; SameSite=Strict; "
+                   f"Max-Age={yonghu.JI_ZHU_MIAO}")
+        else:
+            zhi = f"{yonghu.COOKIES_MING}={a1}; Path=/; HttpOnly; SameSite=Strict"
+        return {"Set-Cookie": zhi}
+
+    def _handle_auth_status(self):
+        hui = self._hui_hua()
+        self._send_json({
+            "initialized": yonghu.ZH is not None and not yonghu.ZH.kong(),
+            "authenticated": hui is not None,
+            "username": hui["username"] if hui else None,
+            "csrf": bridge_admin.qu_ma(),
+        })
+
+    def _handle_auth_setup(self):
+        """创建首个 admin 账户（首启向导）。已有账户则 403（幂等保护）。"""
+        if not self._ben_ji_yuan():
+            return
+        zhang = yonghu.ZH
+        if zhang is None or not zhang.kong():
+            self._send_json({"error": {"code": "forbidden", "message": "账户已初始化"}},
+                            status=403)
+            return
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._send_json({"error": {"code": "invalid_request", "message": "body must be JSON"}}, status=400)
+            return
+        username = str(body.get("username") or "")
+        try:
+            zhang.chuang(username, str(body.get("password") or ""))
+        except ValueError as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        # 首个账户即 admin，建完自动登录（方案 6.7 验收 1）。
+        ling = yonghu.HH.chuang(username, True)
+        yonghu.ji_dui(username)
+        self._send_json({"ok": True, "username": username, "csrf": bridge_admin.qu_ma()},
+                        extra=self._fa_cookie(ling, True))
+
+    def _handle_auth_login(self):
+        if not self._ben_ji_yuan():
+            return
+        if yonghu.ZH is None or yonghu.HH is None:
+            self._send_json({"error": {"code": "forbidden", "message": "未启用登录"}}, status=403)
+            return
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._send_json({"error": {"code": "invalid_request", "message": "body must be JSON"}}, status=400)
+            return
+        username = str(body.get("username") or "")
+        yu = yonghu.suo_yu(username)
+        if yu > 0:
+            self._send_json(
+                {"error": {"code": "rate_limited",
+                           "message": f"失败次数过多，{int(yu) + 1} 秒后再试"}},
+                status=429, extra={"Retry-After": str(int(yu) + 1)})
+            return
+        if not yonghu.ZH.yan_zheng(username, str(body.get("password") or "")):
+            yonghu.ji_cuo(username)
+            # 统一文案，不区分哪个错（防用户名枚举，方案 6.4）。
+            self._send_json({"error": {"code": "unauthorized",
+                                       "message": "用户名或口令不正确"}}, status=401)
+            return
+        yonghu.ji_dui(username)
+        jizhu = bool(body.get("remember"))
+        ling = yonghu.HH.chuang(username, jizhu)
+        self._send_json({"ok": True, "username": username, "csrf": bridge_admin.qu_ma()},
+                        extra=self._fa_cookie(ling, jizhu))
+
+    def _handle_auth_logout(self):
+        # 登出只销毁自己的会话；无会话也回 ok（幂等）。
+        if not self._ben_ji_yuan():
+            return
+        if yonghu.HH is not None:
+            yonghu.HH.xiao(self._hui_ling())
+        self._send_json({"ok": True}, extra=self._fa_cookie(None))
+
+    def _handle_auth_password(self):
+        """改口令：会话 + CSRF + 验旧 → 写新 → 吊销其他全部会话（方案 6.2）。"""
+        if not self._fangxing():
+            return
+        hui = self._hui_hua()
+        if hui is None:
+            self._send_json({"error": {"code": "unauthorized", "message": "需要登录"}}, status=401)
+            return
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._send_json({"error": {"code": "invalid_request", "message": "body must be JSON"}}, status=400)
+            return
+        try:
+            yonghu.ZH.gai_kou_ling(
+                hui["username"],
+                str(body.get("old_password") or ""),
+                str(body.get("new_password") or ""))
+        except ValueError as exc:
+            self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            return
+        diao = yonghu.HH.chu_yong_hu_wai(hui["username"], self._hui_ling())
+        self._send_json({"ok": True, "revoked": diao})
+
+    def _handle_auth_sessions(self):
+        hui = self._hui_hua()
+        if hui is None:
+            self._send_json({"error": {"code": "unauthorized", "message": "需要登录"}}, status=401)
+            return
+        self._send_json({"sessions": yonghu.HH.lie_chu(self._hui_ling())})
+
+    def _handle_auth_revoke(self):
+        if not self._fangxing():
+            return
+        hui = self._hui_hua()
+        if hui is None:
+            self._send_json({"error": {"code": "unauthorized", "message": "需要登录"}}, status=401)
+            return
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._send_json({"error": {"code": "invalid_request", "message": "body must be JSON"}}, status=400)
+            return
+        n = yonghu.HH.xiao_qian_zhui(str(body.get("tokenHash") or ""), hui["username"])
+        self._send_json({"ok": n > 0, "revoked": n})
 
     def _handle_bridge_start(self):
         if not self._fangxing():
@@ -1294,6 +1510,11 @@ def run(host="127.0.0.1", port=None):
     # 设备表与隧道网关（公网形态的入口）。与 runtime.json 同级（spec 8.2）。
     # `LIFEOS_ROOT` 给了别的根就跟着走——两套栈共用 `.lifeos/` 会撞车。
     gen = Path(os.environ.get("LIFEOS_ROOT") or ".") / ".lifeos" / "bridge"
+    # 账户与会话的根：LIFEOS_HOME 优先（打包态指向 %LOCALAPPDATA%\LifeOS），
+    # 开发态回落到仓库 .lifeos（方案 4.2.3，阶段二把默认根切到数据目录）。
+    jia = Path(os.environ.get("LIFEOS_HOME") or ".") / ".lifeos"
+    yonghu.zhuang(yonghu.ZhangHuBiao(jia / "accounts.json"),
+                  yonghu.HuiHuaBiao(jia / "sessions"))
     biao = SheBiao(gen / "devices.json")
     gw = TunnelGw(biao, "127.0.0.1", int(os.environ.get("LIFEOS_GW_PORT") or 8771))
     try:
