@@ -23,6 +23,9 @@
 }
 /* 必须覆盖父级的 600px，否则左格被撑破。组件结构一字未改，只压这一处。 */
 .chat-split-grid > .chat-page-grid { min-height: 0; }
+/* Agent 卡与对话卡同高：不钉住的话，行高随 Agent 消息涨，长会话把整页往下顶，
+   .agp-body 的内滚永远轮不到生效。 */
+.chat-split-grid > .agp { max-height: min(760px, calc(100dvh - 210px)); }
 
 /* ---- 折叠态审批条（11.7）---- */
 .apb {
@@ -251,7 +254,7 @@
 /* ---- 「本地 Agent」页 ---- */
 .ags {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px; align-items: start;
+  gap: 16px; align-items: stretch;
 }
 /* 凭据目录建不出来时的通栏告警（spec 11.2）。走 `.agp-notice` 的配色惯例
    （琥珀底 = 待办，红底 = 已坏），但跨整屏宽度且不通栏收缩——`.ags` 是
@@ -275,6 +278,9 @@
 /* 「Agent 活动」面板是 .ags 里唯一的 Panel，让它整行通栏。
    不写这一条的话它只占一格（minmax(340px, 1fr)），事件表和详情挤在 340px 里没法看。 */
 .ags > .panel { grid-column: 1 / -1; }
+/* 活动表行数上限 40：不给 panel-body 封顶的话，面板随事件无限长高，
+   整页被往下顶——封顶后表在卡内滚。 */
+.ags > .panel .panel-body { max-height: 320px; }
 .ags-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ags-head h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
 .ags-desc { margin: 0; font-size: 12px; line-height: 1.7; color: var(--fg-2); }
@@ -284,6 +290,7 @@
 }
 .ags-fact { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; background: var(--bg-1); }
 .ags-fact .mono { font-size: 10px; }
+.ags-fact > span.mono { white-space: nowrap; }
 .ags-fact strong { font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; }
 .ags-note { margin: 0; font-size: 11px; line-height: 1.6; color: var(--fg-3); }
 .ags-note.err { color: var(--st-failed); }

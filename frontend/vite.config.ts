@@ -149,14 +149,16 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // 主服务自己的业务路由（/chat、/entries、/feedback…）**不带** /api 前缀，
-      // 而管控类端点（/api/bridge/*、/api/settings/*，方案 10.2）**带**。
+      // 而管控类端点（/api/bridge/*、/api/settings/*、/api/auth/*、/api/health，
+      // 方案 10.2）**带**。auth/health 漏进白名单的话，登录接口在 dev 态被剥成
+      // /auth/*，后端 SPA 回退吐 index.html，登录/注册整条链路在开发环境全挂。
       // 一律剥前缀会让管控类一进开发环境就 404，而且只在 dev 复现——
       // 生产是主服务直接托管 dist，不走这条链。所以这里按前缀分流。
       "/api": {
         target: "http://127.0.0.1:8765",
         changeOrigin: true,
         rewrite: (path) =>
-          /^\/api\/(bridge|settings)(\/|$)/.test(path) ? path : path.replace(/^\/api/, ""),
+          /^\/api\/(bridge|settings|auth|health)(\/|$)/.test(path) ? path : path.replace(/^\/api/, ""),
       },
     },
   },

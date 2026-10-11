@@ -755,7 +755,7 @@ textarea { resize: vertical; }
 .chat-composer textarea:focus { border: 0; outline: 0; box-shadow: none; }
 .chat-composer textarea::placeholder { color: #a0a79a; }
 .chat-composer-side { display: flex; flex: 0 0 auto; align-items: flex-end; gap: 9px; }
-.chat-route-control { display: grid; gap: 4px; color: #75816f; font-size: 10px; }
+.chat-route-control { display: flex; align-items: center; gap: 7px; padding-bottom: 3px; color: #75816f; font-size: 10px; }
 .chat-route-control select { max-width: 190px; min-height: 34px; padding: 0 26px 0 9px; border: 1px solid #e3e9df; border-radius: 9px; background: #fbfcfa; color: #43533f; font: 11px var(--font-ui); }
 .chat-route-control select:focus-visible, .chat-send:focus-visible { outline: 2px solid #73966d; outline-offset: 2px; }
 .chat-route-badge { display: inline-flex; align-items: center; margin-left: 8px; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; }
