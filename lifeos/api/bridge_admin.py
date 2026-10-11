@@ -190,8 +190,13 @@ def xinxi() -> dict[str, Any]:
     return out
 
 
-def qidong(a4: float = 8.0) -> dict[str, Any]:
-    """拉起 Bridge 子进程。**仅本地开发形态**：公网下云端拉不起用户机器上的进程。"""
+def qidong(a4: float = 30.0) -> dict[str, Any]:
+    """拉起 Bridge 子进程。**仅本地开发形态**：公网下云端拉不起用户机器上的进程。
+
+    默认等待 30 秒：Bridge 监听前要先跑完 `claude --version` 版本探测
+    （10 秒上限）与 SDK 导入，8 秒的旧窗在冷机上会误报「启动超时」——
+    实际 bridge 随后就绪，看护线程还会再拉一次，白杀一遍。
+    """
     yun = du_yunxing()
     if yun:
         try:
@@ -206,9 +211,20 @@ def qidong(a4: float = 8.0) -> dict[str, Any]:
         kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
     else:
         kw["start_new_session"] = True
+    if getattr(sys, "frozen", False):
+        # 打包态：sys.executable 是 LifeOS.exe，`-m lifeos.bridge.run` 的
+        # 语义在打包里不存在——那样拉起的是第二个桌面壳进程，会被单实例
+        # 锁当场弹掉，Bridge 永远起不来（dist_debug 实测：/api/bridge/start
+        # 返回 200，/agent-api/* 全线 502）。改带 `--lifeos-bridge` 再入，
+        # 桌面壳看到这个标志就把进程转交 bridge.run.main()。
+        ming = [sys.executable, "--lifeos-bridge"]
+        cwd = str(Path(sys.executable).parent)
+    else:
+        ming = [sys.executable, "-m", "lifeos.bridge.run", "--root", str(XIANG)]
+        cwd = str(XIANG)
     subprocess.Popen(
-        [sys.executable, "-m", "lifeos.bridge.run"],
-        cwd=str(XIANG),
+        ming,
+        cwd=cwd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         **kw,

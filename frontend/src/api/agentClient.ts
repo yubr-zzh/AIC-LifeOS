@@ -169,9 +169,26 @@ export interface PickFolderResult {
   inTrustRoot: boolean;
 }
 
-/** 弹本机原生「选择文件夹」对话框。Bridge 侧弹，请求会挂到对话框关闭才返回。 */
-export const pickFolder = (startIn?: string) =>
-  post<PickFolderResult>("/pick-folder", { startIn: startIn || undefined });
+/** 弹本机原生「选择文件夹」对话框（方案 7.1 双形态）。
+ *
+ * 桌面壳（pywebview）在 → 走 `pywebview.api.select_folder()`（对话框模态于
+ * 应用窗口）；浏览器 → 走 bridge 的 `/pick-folder`。两条通道同一契约
+ * `{path: string|null}`；桌面壳选完路径后补一次 `/trust-check` 拿
+ * inTrustRoot——信任根判定唯一实现在 planner_guard，桌面壳不复制。
+ * 之后的信任确认流程（黄字提示 → /trust-folder）两种形态完全一致。
+ */
+export const pickFolder = async (startIn?: string): Promise<PickFolderResult> => {
+  const api = (window as unknown as { pywebview?: { api?: { select_folder?: () => Promise<string | null> } } })
+    .pywebview?.api;
+  if (api?.select_folder) {
+    const lu = await api.select_folder();
+    if (lu === null || lu === undefined) return { path: null, inTrustRoot: false };
+    const zhi = await get<{ path: string; inTrustRoot: boolean }>(
+      `/trust-check?path=${encodeURIComponent(lu)}`);
+    return { path: zhi.path, inTrustRoot: zhi.inTrustRoot };
+  }
+  return post<PickFolderResult>("/pick-folder", { startIn: startIn || undefined });
+};
 
 /** 用户确认后，把信任根外的目录追加进 Bridge 的信任根（闸门 3 的白名单）。 */
 export const trustFolder = (path: string) =>
@@ -179,6 +196,18 @@ export const trustFolder = (path: string) =>
 
 export const health = () =>
   get<{ ok: boolean; pid: number; uptimeSec: number; version: string; instanceId: string }>("/health");
+
+/** 桌面壳形态判定（方案 4.4/7.1）：pywebview 存在即 exe 壳。 */
+export const zaiZhuoMian = (): boolean =>
+  typeof window !== "undefined" &&
+  Boolean((window as unknown as { pywebview?: unknown }).pywebview);
+
+/** 打开数据/日志目录（方案 4.4）。仅桌面壳有实现；浏览器形态不显示入口。 */
+export function daKaiRiZhi(): void {
+  const api = (window as unknown as { pywebview?: { api?: { open_logs?: () => void } } })
+    .pywebview?.api;
+  void api?.open_logs?.();
+}
 
 export const createSession = (a: CreateSessionRequest) =>
   post<{ session: AgentSession }>("/sessions", a).then((r) => r.session);

@@ -50,7 +50,9 @@ from lifeos.bridge.pingju import gel as _ge_li
 # 依据：anyio 的 asyncio 后端把多余 kwargs 透传给
 # `asyncio.create_subprocess_exec`，与 SDK 调用处的参数不冲突。
 import anyio as _anyio
+import os as _os
 import sys as _sys
+from pathlib import Path as _Lu
 
 _yuan_open_process = _anyio.open_process
 
@@ -90,6 +92,35 @@ ZHUAN_SHANG = 200
 # SDK 的 permission_mode 字面量里没有 "manual"，是 "default"（方案变更记录已纠错）。
 MO_SHI = {"manual": "default", "acceptEdits": "acceptEdits", "plan": "plan",
           "auto": "auto", "dontAsk": "dontAsk"}
+
+
+def resolve_claude_runtime() -> tuple[str | None, dict[str, str]]:
+    """claude CLI 运行时的**唯一归口**（方案 5.1：S1 检测 + S2 捆绑）。
+
+    返回 `(cli_path, env 增量)`。`cli_path=None` 表示交回 SDK 默认
+    （PATH 探测）——即「用户本就装过 Claude Code」的 S1 形态，改动三的
+    直读本机配置正建立在这个假设上。三个来源按优先级：
+
+    1. `LIFEOS_CLAUDE_PATH`：用户显式指定的 claude.exe；
+    2. 捆绑运行时（S2）：打包态 `resources/node/` 下的原生 `claude.exe`
+       （SDK 直接 spawn 可执行文件，`.bat/.cmd` 会被它拒绝——subprocess_cli
+       的 `_reject_windows_batch_cli`，所以捆绑的必须是原生 exe）；
+    3. 都没有 → SDK 自己沿 PATH 找。
+
+    SDK 的注入点是 `ClaudeAgentOptions(cli_path=...)`，`kaishi()` 里接。
+    """
+    a1 = _os.environ.get("LIFEOS_CLAUDE_PATH")
+    if a1 and _Lu(a1).is_file():
+        return a1, {}
+    gen = _os.environ.get("LIFEOS_BUNDLED_NODE")
+    hou_xuan = [_Lu(gen)] if gen else []
+    if getattr(_sys, "frozen", False):
+        hou_xuan.append(_Lu(_sys.executable).parent / "resources" / "node")
+    for mu in hou_xuan:
+        exe = mu / ("claude.exe" if _os.name == "nt" else "claude")
+        if exe.is_file():
+            return str(exe), {}
+    return None, {}
 
 
 def _qu(a1: Any, a2: str, a3: Any = None) -> Any:
@@ -170,7 +201,10 @@ class ClaudeCodeAdapter(AgentAdapter):
                 # Bridge 无控制台（DETACHED_PROCESS 拉起），探测子进程不补
                 # CREATE_NO_WINDOW 就会在桌面闪现终端窗。
                 kw["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-            chu = subprocess.run(["claude", "--version"], capture_output=True,
+            # 版本探测与 spawn 走同一个归口：探测到的是用户实际会用到的那个 CLI。
+            lu, _ = resolve_claude_runtime()
+            ming = [lu] if lu else ["claude"]
+            chu = subprocess.run([*ming, "--version"], capture_output=True,
                                  text=True, timeout=10, **kw)
             m = _re.search(r"(\d+\.\d+\.\d+)", chu.stdout or "")
             cli = m.group(1) if m else None
@@ -215,7 +249,11 @@ class ClaudeCodeAdapter(AgentAdapter):
             # 随即 `TypeError: 'NoneType' object is not a mapping`，被包成
             # `CLIConnectionError: Failed to start Claude Code` —— 前端连
             # 后端一开会话就报的那个错（2026-10-10 实测复现）。
-            env=a1.get("env") or {},
+            env={**resolve_claude_runtime()[1], **(a1.get("env") or {})},
+            # CLI 运行时归口（方案 5.1）：resolve_claude_runtime 检出捆绑/
+            # 用户指定的 claude.exe 就显式指给 SDK；None 则 SDK 自己沿 PATH
+            # 找（S1 形态）。
+            cli_path=resolve_claude_runtime()[0],
         ))
         await self.kehu.connect()
         self.guan_le = False

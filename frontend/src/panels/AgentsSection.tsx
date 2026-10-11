@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   bridgeInfo,
+  daKaiRiZhi,
   devices,
   pairCode,
   pickFolder,
@@ -9,6 +10,7 @@ import {
   stopBridge,
   trustFolder,
   unpair,
+  zaiZhuoMian,
   type BridgeInfo,
   type DeviceRow,
 } from "../api/agentClient";
