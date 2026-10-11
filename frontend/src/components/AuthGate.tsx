@@ -156,9 +156,13 @@ export function AccountMenu() {
     } catch { /* 未登录时菜单不渲染内容 */ }
   }, []);
 
+  // status 必须挂载即拉取：只在 kai 时拉，会卡死在「?」div 上——那个 div 没有
+  // onClick，头像永远点不开，也就永远触发不了 kai。
+  useEffect(() => { void shua(); }, [shua]);
   useEffect(() => { if (kai) void shua(); }, [kai, shua]);
 
-  if (!status?.authenticated) return <div className="avatar">?</div>;
+  if (!status) return <div className="avatar">…</div>;
+  if (!status.authenticated) return <div className="avatar">?</div>;
 
   const shouZi = (status.username ?? "?").charAt(0).toUpperCase();
 
