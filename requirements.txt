@@ -1,6 +1,8 @@
 claude-agent-sdk==0.2.160
 websockets>=15,<16
+pywebview>=5.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-reporter==0.5.3
-pywebview>=5.0
+# 打包用：tools/build_exe.ps1 通过 .venv 的解释器调 PyInstaller
+pyinstaller>=6.10
