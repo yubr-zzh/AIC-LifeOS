@@ -461,15 +461,23 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     def _dai_li(self, a1, a2: str) -> None:
         """反代的一次请求。延迟 import `bridge_admin` 是为了避开循环依赖。"""
         from lifeos.api import bridge_admin
-        if a2 != "GET" and not self._shou_quan_guan():
-            return
         # 桌面壳形态（方案 7.1 的本地直连）没有「配对设备」这回事：隧道/
         # 设备表那条主干是公网形态的，硬走只会稳定 502「还没有配对的设备」。
         # 开发态这条链由 vite.config.ts 的 agentBridgeProxy 扮演（读
         # runtime.json 注入 token）；打包态主服务就是那个「本机可信进程」，
         # 同样的职责由 _dai_li_ben_di 接手。
+        #
+        # **桌面分支必须排在 CSRF 闸之前。** 一次性 token 闸是为隧道形态
+        # 设计的；桌面直连与 vite 代理同一份信任模型（见 _dai_li_ben_di），
+        # 而控制台的 /agent-api/* 调用按契约不带 CSRF 头——闸若照吃，
+        # 会话建立、目录信任、审批决定全部 403「CSRF token 无效或已用过」，
+        # 且前端没有任何恢复手段。桌面态的 CSRF 防线由登录闸承担：
+        # /agent-api/* 在登录闸之后（_xu_yao_deng_lu），会话 Cookie 是
+        # SameSite=Strict，跨站 no-cors 的简单请求带不来会话。
         if os.environ.get("LIFEOS_DESKTOP") == "1":
             self._dai_li_ben_di(a1, a2)
+            return
+        if a2 != "GET" and not self._shou_quan_guan():
             return
         gw = bridge_admin.GW
         if gw is None:
@@ -588,6 +596,11 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
             return
         ling = str(yun.get("token") or "")
         rest = a1.path[len("/agent-api"):] or "/"
+        # query 必须跟路走：`/trust-check?path=…`、`transcript?from=…`、
+        # `/stream?lastEventId=…` 的参数都在 query 里。只转发 path 的老写法
+        # 让桌面壳选完目录拿回 400「path 不能为空」，工作目录永远填不上。
+        if a1.query:
+            rest += "?" + a1.query
         shi_liu = rest.split("?", 1)[0] == "/stream" and a2 == "GET"
         if shi_liu and ling:
             rest += ("&" if "?" in rest else "?") + "token=" + quote(ling)

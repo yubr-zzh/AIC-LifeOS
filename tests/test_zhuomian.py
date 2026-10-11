@@ -120,5 +120,129 @@ class KouTanCeTest(unittest.TestCase):
         s.close()
 
 
+class _JiaBridge:
+    """假 Bridge：记下每个请求的 method/path/关键头，回一段 JSON。
+
+    桌面直连代理（_dai_li_ben_di）的断言对象是「请求怎么被搬运」，
+    真 Bridge 会把探测、鉴权那一堆变量带进来，不用它。
+    """
+
+    def __init__(self):
+        import http.server
+        self.shou_dao: list[dict] = []
+
+        zhe = self
+
+        class ChuLi(http.server.BaseHTTPRequestHandler):
+            def _ji(self):
+                zhang = int(self.headers.get("content-length") or 0)
+                ti = self.rfile.read(zhang) if zhang else b""
+                zhe.shou_dao.append({
+                    "method": self.command,
+                    "path": self.path,
+                    "token": self.headers.get("X-Bridge-Token"),
+                    "body": json.loads(ti) if ti else None,
+                })
+                hui = json.dumps({"ok": True}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(hui)))
+                self.end_headers()
+                self.wfile.write(hui)
+
+            do_GET = do_POST = _ji
+
+            def log_message(self, *a):
+                pass
+
+        self.fu = http.server.ThreadingHTTPServer(("127.0.0.1", 0), ChuLi)
+        self.duan = self.fu.server_address[1]
+        threading.Thread(target=self.fu.serve_forever, daemon=True).start()
+
+    def ting(self):
+        self.fu.shutdown()
+        self.fu.server_close()
+
+
+class ZhuoMianZhiLianTest(unittest.TestCase):
+    """桌面直连代理的两条承重契约（2026-10-11 真机两病灶的回归钉）：
+
+    1. **query 必须跟路走**——老写法只转发 `a1.path`，`/trust-check?path=…`
+       到了 Bridge 手里只剩 `/trust-check`，回 400「path 不能为空」，
+       桌面壳选完目录工作目录永远填不上。
+    2. **不吃隧道形态的 CSRF 闸**——控制台的 /agent-api/* 调用按契约不带
+       `X-LifeOS-CSRF`，桌面直连若照吃闸，会话建立、目录信任全部 403
+       「CSRF token 无效或已用过」。桌面态的 CSRF 防线是登录闸 +
+       SameSite=Strict 会话（见 server.py `_dai_li` 的注释），
+       这里钉住「不带 CSRF 头的 POST 必须通」。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import http.client
+        cls.http = http.client
+
+    def setUp(self):
+        import logging
+        from lifeos.api.devices import PeiMa, SheBiao
+        from lifeos.api.server import LiAnHTTPServer, LifeOSRequestHandler
+        self.jia = _JiaBridge()
+        self.yuan = (bridge_admin.SHE, bridge_admin.GW, bridge_admin.MA)
+        with tempfile.TemporaryDirectory() as tmp:
+            biao = SheBiao(Path(tmp) / "devices.json", logging.getLogger("test.zm"))
+            bridge_admin.zhuang(biao, None, PeiMa())
+        self.huan = mock.patch.dict("os.environ", {"LIFEOS_DESKTOP": "1"}, clear=False)
+        with self.huan:
+            self.duan = _kong_kou(9300, 9320)
+            self.fu = LiAnHTTPServer(("127.0.0.1", self.duan), LifeOSRequestHandler)
+        threading.Thread(target=self.fu.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.fu.shutdown()
+        self.fu.server_close()
+        bridge_admin.zhuang(*self.yuan)
+        self.jia.ting()
+
+    def _fa(self, lu, fa="GET", ti=None, tou=None):
+        c = self.http.HTTPConnection("127.0.0.1", self.duan, timeout=5)
+        try:
+            c.request(fa, lu,
+                      body=None if ti is None else json.dumps(ti),
+                      headers=tou or {})
+            r = c.getresponse()
+            return r.status, json.loads(r.read())
+        finally:
+            c.close()
+
+    def test_query_geng_lu_zou(self):
+        """`/trust-check?path=…` 的 query 必须原样到 Bridge，token 头照注入。"""
+        with (mock.patch.object(bridge_admin, "du_yunxing",
+                                return_value={"port": self.jia.duan, "token": "T"}),
+              self.huan):
+            zi, _ = self._fa("/agent-api/trust-check?path=D%3A%5Ctmp")
+            self.assertEqual(zi, 200)
+            self.assertEqual(self.jia.shou_dao[-1]["path"],
+                             "/trust-check?path=D%3A%5Ctmp")
+            self.assertEqual(self.jia.shou_dao[-1]["token"], "T")
+
+    def test_post_bu_chi_csrf_zha(self):
+        """桌面直连的 POST 不带 CSRF 头也必须通（登录闸在挡，token 闸不归它）。"""
+        with (mock.patch.object(bridge_admin, "du_yunxing",
+                                return_value={"port": self.jia.duan, "token": "T"}),
+              self.huan):
+            zi, _ = self._fa("/agent-api/sessions", fa="POST",
+                             ti={"agentId": "claude-code", "cwd": "D:/x"})
+            self.assertEqual(zi, 200)
+            self.assertEqual(self.jia.shou_dao[-1]["body"],
+                             {"agentId": "claude-code", "cwd": "D:/x"})
+
+    def test_bridge_mei_qi_lai_hui_502(self):
+        with (mock.patch.object(bridge_admin, "du_yunxing", return_value={}),
+              self.huan):
+            zi, xiang = self._fa("/agent-api/agents")
+            self.assertEqual(zi, 502)
+            self.assertEqual(xiang["error"]["code"], "agent_unavailable")
+
+
 if __name__ == "__main__":
     unittest.main()
