@@ -2,9 +2,7 @@
 node_modules/
 .pnpm-store/
 
-# Build output
-dist/
-build/
+# Build output（根目录 dist/ 与 build/ 为打包产物，按要求入库）
 .next/
 out/
 coverage/
@@ -36,6 +34,10 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# 打包产物中的编译扩展（.pyd 是 Windows 的动态库，软件运行必需，须入库）
+!dist/**/*.pyd
+!build/**/*.pyd
 
 # Temporary files
 *.tmp
