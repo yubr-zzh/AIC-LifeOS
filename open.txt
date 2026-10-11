@@ -1,0 +1,24 @@
+## 方式一：一键脚本（推荐）
+
+- **启动**：双击 `start-lifeos.bat`
+自动弹出两个窗口（后端 8765、前端 5173），约 5 秒后自动打开浏览器。
+- **关闭**：双击 `stop-lifeos.bat`
+按端口找到监听进程并结束，窗口会显示关闭结果。
+
+## 方式二：手动
+
+**启动**（开两个 PowerShell 终端）：
+
+```
+# 终端 1 - 后端
+cd C:\Users\Liuxj\Desktop\AIC-LifeOS-integration
+python -m lifeos.api.server
+
+# 终端 2 - 前端
+cd C:\Users\Liuxj\Desktop\AIC-LifeOS-integration\frontend
+npm run dev
+```
+
+**关闭**：
+
+- 在对应窗口按 `Ctrl + C`
