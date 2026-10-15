@@ -68,18 +68,23 @@ class MemoryManager:
             for entry in store.get(category, [])
         ]
 
-    def set_provider_sync(self, memory_id, status, *, remote_id=None, error=None):
+    def set_provider_sync(self, memory_id, status, *, remote_id=None, remote_scope_key=None, error=None):
         if status not in {"synced", "pending", "deleted"}:
             raise ValueError("unsupported provider sync status")
         store = self._read()
         item = self._find_memory(store, memory_id)
-        item["provider_sync"] = {
+        previous_sync = item.get("provider_sync") or {}
+        provider_sync = {
             "provider": "tencentdb",
             "status": status,
-            "remote_id": remote_id,
+            "remote_id": remote_id if remote_id is not None else previous_sync.get("remote_id"),
             "error": error,
             "updated_at": datetime.utcnow().isoformat(),
         }
+        binding_key = remote_scope_key or previous_sync.get("remote_scope_key")
+        if binding_key is not None:
+            provider_sync["remote_scope_key"] = binding_key
+        item["provider_sync"] = provider_sync
         self._write(store)
         return item
 

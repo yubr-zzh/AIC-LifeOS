@@ -47,6 +47,85 @@ class CoreRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "loopback Gateway"):
             TencentDBConfig.from_env(complete)
 
+    def test_tencentdb_scope_mapping_and_atomic_create_are_explicitly_gated(self):
+        calls = []
+        coordinates = {
+            "team_id": "project-team",
+            "agent_id": "project-agent",
+            "user_id": "project-user",
+            "session_id": "lifeos-project-lifeos",
+        }
+        env = {
+            "LIFEOS_TDAI_ENDPOINT": "http://127.0.0.1:8420",
+            "LIFEOS_TDAI_SERVICE_ID": "test-instance",
+            "LIFEOS_TDAI_TEAM_ID": "global-team",
+            "LIFEOS_TDAI_AGENT_ID": "global-agent",
+            "LIFEOS_TDAI_USER_ID": "global-user",
+            "LIFEOS_TDAI_SCOPE_MAP": json.dumps({"project:lifeos": coordinates}),
+        }
+        config = TencentDBConfig.from_env(env)
+        self.assertFalse(config.atomic_create_enabled)
+        self.assertEqual(
+            TencentDBMemoryAdapter(config).coordinates_for_scope(
+                {"kind": "project", "project_id": "lifeos"}
+            ),
+            coordinates,
+        )
+
+        adapter = TencentDBMemoryAdapter(config, transport=lambda path, payload: calls.append((path, payload)) or {})
+        with self.assertRaisesRegex(TencentDBError, "no explicit TencentDB identity mapping"):
+            adapter.approved_memory_payload({
+                "id": "unmapped",
+                "status": "active",
+                "category": "project",
+                "content": {"claim": "synthetic"},
+                "scope": {"kind": "project", "project_id": "other"},
+            })
+        self.assertEqual(adapter.search_memories("synthetic", {"kind": "project", "project_id": "other"}), [])
+        self.assertEqual(calls, [])
+
+        env["LIFEOS_TDAI_ALLOW_ATOMIC_CREATE"] = "true"
+        enabled = TencentDBMemoryAdapter(
+            TencentDBConfig.from_env(env),
+            transport=lambda path, payload: calls.append((path, payload)) or {"id": payload.get("id")},
+        )
+        scope = {"kind": "project", "project_id": "lifeos"}
+        binding = enabled.scope_key_for(scope)
+        memory = {
+            "id": "memory-1",
+            "status": "active",
+            "category": "project",
+            "content": {"claim": "approved synthetic fact"},
+            "scope": scope,
+            "provider_sync": {"status": "pending", "remote_scope_key": binding},
+        }
+        enabled.write_approved_memory(memory)
+        self.assertEqual(calls[-1][0], "/v3/atomic/create")
+        self.assertEqual({key: calls[-1][1][key] for key in coordinates}, coordinates)
+        self.assertEqual(calls[-1][1]["type"], "work_fact")
+        self.assertNotIn("raw transcript", json.dumps(calls[-1][1]))
+
+        memory["provider_sync"] = {
+            "status": "synced",
+            "remote_id": "lifeos-memory-1",
+            "remote_scope_key": binding,
+        }
+        enabled.write_approved_memory(memory)
+        enabled.delete_approved_memory("memory-1", scope=scope, remote_scope_key=binding)
+        self.assertEqual(calls[-2][0], "/v3/atomic/update")
+        self.assertEqual(calls[-1][0], "/v3/atomic/delete")
+        self.assertEqual(
+            {key: calls[-1][1][key] for key in ("team_id", "agent_id", "user_id")},
+            {key: coordinates[key] for key in ("team_id", "agent_id", "user_id")},
+        )
+
+        with self.assertRaisesRegex(TencentDBError, "binding does not match"):
+            enabled.delete_approved_memory("memory-1", scope=scope, remote_scope_key="stale-scope")
+        self.assertEqual(len(calls), 3)
+
+        with self.assertRaisesRegex(ValueError, "must be true or false"):
+            TencentDBConfig.from_env({**env, "LIFEOS_TDAI_ALLOW_ATOMIC_CREATE": "sometimes"})
+
     def test_tencentdb_adapter_writes_approved_only_and_fail_closed_filters_scope(self):
         calls = []
 
@@ -81,6 +160,14 @@ class CoreRegressionTests(unittest.TestCase):
             team_id="test-team",
             agent_id="test-agent",
             user_id="test-user",
+            scope_map={
+                "project:lifeos": {
+                    "team_id": "project-team",
+                    "agent_id": "project-agent",
+                    "user_id": "project-user",
+                    "session_id": "lifeos-project-lifeos",
+                },
+            },
         )
         adapter = TencentDBMemoryAdapter(config, transport=fake_transport)
         unapproved = {"id": "pending", "content": {"claim": "x"}, "status": "candidate"}
@@ -91,6 +178,7 @@ class CoreRegressionTests(unittest.TestCase):
         first_write = {
             "id": "new-memory",
             "status": "active",
+            "category": "user",
             "content": {"claim": "approved but not remotely bound"},
         }
         with self.assertRaisesRegex(TencentDBError, "cannot create"):
@@ -100,7 +188,11 @@ class CoreRegressionTests(unittest.TestCase):
         approved = {
             "id": "memory-1",
             "status": "active",
-            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": adapter.scope_key_for({"kind": "project", "project_id": "lifeos"}),
+            },
             "category": "project",
             "content": {"claim": "approved fact"},
             "source": "structured_entry",
@@ -109,8 +201,8 @@ class CoreRegressionTests(unittest.TestCase):
         }
         adapter.write_approved_memory(approved)
         self.assertEqual(calls[-1][0], "/v3/atomic/update")
-        self.assertEqual(calls[-1][1]["team_id"], "test-team")
-        self.assertEqual(calls[-1][1]["session_id"], "lifeos-approved-memory")
+        self.assertEqual(calls[-1][1]["team_id"], "project-team")
+        self.assertEqual(calls[-1][1]["session_id"], "lifeos-project-lifeos")
         self.assertIn("review-1", calls[-1][1]["background"])
 
         grouped = adapter.retrieve(
@@ -768,15 +860,20 @@ class CoreRegressionTests(unittest.TestCase):
             def __init__(self):
                 self.writes = []
                 self.deletes = []
+                self.write_bindings = []
                 self.fail_next_write = False
 
+            def scope_key_for(self, scope):
+                return scope.get("kind", "global")
+
             def write_approved_memory(self, item):
+                self.write_bindings.append(item.get("provider_sync", {}).get("remote_scope_key"))
                 if self.fail_next_write:
                     self.fail_next_write = False
                     raise RuntimeError("simulated provider outage")
                 self.writes.append(item["id"])
 
-            def delete_approved_memory(self, memory_id):
+            def delete_approved_memory(self, memory_id, *, scope=None, remote_scope_key=None):
                 self.deletes.append(memory_id)
 
         provider = FakeMemoryProvider()
@@ -810,6 +907,7 @@ class CoreRegressionTests(unittest.TestCase):
         approved = fetch(f"/memory/candidates/{candidate['id']}/commit", "POST")
         self.assertEqual(approved["status"], "committed")
         self.assertEqual(approved["item"]["provider_sync"]["status"], "synced")
+        self.assertEqual(approved["item"]["provider_sync"]["remote_scope_key"], "global")
         self.assertEqual(provider.writes, [candidate["id"]])
         self.assertEqual(fetch("/memory")["user"][0]["id"], candidate["id"])
         profile = fetch("/memory/profile")
@@ -846,10 +944,15 @@ class CoreRegressionTests(unittest.TestCase):
         provider.fail_next_write = True
         failed_sync = fetch(f"/memory/candidates/{pending['id']}/commit", "POST")
         self.assertEqual(failed_sync["item"]["provider_sync"]["status"], "pending")
+        self.assertEqual(failed_sync["item"]["provider_sync"]["remote_scope_key"], "global")
         retried_sync = fetch("/memory/providers/tencentdb/sync-pending", "POST")
         self.assertEqual(
             retried_sync["results"],
             [{"memory_id": pending["id"], "status": "synced"}],
+        )
+        self.assertEqual(
+            agent.memory._find_memory(agent.memory._read(), pending["id"])["provider_sync"]["remote_scope_key"],
+            "global",
         )
         self.assertEqual(fetch("/skills/pending/skill-1/approve", "POST")["status"], "approved")
         self.assertEqual(fetch("/skills")["approved"][0]["id"], "skill-1")
@@ -877,7 +980,7 @@ class CoreRegressionTests(unittest.TestCase):
             def write_approved_memory(self, item):
                 self.items.append(item)
 
-            def delete_approved_memory(self, _memory_id):
+            def delete_approved_memory(self, _memory_id, *, scope=None, remote_scope_key=None):
                 pass
 
         provider = FakeMemoryProvider()

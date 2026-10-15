@@ -1,7 +1,7 @@
 # LifeOS 外部记忆能力组合与数据权威
 
 > 状态：阶段 8 修订后的目标架构决策（2026-10-03）
-> 说明：目标是实际使用 `ai-memory` 与 TencentDB Agent Memory 的互补能力。本文区分目标架构与当前实现；适配器尚未落地，API/身份/审核契约仍需在阶段 9 验证。
+> 说明：目标是实际使用 `ai-memory` 与 TencentDB Agent Memory 的互补能力。当前代码已包含 loopback-only 的 ai-memory 项目只读适配器和 TencentDB v3 记忆适配器；本地 LifeOS Memory 仍是运行时权威，外部写入与召回尚未完成生产切换。
 
 ## 核心决策
 
@@ -57,6 +57,15 @@ flowchart LR
 - 新接入优先评估上游推荐的 v3 API/SDK，并稳定映射 LifeOS `user_id`、`project_id`、`scenario_type` 到 `team_id`、`agent_id`、`user_id` 和 session 等坐标；禁止用固定默认 ID 代替真实隔离。
 - 公开文档列出了 v3 conversation/atomic/scenario/core 路由及身份字段，但没有证明它提供与 LifeOS 等价的 pending-candidate/user-approval 工作流。必须先验证“先审核再写 L1”的可实现方式；未解决前不可启用自动提取到生产数据。
 - TencentDB 的 L2/L3 是长期认知能力的目标组成，不是仅供展示的可选参考；但生成结果需要 generation refs，且范围和上游 approved L1 可解释。缺来源、scope 不符或 generator 故障时不注入模型。
+
+#### 当前 v3 适配器配置
+
+- `LIFEOS_TDAI_ENDPOINT`、`LIFEOS_TDAI_SERVICE_ID`、`LIFEOS_TDAI_TEAM_ID`、`LIFEOS_TDAI_AGENT_ID`、`LIFEOS_TDAI_USER_ID` 必须显式提供；当前只允许 loopback Gateway。全局记忆使用这组基础身份。
+- 项目和场景必须通过 `LIFEOS_TDAI_SCOPE_MAP` 显式映射为 `team_id`、`agent_id`、`user_id`、`session_id`。未映射的范围不会查询或写入 TencentDB；不得回退到全局身份。
+- 映射格式示例：`{"project:lifeos":{"team_id":"...","agent_id":"...","user_id":"...","session_id":"..."}}`。每个映射必须且只能包含这四个非空字符串字段。
+- 每条已同步记忆会记录远端身份映射指纹。映射改变后，更新/删除会 fail closed，避免按新身份操作旧远端记录。
+- 新记忆写入依赖 Gateway 的 `POST /v3/atomic/create`。`LIFEOS_TDAI_ALLOW_ATOMIC_CREATE` 默认关闭；只有部署的 Gateway 明确支持该端点并通过隔离验收后才可开启。更新仍使用 `/v3/atomic/update`，不以 upsert 代替 create。
+- 当前证据仅覆盖合成数据下单条记录的真实 Gateway 生命周期；多条首次 create 的上游问题仍未解决。LifeOS 本地记录继续保留为权威，失败写入保持 pending，可在问题修复后重试。
 
 ## 迁移与切换原则
 
