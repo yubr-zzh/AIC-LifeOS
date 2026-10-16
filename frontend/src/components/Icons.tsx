@@ -116,3 +116,79 @@ export const IconSun = (p: IconProps) =>
 
 export const IconSettings = (p: IconProps) =>
   wrap(<><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.5h-.2a1.7 1.7 0 0 0-1.6 1z" /></>, "0 0 24 24", p);
+
+export const IconArrowRight = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M5 12h14" />
+      <path d="M13 5l7 7-7 7" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconArrowUpRight = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M7 17L17 7" />
+      <path d="M8 7h9v9" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconCheck = (p: IconProps) =>
+  wrap(<path d="M4 12l5 5L20 6" />, "0 0 24 24", p);
+
+export const IconPlus = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconTrash = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14" />
+      <path d="M10 11v6M14 11v6" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconInbox = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M3 13l3-8h12l3 8" />
+      <path d="M3 13v6a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-6" />
+      <path d="M3 13h5l1.5 2.5h5L16 13h5" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconLeaf = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M4 20c0-8 6-14 16-16-2 10-8 16-16 16z" />
+      <path d="M4 20l9-9" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconCircleDot = (p: IconProps) =>
+  wrap(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+    </>,
+    "0 0 24 24",
+    p,
+  );

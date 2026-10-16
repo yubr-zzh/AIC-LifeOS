@@ -93,7 +93,10 @@ function zhuang(bei: DeviceRow[] = [], xin: Partial<BridgeInfo> = {}) {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("AgentsSection 的配对与设备列表", () => {
+// 2026-10-16：spec 变更，AgentsSection 的「配对」整段卡从 UI 拿掉（改为隐藏，
+// 代码保留，按 SHOW_PAIRING 开关可恢复）。这里三项 describe 全部 it.skip ——
+// 等配对流程重新设计后再恢复。
+describe.skip("AgentsSection 的配对与设备列表", () => {
   it("tunnelState 的中文映射在界面上真的生效——隧道形态下不能显示裸的 none", async () => {
     vi.mocked(client.bridgeInfo).mockResolvedValue(xinXi({ tunnelState: "none" }));
     render(<AgentsSection store={dummyStore()} api={dummyApi()} onGoChat={() => undefined} />);
@@ -140,7 +143,7 @@ describe("AgentsSection 的配对与设备列表", () => {
  * 没有确认；而且调用处不看 `ok`，后端回 `{ok:false}`（HTTP 200）时界面照样显示
  * 「设备已被解绑」——失败被显示成了成功。
  */
-describe("AgentsSection 的解绑确认与 ok", () => {
+describe.skip("AgentsSection 的解绑确认与 ok", () => {
   it("单击「解绑」不发请求，只进入确认态——吊销凭据不可逆，不能单击即生效", async () => {
     const { jie } = zhuang([sheBei({ deviceId: "dev-9", label: "笔记本" })]);
     fireEvent.click(await screen.findByRole("button", { name: /解绑/ }));
@@ -179,7 +182,7 @@ describe("AgentsSection 的解绑确认与 ok", () => {
  * ——`tunnelState` 的默认值 `"local"` 出现在读不到 runtime.json 时，而那一路
  * 在给 port 赋值之前就 return 了，两者永远互斥。
  */
-describe("AgentsSection 的配对入口地址", () => {
+describe.skip("AgentsSection 的配对入口地址", () => {
   const tianMa = async (xin: Partial<BridgeInfo>) => {
     zhuang([], xin);
     fireEvent.click(await screen.findByRole("button", { name: /添加设备/ }));
@@ -245,13 +248,14 @@ describe("AgentsSection 的凭据目录告警（credentialsReady）", () => {
 
   it("true 时不显示任何凭据告警——正常情况是常态，不该天天占屏", async () => {
     zhuangCatalog([], {}, catalog({ credentialsReady: true }));
-    await screen.findByText("还没有配对过任何设备。");
+    // 配对卡 2026-10-16 后从 UI 拿掉，改用「本机 Bridge」卡里的"未运行"作为渲染就位信号。
+    await screen.findByText(/未运行|运行中/);
     expect(screen.queryByText(/重新登录一次/)).toBeNull();
   });
 
   it("字段缺失（旧 Bridge）时**不**报警报——`!undefined` 是 true，把它显示成故障就是假警报", async () => {
     zhuangCatalog([], {}, catalog());
-    await screen.findByText("还没有配对过任何设备。");
+    await screen.findByText(/未运行|运行中/);
     expect(screen.queryByText(/重新登录一次/)).toBeNull();
   });
 });

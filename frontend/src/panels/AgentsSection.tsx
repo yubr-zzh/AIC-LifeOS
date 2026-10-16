@@ -138,6 +138,11 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
   // 维持原判：三态诚实，不知道就不响，但知道要隔离就照旧管。
   const credentialsBad = geli !== false && state.catalog?.credentialsReady === false;
 
+  const portV = info && info.port != null ? String(info.port) : "—";
+  const pidV = info && info.pid != null ? String(info.pid) : "—";
+  const cliV = info?.cliVersion ?? "—";
+  const tunnelV = tunnelLabel(info?.tunnelState);
+  const errorV = info?.error;
   return (
     <div className="ags">
       {/* ---- 凭据目录告警（spec 11.2）----
@@ -154,8 +159,6 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </span>
         </div>
       ) : null}
-      <AgentActivityPanel />
-      {/* ---- 设备 / 进程状态 ---- */}
       <section className="ags-card">
         <div className="ags-head">
           <div>
@@ -180,12 +183,12 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </p>
         ) : null}
         <div className="ags-facts">
-          <Fact k="端口" v={info?.port ? String(info.port) : "—"} />
-          <Fact k="进程" v={info?.pid ? String(info.pid) : "—"} />
-          <Fact k="CLI" v={info?.cliVersion ?? "—"} />
-          <Fact k="通道" v={tunnelLabel(info?.tunnelState)} />
+          <Fact k="端口" v={portV} />
+          <Fact k="进程" v={pidV} />
+          <Fact k="CLI" v={cliV} />
+          <Fact k="通道" v={tunnelV} />
         </div>
-        {info?.error ? <p className="ags-note">{info.error}</p> : null}
+        {errorV ? <p className="ags-note">{errorV}</p> : null}
         <div className="ags-btns">
           {info?.running ? (
             <button
@@ -221,10 +224,9 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         </div>
       </section>
 
-      {/* ---- 配对与设备（spec 8.1 第 1 步 + 8.3）----
-          不按形态设闸：本机直连下这一块显示的是「还没有配对过任何设备」，
-          条件渲染多一条分支、少一个能解释状态的地方。上面「通道」那一格
-          已经说清现在是什么形态。 */}
+      {/* 配对卡在 spec 变更后从 UI 拿掉：保留代码，下面用 {false && ...} 一键恢复。
+          设备列表仍在本节里出现（CLI 列表是设备/进程信息，与配对流程不重叠）。 */}
+      {false && (<>
       <section className="ags-card">
         <div className="ags-head">
           <div>
@@ -249,7 +251,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         </div>
         {ma ? (
           <div className="ags-note" aria-live="polite">
-            <strong className="mono" style={{ fontSize: 18, letterSpacing: ".1em" }}>{ma.code}</strong>
+            <strong className="mono" style={{ fontSize: 18, letterSpacing: ".1em" }}>{ma?.code}</strong>
             <br />
             <PeiDuiRuKou info={info} />
             {gao ? <> 剩余 {gao}。</> : null}
@@ -270,6 +272,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           }
         />
       </section>
+      </>)}
 
       {/* ---- Agent 发现 ---- */}
       <section className="ags-card">
@@ -468,6 +471,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </div>
         </section>
       ) : null}
+      <AgentActivityPanel />
     </div>
   );
 }

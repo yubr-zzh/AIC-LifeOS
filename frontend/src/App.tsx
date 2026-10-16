@@ -3,11 +3,10 @@ import { useStore } from "./state/store";
 import { useAgentStore } from "./state/agentStore";
 import { useAgentStream } from "./hooks/useAgentStream";
 import { listEntries, proposeEntryMemoryCandidate, saveEntry } from "./api/client";
-import type { MemoryScope, StructuredEntryKind } from "./api/types";
+import type { MemoryScope, StructuredEntry, StructuredEntryKind } from "./api/types";
+import { RichEditor } from "./components/RichEditor";
 import { ChatPanel } from "./panels/ChatPanel";
-import { AgentPanel } from "./panels/AgentPanel";
 import { AgentsSection } from "./panels/AgentsSection";
-import { AgentPeekBar } from "./panels/AgentPeekBar";
 import { RuntimeRail } from "./panels/RuntimeRail";
 import { EventsPanel } from "./panels/EventsPanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
@@ -17,7 +16,23 @@ import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
 import { SettingsPage } from "./panels/SettingsPage";
 import { WorkCalendar } from "./components/WorkCalendar";
-import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
+import {
+  IconArrowRight,
+  IconBook,
+  IconBolt,
+  IconCalendar,
+  IconCheck,
+  IconCircleDot,
+  IconHome,
+  IconInbox,
+  IconLeaf,
+  IconMessage,
+  IconPlus,
+  IconSettings,
+  IconSpark,
+  IconSun,
+  IconTrash,
+} from "./components/Icons";
 
 type SectionId =
   | "home"
@@ -31,7 +46,7 @@ type SectionId =
   | "feedback"
   | "diary"
   | "insight"
-  | "admin"
+  | "memory"
   | "settings";
 
 type NavIcon = "home" | "message" | "calendar" | "book" | "spark" | "bolt";
@@ -60,29 +75,26 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     items: [{ id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" }],
   },
   {
-    group: "系统",
-    items: [{ id: "admin", label: "系统后台", icon: "spark", hint: "工程与运行状态" }],
-  },
-  {
     group: "记录",
     items: [{ id: "calendar", label: "工作历", icon: "calendar", hint: "回看每日记录" }],
   },
 ];
 
-const sectionMeta = {
-  calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
-  home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
-  "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
-  "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
-  "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
-  "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
-  chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
-  agents: { eyebrow: "连接 · 本地 Agent", title: "把执行交给你机器上的 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
-  feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
-  diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
-  insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
-  admin: { eyebrow: "后台 · 系统", title: "LifeOS 的运行后台", description: "这里放置事件、记忆、技能与运行状态等工程信息。" },
-} as Record<SectionId, { eyebrow: string; title: string; description: string }>;
+const sectionTitle: Record<SectionId, string> = {
+  home: "今天",
+  chat: "对话",
+  agents: "本地 Agent",
+  "daily-plan": "每日规划",
+  "daily-review": "每日复盘",
+  "phase-plan": "阶段性规划",
+  "phase-review": "阶段性复盘",
+  feedback: "反馈",
+  diary: "日记",
+  insight: "心得 / 体验",
+  calendar: "工作历",
+  memory: "Memory",
+  settings: "设置",
+};
 
 function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "home") return <IconHome size={17} />;
@@ -93,19 +105,22 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   return <IconSpark size={17} />;
 }
 
-sectionMeta.settings = { eyebrow: "系统 · 设置", title: "让 LifeOS 按你的方式工作", description: "管理模型 Provider、API 连接和工作区外观。" };
-
 export default function App() {
   const store = useStore();
   const agent = useAgentStore();
   const api = useAgentStream(agent);
-  const [active, setActive] = useState<SectionId>("home");
+  const initialSection: SectionId = (() => {
+    if (typeof window === "undefined") return "home";
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    return (hash as SectionId) || "home";
+  })();
+  const [active, setActive] = useState<SectionId>(initialSection);
   const [dark, setDark] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const meta = sectionMeta[active];
-  const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
-  const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
-  const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const todayLabel = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat("zh-CN", { weekday: "long", month: "long", day: "numeric" });
+    return fmt.format(new Date());
+  }, []);
 
   // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左栏。
   // agentStore 不能反向 import 主 store，所以由同时持有两者的这一层搭桥。
@@ -121,7 +136,8 @@ export default function App() {
 
   const select = (id: SectionId) => {
     setActive(id);
-    setSettingsOpen(false);
+    setInboxOpen(false);
+    if (typeof window !== "undefined") window.location.hash = `#/${id}`;
   };
 
   return (
@@ -164,37 +180,81 @@ export default function App() {
           <div className="side-footer-line"><span className="status-orb" />系统运行良好</div>
           <div className="side-footer-sub">本地工作区 · 数据已同步</div>
         </div>
+        <div className="dev-footer">
+          <button className="dev-footer-link" onClick={() => select("memory")} title="Memory 候选 / 生命周期 / 撤回 / 画像">
+            <IconSpark size={11} /> Memory
+          </button>
+        </div>
       </aside>
 
       <div className="content-shell">
         <header className="workspace-header">
-          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.eyebrow.split(" · ")[0]}</strong></div>
+          <div className="workspace-date">{todayLabel}</div>
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
-            <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
-            <button className="header-icon-button" onClick={() => { setSettingsOpen(false); select("settings"); }} title="设置" aria-label="设置" aria-expanded={active === "settings"}><IconSettings size={16} /></button>
+            <button
+              className={`header-icon-button ${inboxOpen ? "is-active" : ""}`}
+              onClick={() => setInboxOpen(!inboxOpen)}
+              title="收件箱"
+              aria-label="收件箱"
+              aria-expanded={inboxOpen}
+            >
+              <IconInbox size={16} />
+            </button>
+            <button
+              className="header-icon-button"
+              onClick={() => setDark(!dark)}
+              title="切换主题"
+              aria-label={`切换到${dark ? "浅色" : "夜间"}主题`}
+              aria-pressed={dark}
+            >
+              {dark ? <IconSun size={16} /> : <IconSpark size={16} />}
+            </button>
+            <button
+              className="header-icon-button"
+              onClick={() => select("settings")}
+              title="设置"
+              aria-label="设置"
+              aria-expanded={active === "settings"}
+            >
+              <IconSettings size={16} />
+            </button>
             <div className="avatar">Z</div>
           </div>
-          {settingsOpen ? (
-            <div className="settings-popover">
-              <strong>工作区设置</strong>
-              <span>主题：{dark ? "夜间" : "浅色薄荷"}</span>
-              <span>数据模式：{store.state.ui.dataMode === "backend" ? "实时后端" : "本地预览"}</span>
-            </div>
-          ) : null}
+          {inboxOpen ? <InboxPopover onClose={() => setInboxOpen(false)} /> : null}
         </header>
 
         <main id="main-content" className="workspace-main">
-          <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
-            <div>
-              <div className="page-eyebrow">{meta.eyebrow}</div>
-              <h1>{meta.title}</h1>
-              <p>{meta.description}</p>
-            </div>
-            <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
+          <div className={`page-title-row ${active === "chat" ? "page-title-row-chat" : ""}`}>
+            <h1 className="page-title">{sectionTitle[active]}</h1>
           </div>
-          <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} dark={dark} onDarkChange={setDark} />
+          <SectionContent
+            active={active}
+            store={store}
+            agent={agent}
+            api={api}
+            onNavigate={select}
+            dark={dark}
+            onDarkChange={setDark}
+            onOpenInbox={() => setInboxOpen(true)}
+          />
         </main>
+      </div>
+    </div>
+  );
+}
+
+function InboxPopover({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="inbox-popover" role="dialog" aria-label="收件箱">
+      <div className="inbox-head">
+        <strong>收件箱</strong>
+        <button className="header-icon-button" onClick={onClose} aria-label="关闭" title="关闭">×</button>
+      </div>
+      <div className="inbox-empty">
+        <span className="inbox-empty-icon" aria-hidden="true"><IconInbox size={28} /></span>
+        <p>还没有外部 Agent 的任务消息。</p>
+        <small>当本机 Agent 完成任务或需要你确认时，通知会出现在这里。</small>
       </div>
     </div>
   );
@@ -208,6 +268,7 @@ function SectionContent({
   onNavigate,
   dark,
   onDarkChange,
+  onOpenInbox,
 }: {
   active: SectionId;
   store: ReturnType<typeof useStore>;
@@ -216,30 +277,17 @@ function SectionContent({
   onNavigate: (id: SectionId) => void;
   dark: boolean;
   onDarkChange: (dark: boolean) => void;
+  onOpenInbox: () => void;
 }) {
   if (active === "chat") {
-    // 对话保持内容优先；运行指标留在系统后台，执行面板按需展开。
-    const zuo = (
+    // 对话整页：左侧 session 列表（已含删除），右侧消息流。
+    // AgentPanel 仍在 admin/agents 路由使用，聊天内 Agent 活动走 ChatPanel 自己的 inline trace。
+    return (
       <div className="chat-page-grid">
         <section className="content-card chat-card">
           <ChatPanel store={store} agent={agent} api={api} />
         </section>
       </div>
-    );
-    return (
-      <>
-        <AgentPeekBar store={agent} api={api} onOpen={() => agent.setLayout("split")} />
-        {agent.state.layout === "split" ? (
-          <div className="chat-split-grid">
-            {zuo}
-            <AgentPanel store={agent} api={api}
-              onCandidateCreated={() => void store.refreshAll()}
-              onCollapse={() => agent.setLayout("collapsed")} />
-          </div>
-        ) : (
-          zuo
-        )}
-      </>
     );
   }
   if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
@@ -247,32 +295,188 @@ function SectionContent({
   if (active === "diary") return <DiaryPage />;
   if (active === "calendar") return <WorkCalendar onNavigate={onNavigate} />;
   if (active === "insight") return <InsightPage />;
-  if (active === "admin") return <AdminPage store={store} />;
+  if (active === "memory") return <MemoryPage store={store} />;
   if (active === "settings") return <SettingsPage dark={dark} onDarkChange={onDarkChange} />;
   if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
   if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
   return <HomePage store={store} onNavigate={onNavigate} />;
 }
 
+const DAILY_REMINDERS: string[] = [
+  "把最重要的事放在最前面；其余的，会自己找到位置。",
+  "慢一点，但要向前。",
+  "今天的一页空白，也是一种完成。",
+  "选择做一件事，比做完十件事更难，也更值。",
+  "完成好过完美。",
+  "留一点余地给意外的好事。",
+  "你不需要把每件事都做好；你只需要知道此刻什么值得被做好。",
+  "想不清楚的时候，先动起来。",
+  "记下来，未来会谢你。",
+  "今天的复盘，是明天的计划。",
+  "不必塞满日程；重要的那件，先做。",
+  "用笔尖慢下来，思绪会清楚。",
+  "判断你的不是今天做了什么，而是今天没做什么。",
+  "放下和坚持一样重要。",
+  "在精力最好的时候，做最难的事。",
+  "少即是多，慢即是快。",
+  "把目标写下来，可见的进度才有意义。",
+  "今天你为未来留下的，比你为今天做的，更值得被记住。",
+  "犹豫是数据不够。去查，去问，去做最小的一步。",
+  "把时间花在让你成为自己的事情上。",
+];
+
+function dayOfYearIndex(total: number): number {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now.getTime() - start.getTime();
+  const day = Math.floor(diff / (1000 * 60 * 60 * 24));
+  return day % total;
+}
+
+const DEFAULT_TODAY_TASKS = [
+  "写下本周的阶段目标",
+  "完成课程阅读 · 45 分钟",
+  "整理项目反馈",
+  "晚间复盘",
+];
+
+const TASK_KEY = "lifeos.home.todayTasks.v1";
+
+function loadTodayTasks(): { label: string; done: boolean }[] {
+  if (typeof localStorage === "undefined") return DEFAULT_TODAY_TASKS.map((label) => ({ label, done: false }));
+  try {
+    const raw = localStorage.getItem(TASK_KEY);
+    if (!raw) return DEFAULT_TODAY_TASKS.map((label) => ({ label, done: false }));
+    const parsed = JSON.parse(raw) as { label: string; done: boolean }[];
+    if (!Array.isArray(parsed)) throw new Error("bad shape");
+    return parsed;
+  } catch {
+    return DEFAULT_TODAY_TASKS.map((label) => ({ label, done: false }));
+  }
+}
+
 function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void }) {
-  const completed = 2;
-  const total = 4;
-  const progress = useMemo(() => `${Math.round((completed / total) * 100)}%`, []);
-  const today = new Intl.DateTimeFormat("zh-CN", { weekday: "short", month: "long", day: "numeric" }).format(new Date());
-  return <div className="home-grid">
-    <section className="focus-card content-card">
-      <div className="focus-top"><span className="card-kicker">今日焦点</span><span className="focus-date">{today}</span></div>
-      <h2>慢一点，但要向前。</h2>
-      <p>今天适合完成一件需要专注的事，也适合给自己留一点空白。</p>
-      <button className="green-button" onClick={() => onNavigate("daily-plan")}>开始今日规划 <span>→</span></button>
-      <div className="leaf-decoration" aria-hidden="true">✳</div>
-    </section>
-    <section className="content-card progress-card"><div className="card-heading"><div><span className="card-kicker">今日进度</span><h2>{progress}</h2></div><span className="progress-ring">{completed}/{total}</span></div><div className="progress-track"><span style={{ width: progress }} /></div><p>已完成 {completed} 项，还有 2 项等待你的注意。</p><button className="text-button" onClick={() => onNavigate("daily-plan")}>查看今日清单 →</button></section>
-    <section className="content-card today-card"><div className="card-heading"><div><span className="card-kicker">接下来</span><h2>今日安排</h2></div><span className="soft-count">4 件</span></div><Task label="写下本周的阶段目标" done /><Task label="完成课程阅读 · 45 分钟" done /><Task label="整理项目反馈" /><Task label="晚间复盘" /></section>
-    <section className="content-card rhythm-card"><div className="card-heading"><div><span className="card-kicker">生活节奏</span><h2>给自己留一点余地</h2></div><span className="soft-count">本周 · 4 / 7 天</span></div><p className="pulse-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p><div className="week-dots"><span className="filled" /><span className="filled" /><span className="filled" /><span className="filled" /><span /><span /><span /></div><div className="rhythm-footer"><span>本周已经记录了 4 个值得记住的瞬间</span><button className="text-button" onClick={() => onNavigate("diary")}>写一篇日记 →</button></div></section>
-    <section className="content-card quote-card"><span className="quote-mark">“</span><p>真正重要的不是把每件事都做好，而是知道此刻什么值得被做好。</p><span className="quote-source">— 今日提醒</span></section>
-    <section className="content-card recent-card"><div className="card-heading"><div><span className="card-kicker">最近记录</span><h2>工作台动态</h2></div><button className="text-button" onClick={() => onNavigate("feedback")}>查看全部</button></div><div className="recent-row"><span className="recent-icon">↗</span><div><strong>完成了一次对话</strong><small>刚刚 · 已写入事件队列</small></div><span className="recent-status">已记录</span></div><div className="recent-row"><span className="recent-icon">✦</span><div><strong>收到一个新的反馈</strong><small>昨天 · 关于复盘流程</small></div><span className="recent-status">待处理</span></div></section>
-  </div>;
+  const [tasks, setTasks] = useState(() => loadTodayTasks());
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") localStorage.setItem(TASK_KEY, JSON.stringify(tasks));
+  }, [tasks]);
+  const completed = tasks.filter((t) => t.done).length;
+  const total = tasks.length;
+  const progressPct = total ? Math.round((completed / total) * 100) : 0;
+  const today = new Intl.DateTimeFormat("zh-CN", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
+  const reminder = DAILY_REMINDERS[dayOfYearIndex(DAILY_REMINDERS.length)];
+
+  const toggleTask = (idx: number) => {
+    setTasks((current) => current.map((t, i) => (i === idx ? { ...t, done: !t.done } : t)));
+  };
+  const addTask = (label: string) => {
+    if (!label.trim()) return;
+    setTasks((current) => [...current, { label: label.trim(), done: false }]);
+  };
+  const [draft, setDraft] = useState("");
+  return (
+    <div className="home-grid">
+      <section className="home-hero">
+        <div className="home-hero-meta">{today}</div>
+        <h2 className="home-hero-title">慢一点，但要向前。</h2>
+        <p className="home-hero-lead">今天适合完成一件需要专注的事，也适合给自己留一点空白。</p>
+        <div className="home-hero-actions">
+          <button className="green-button" onClick={() => onNavigate("daily-plan")}>
+            开始今日规划
+            <IconArrowRight size={14} />
+          </button>
+          <button className="text-button" onClick={() => onNavigate("diary")}>
+            写一篇日记
+          </button>
+        </div>
+      </section>
+
+      <section className="home-today content-card">
+        <header className="block-head">
+          <span className="block-kicker">接下来</span>
+          <span className="block-meta">{completed}/{total} 完成</span>
+        </header>
+        <ul className="home-task-list" role="list">
+          {tasks.map((task, idx) => (
+            <li key={`${task.label}-${idx}`} className={task.done ? "is-done" : ""}>
+              <button
+                className="check-box"
+                role="checkbox"
+                aria-checked={task.done}
+                aria-label={task.label}
+                onClick={() => toggleTask(idx)}
+              >
+                {task.done ? <IconCheck size={12} /> : null}
+              </button>
+              <span className="home-task-label">{task.label}</span>
+            </li>
+          ))}
+        </ul>
+        <form
+          className="home-task-add"
+          onSubmit={(event) => {
+            event.preventDefault();
+            addTask(draft);
+            setDraft("");
+          }}
+        >
+          <input
+            type="text"
+            placeholder="再加一件小事…"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label="添加今日任务"
+          />
+          <button type="submit" className="ghost" disabled={!draft.trim()}>
+            <IconPlus size={12} /> 添加
+          </button>
+        </form>
+        <div className="home-progress" aria-hidden="true">
+          <div className="home-progress-track">
+            <span style={{ width: `${progressPct}%` }} />
+          </div>
+          <small>{progressPct}%</small>
+        </div>
+      </section>
+
+      <aside className="home-reminder content-card">
+        <span className="block-kicker">今日提醒</span>
+        <blockquote>{reminder}</blockquote>
+        <small>每天一句 · 一年不重样</small>
+      </aside>
+
+      <section className="home-rhythm content-card">
+        <header className="block-head">
+          <span className="block-kicker">生活节奏</span>
+          <span className="block-meta">本周 4 / 7 天</span>
+        </header>
+        <p className="home-rhythm-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p>
+        <div className="week-dots" aria-hidden="true">
+          <span className="filled" />
+          <span className="filled" />
+          <span className="filled" />
+          <span className="filled" />
+          <span />
+          <span />
+          <span />
+        </div>
+        <button className="text-button" onClick={() => onNavigate("calendar")}>
+          查看工作历
+        </button>
+      </section>
+
+      <section className="home-agents content-card">
+        <header className="block-head">
+          <span className="block-kicker">本地 Agent</span>
+          <span className="block-meta">空闲 · 等待任务</span>
+        </header>
+        <p className="home-agents-copy">把执行交给机器上的 Agent，审批始终由你点。</p>
+        <button className="text-button" onClick={() => onNavigate("agents")}>
+          打开 Agent 面板
+        </button>
+      </section>
+    </div>
+  );
 }
 
 function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; content?: string }) {
@@ -283,15 +487,20 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
   const [metadata, setMetadata] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [entries, setEntries] = useState<StructuredEntry[]>([]);
+
+  const refresh = () => listEntries(kind).then(setEntries).catch(() => setEntries([]));
 
   useEffect(() => {
     let alive = true;
-    listEntries(kind).then((entries) => {
-      if (!alive || !entries[0]) { if (alive) setLoaded(true); return; }
-      const entry = entries[0];
-      setId(entry.id); setTitle(entry.title); setContent(entry.content);
-      setMood(entry.mood ?? null); setMetadata(entry.metadata ?? {}); setLoaded(true);
-    }).catch(() => setLoaded(true));
+    listEntries(kind).then((items) => {
+      if (!alive) return;
+      setEntries(items);
+      const first = items[0];
+      if (!first) { setLoaded(true); return; }
+      setId(first.id); setTitle(first.title); setContent(first.content);
+      setMood(first.mood ?? null); setMetadata(first.metadata ?? {}); setLoaded(true);
+    }).catch(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
   }, [kind]);
 
@@ -300,23 +509,183 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
     try {
       const entry = await saveEntry({ id, kind, entry_date: new Date().toISOString().slice(0, 10), title: overrides.title ?? title, content: overrides.content ?? content, mood: overrides.mood ?? mood, metadata: overrides.metadata ?? metadata });
       setId(entry.id); setTitle(entry.title); setContent(entry.content); setMood(entry.mood ?? null); setMetadata(entry.metadata ?? {});
+      await refresh();
     } finally { setSaving(false); }
   };
-  return { id, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, save };
+  return { id, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, save, entries, refresh };
 }
 
 function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", { content: phase ? "建立一个更稳定的学习与创作节奏。" : "" });
-  return <div className="planning-layout"><section className="content-card editor-card"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段规划" : "今日规划"}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的三件事"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div><textarea className="big-editor" placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "从最重要的事情开始，不必一次写完…"} value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>{draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}</section><aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "试着写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？先把这一件事放在最前面。"}</p></aside></div>;
+  return (
+    <div className="planning-layout">
+      <section className="content-card editor-card">
+        <div className="block-head">
+          <h2 className="editor-card-title">{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的三件事"}</h2>
+          <span className="block-meta">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span>
+        </div>
+        <RichEditor
+          value={draft.content}
+          onChange={draft.setContent}
+          placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "从最重要的事情开始，不必一次写完…"}
+          ariaLabel={phase ? "阶段性规划" : "今日规划"}
+        />
+        <div className="editor-footer">
+          <span>内容会保存到本地 SQLite</span>
+          <button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>
+            {draft.saving ? "保存中…" : "保存规划"}
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+        {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
+      </section>
+      <aside className="content-card side-tip">
+        <h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3>
+        <p>{phase ? "试着写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？先把这一件事放在最前面。"}</p>
+      </aside>
+    </div>
+  );
 }
 
 function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
-  const questions = phase ? ["这段时间，什么真正带来了进展？", "什么消耗了你，却没有带来相应的回报？", "下一阶段，你要继续、停止或开始什么？"] : ["今天最有能量的时刻是什么？", "有什么事情没有完成？真正的原因是什么？", "明天醒来后，你最想先做什么？"];
   const draft = useEntryDraft(phase ? "phase_review" : "daily_review", {});
-  const [answers, setAnswers] = useState<string[]>(["", "", ""]);
-  useEffect(() => { const saved = draft.metadata.answers; if (Array.isArray(saved)) setAnswers(saved.map(String)); }, [draft.metadata]);
-  const save = () => void draft.save({ content: JSON.stringify({ answers }), metadata: { answers } });
-  return <div className="review-layout"><section className="content-card review-prompts"><div className="card-heading"><div><span className="card-kicker">{phase ? "阶段性复盘" : "每日复盘"}</span><h2>{phase ? "回看这段路，你发现了什么？" : "今天发生了什么？"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>{questions.map((question, index) => <label className="prompt-block" key={question}><span>{question}</span><textarea placeholder="写下你的想法…" value={answers[index]} onChange={(event) => setAnswers((current) => current.map((value, position) => position === index ? event.target.value : value))} /></label>)}<button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button>{draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}</section><aside className="content-card review-aside"><span className="card-kicker">复盘不是审判</span><div className="big-emoji">☁</div><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside></div>;
+  const [checks, setChecks] = useState<{ id: string; label: string; done: boolean }[]>([]);
+  const [newCheck, setNewCheck] = useState("");
+
+  // 每日复盘时拉取"今日规划"作为勾选清单来源；阶段性复盘不做这个。
+  useEffect(() => {
+    if (phase) return;
+    let alive = true;
+    listEntries("daily_plan").then((items) => {
+      if (!alive) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const todayEntry = items.find((it) => it.entry_date === today) ?? items[0];
+      if (!todayEntry) { setChecks([]); return; }
+      // 简单解析：把规划正文按行切，每行一项。
+      const lines = todayEntry.content
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^[-*•·\s]+/, "").trim())
+        .filter((line) => line.length > 0);
+      const saved: { id: string; label: string; done: boolean }[] = (Array.isArray(draft.metadata.checks) ? draft.metadata.checks : []) as { id: string; label: string; done: boolean }[];
+      setChecks(
+        lines.length > 0
+          ? lines.map((label, i) => ({
+              id: `plan-${i}`,
+              label,
+              done: saved.find((s) => s.label === label)?.done ?? false,
+            }))
+          : saved,
+      );
+    }).catch(() => setChecks([]));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, draft.id]);
+
+  const toggleCheck = (id: string) => {
+    setChecks((current) => current.map((c) => (c.id === id ? { ...c, done: !c.done } : c)));
+  };
+  const addCheck = () => {
+    const label = newCheck.trim();
+    if (!label) return;
+    setChecks((current) => [...current, { id: `adhoc-${Date.now()}`, label, done: false }]);
+    setNewCheck("");
+  };
+
+  const save = () =>
+    void draft.save({
+      content: JSON.stringify({ checks, editorHtml: draft.content }),
+      metadata: { checks },
+    });
+
+  return (
+    <div className="review-layout">
+      <section className="content-card review-prompts">
+        <div className="block-head">
+          <h2 className="editor-card-title">{phase ? "回看这段路，你发现了什么？" : "今天发生了什么？"}</h2>
+          <span className="block-meta">{draft.id ? "已保存" : "未完成"}</span>
+        </div>
+
+        {!phase ? (
+          <>
+            <span className="review-section-title">从今日规划里勾选完成度</span>
+            {checks.length > 0 ? (
+              <ul className="review-checks" role="list">
+                {checks.map((c) => (
+                  <li key={c.id} className={c.done ? "is-done" : ""}>
+                    <button
+                      className="check-box"
+                      role="checkbox"
+                      aria-checked={c.done}
+                      aria-label={c.label}
+                      onClick={() => toggleCheck(c.id)}
+                    >
+                      {c.done ? <IconCheck size={12} /> : null}
+                    </button>
+                    <span className="review-check-label">{c.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="review-checks-empty">今天还没有写过规划。</p>
+            )}
+            <div className="review-check-add">
+              <input
+                type="text"
+                placeholder="额外做了 / 没做的事…"
+                value={newCheck}
+                onChange={(event) => setNewCheck(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCheck(); } }}
+                aria-label="添加复盘条目"
+              />
+              <button type="button" className="ghost" onClick={addCheck} disabled={!newCheck.trim()}>
+                <IconPlus size={12} /> 添加
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        <span className="review-section-title">{phase ? "阶段心得" : "写下今天真正发生了什么"}</span>
+        <RichEditor
+          value={draft.content}
+          onChange={draft.setContent}
+          placeholder={phase ? "回看这段路，你发现了什么…" : "诚实，但不要苛刻。"}
+          minHeight={220}
+          ariaLabel={phase ? "阶段性复盘正文" : "每日复盘正文"}
+        />
+        <div className="editor-footer">
+          <span>内容会保存到本地 SQLite</span>
+          <button className="green-button" onClick={save} disabled={draft.saving}>
+            {draft.saving ? "保存中…" : "完成复盘"}
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+        {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
+      </section>
+      <EntryHistoryList entries={draft.entries} kind={phase ? "phase_review" : "daily_review"} />
+    </div>
+  );
+}
+
+function EntryHistoryList({ entries, kind }: { entries: StructuredEntry[]; kind: StructuredEntryKind }) {
+  const title = kind === "diary" ? "往日日记" : kind === "insight" ? "往日心得" : "历史复盘";
+  const prior = entries.slice(1).slice(0, 12);
+  return (
+    <aside className="content-card side-tip">
+      <h3>{title}</h3>
+      {prior.length > 0 ? (
+        <ul className="entry-history-list" role="list">
+          {prior.map((entry) => (
+            <li key={entry.id}>
+              <time>{entry.entry_date}</time>
+              <span>{entry.title || (kind === "diary" ? "无题日记" : kind === "insight" ? "无题心得" : "未命名")}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>还没有更早的记录。</p>
+      )}
+    </aside>
+  );
 }
 
 function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: boolean; store: ReturnType<typeof useStore> }) {
@@ -355,12 +724,136 @@ function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: 
   </div>;
 }
 
-function FeedbackPage() { const draft = useEntryDraft("feedback", {}); const [category, setCategory] = useState("使用感受"); return <div className="feedback-layout"><section className="content-card feedback-main"><span className="card-kicker">写给 LifeOS</span><h2>哪里让你觉得顺手？哪里还不够像你？</h2><textarea className="feedback-editor" placeholder="可以是一句话，也可以是一段具体的经历…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="feedback-tags">{["功能建议", "使用感受", "发现问题", "其他"].map((tag) => <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>)}</div><button className="green-button" onClick={() => void draft.save({ metadata: { category } })} disabled={draft.saving}>{draft.saving ? "提交中…" : "提交反馈"} <span>→</span></button></section><section className="content-card feedback-history"><div className="card-heading"><div><span className="card-kicker">你的声音</span><h2>最近反馈</h2></div><span className="soft-count">来自 SQLite</span></div>{draft.content ? <div className="feedback-note"><span>✓</span><div><strong>{draft.content.slice(0, 24)}{draft.content.length > 24 ? "…" : ""}</strong><small>刚刚 · 已保存</small></div></div> : <div className="state-empty">还没有新的反馈</div>}</section></div>; }
+function FeedbackPage() {
+  const draft = useEntryDraft("feedback", {});
+  const [category, setCategory] = useState("使用感受");
+  return (
+    <div className="feedback-layout">
+      <section className="content-card feedback-main">
+        <h2 className="editor-card-title">哪里让你觉得顺手？哪里还不够像你？</h2>
+        <RichEditor
+          value={draft.content}
+          onChange={draft.setContent}
+          placeholder="可以是一句话，也可以是一段具体的经历…"
+          minHeight={160}
+          ariaLabel="反馈正文"
+        />
+        <div className="feedback-tags">
+          {["功能建议", "使用感受", "发现问题", "其他"].map((tag) => (
+            <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>
+          ))}
+        </div>
+        <div className="editor-footer">
+          <span>内容会保存到本地 SQLite</span>
+          <button className="green-button" onClick={() => void draft.save({ metadata: { category } })} disabled={draft.saving}>
+            {draft.saving ? "提交中…" : "提交反馈"}
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+      </section>
+      <section className="content-card feedback-history">
+        <div className="block-head">
+          <h2 className="editor-card-title">你的声音</h2>
+          <span className="block-meta">来自 SQLite</span>
+        </div>
+        {draft.content
+          ? <div className="feedback-note"><IconCheck size={12} /><div><strong>{draft.content.replace(/<[^>]+>/g, " ").slice(0, 24).trim()}{draft.content.length > 24 ? "…" : ""}</strong><small>刚刚 · 已保存</small></div></div>
+          : <div className="state-empty">还没有新的反馈</div>}
+      </section>
+    </div>
+  );
+}
 
-function DiaryPage() { const draft = useEntryDraft("diary", {}); const moods = ["☀ 平静", "☁ 有点累", "✦ 充满能量", "♡ 说不清"]; return <div className="diary-layout"><section className="content-card diary-editor"><div className="card-heading"><div><span className="card-kicker">今天 · 私人记录</span><h2>今天的日记</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div><textarea className="big-editor diary-text" placeholder="今天有什么值得被写下来？" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="diary-mood"><span>今天的心情</span>{moods.map((mood) => <button className={draft.mood === mood ? "selected" : ""} key={mood} onClick={() => draft.setMood(mood)}>{mood}</button>)}</div><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存日记"} <span>→</span></button></div></section><aside className="content-card diary-aside"><span className="card-kicker">近日日记</span><h3>那些被你留住的时刻</h3><div className="diary-history"><div><strong>本地存储</strong><span>你的日记会按日期保存在 LifeOS SQLite 数据库中。</span></div><div><strong>私人空间</strong><span>这些内容不会进入 Git，也不会写入事件队列。</span></div></div></aside></div>; }
+function DiaryPage() {
+  const draft = useEntryDraft("diary", {});
+  const moods: { id: string; label: string; icon: React.ReactNode }[] = [
+    { id: "calm", label: "平静", icon: <IconCircleDot size={14} /> },
+    { id: "tired", label: "有点累", icon: <IconCircleDot size={14} /> },
+    { id: "energized", label: "充满能量", icon: <IconCircleDot size={14} /> },
+    { id: "unsure", label: "说不清", icon: <IconCircleDot size={14} /> },
+  ];
+  return (
+    <div className="diary-layout">
+      <section className="content-card diary-editor">
+        <div className="block-head">
+          <h2 className="editor-card-title">今天的日记</h2>
+          <span className="block-meta">{draft.id ? "已保存" : "新记录"}</span>
+        </div>
+        <RichEditor
+          value={draft.content}
+          onChange={draft.setContent}
+          placeholder="今天有什么值得被写下来？"
+          minHeight={280}
+          ariaLabel="今日日记"
+        />
+        <div className="diary-mood">
+          <span>今天的心情</span>
+          {moods.map((mood) => (
+            <button className={draft.mood === mood.id ? "selected" : ""} key={mood.id} onClick={() => draft.setMood(mood.id)}>
+              {mood.icon}
+              <span>{mood.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="editor-footer">
+          <span>内容会保存到本地 SQLite</span>
+          <button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>
+            {draft.saving ? "保存中…" : "保存日记"}
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+      </section>
+      <EntryHistoryList entries={draft.entries} kind="diary" />
+    </div>
+  );
+}
 
-function InsightPage() { const draft = useEntryDraft("insight", {}); return <div className="insight-layout"><section className="content-card insight-editor"><div className="card-heading"><div><span className="card-kicker">心得 / 体验</span><h2>记录一个正在发酵的想法</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div><input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} /><textarea className="big-editor insight-text" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存心得"} <span>→</span></button></div></section><aside className="content-card insight-aside"><span className="card-kicker">你的知识花园</span><h3>心得会在时间里长出新的连接。</h3><p>把体验留下来，未来的你会更容易看见自己走过的路。</p><div className="insight-count"><strong>SQLite</strong><span>结构化保存</span></div></aside></div>; }
+function InsightPage() {
+  const draft = useEntryDraft("insight", {});
+  return (
+    <div className="insight-layout">
+      <section className="content-card insight-editor">
+        <div className="block-head">
+          <h2 className="editor-card-title">记录一个正在发酵的想法</h2>
+          <span className="block-meta">{draft.id ? "已保存" : "新记录"}</span>
+        </div>
+        <input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} />
+        <RichEditor
+          value={draft.content}
+          onChange={draft.setContent}
+          placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…"
+          minHeight={280}
+          ariaLabel="心得正文"
+        />
+        <div className="editor-footer">
+          <span>内容会保存到本地 SQLite</span>
+          <button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>
+            {draft.saving ? "保存中…" : "保存心得"}
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+      </section>
+      <EntryHistoryList entries={draft.entries} kind="insight" />
+    </div>
+  );
+}
 
 function AdminPage({ store }: { store: ReturnType<typeof useStore> }) { return <div className="admin-page"><div className="admin-banner"><div><span className="card-kicker">系统后台</span><h2>工程信息集中在这里</h2><p>普通使用页面保持安静。只有进入后台，才会看到 Agent、事件、记忆和 Trace 等运行细节。</p></div><span className="admin-badge">开发者视图</span></div><div className="admin-flow"><DataFlowView store={store} /></div><div className="admin-grid"><RuntimeRail store={store} /><EventsPanel store={store} /><MemoryPanel store={store} /><SkillsPanel store={store} /><PermissionsPanel store={store} /><TracePanel store={store} /></div></div>; }
 
-function Task({ label, done = false }: { label: string; done?: boolean }) { return <div className={`task-row ${done ? "task-done" : ""}`}><span className="task-check">{done ? "✓" : ""}</span><span>{label}</span>{done ? <small>完成</small> : null}</div>; }
+function MemoryPage({ store }: { store: ReturnType<typeof useStore> }) {
+  return (
+    <div className="memory-page">
+      <MemoryPanel store={store} />
+    </div>
+  );
+}
+
+function Task({ label, done = false }: { label: string; done?: boolean }) {
+  return (
+    <div className={`task-row ${done ? "task-done" : ""}`}>
+      <span className="task-check">{done ? <IconCheck size={12} /> : null}</span>
+      <span>{label}</span>
+      {done ? <small>完成</small> : null}
+    </div>
+  );
+}

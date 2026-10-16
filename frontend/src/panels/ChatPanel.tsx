@@ -4,7 +4,7 @@ import { FEEDBACK_RATINGS } from "../api/types";
 import type { AgentRoutingPolicy, FeedbackRating, MemoryScope } from "../api/types";
 import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
-import { IconSend, IconCopy, IconMessage } from "../components/Icons";
+import { IconSend, IconCopy, IconMessage, IconTrash } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
 import { DelegationCard } from "./DelegationCard";
 import type { AgentActions } from "../hooks/useAgentStream";
@@ -179,6 +179,24 @@ export function ChatPanel({ store, agent, api }: Props) {
     store.dispatch({ type: "REPLACE_MESSAGES", messages: conversation.messages });
   };
 
+  const deleteConversation = (id: string, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (state.loading.chat) return;
+    setHistory((previous) => {
+      const next = previous.filter((item) => item.id !== id);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* best effort */ }
+      return next;
+    });
+    if (id === activeId) {
+      const remaining = history.filter((item) => item.id !== id);
+      if (remaining[0]) {
+        openConversation(remaining[0]);
+      } else {
+        startNew();
+      }
+    }
+  };
+
   const showWelcome = state.messages.length === 0 ||
     (state.messages.length === 1 && state.messages[0].id === WELCOME_ID);
 
@@ -199,12 +217,27 @@ export function ChatPanel({ store, agent, api }: Props) {
         <div className="chat-history-label">最近对话</div>
         <div className="chat-history-list">
           {history.map((item) => (
-            <button key={item.id} className={`chat-history-item ${item.id === activeId ? "active" : ""}`}
-              onClick={() => openConversation(item)} disabled={state.loading.chat}>
-              <IconMessage size={15} />
-              <span className="chat-history-title">{item.title || "新对话"}</span>
-              <time>{shortDate(item.updatedAt)}</time>
-            </button>
+            <div key={item.id} className={`chat-history-row ${item.id === activeId ? "active" : ""}`}>
+              <button
+                className="chat-history-item"
+                onClick={() => openConversation(item)}
+                disabled={state.loading.chat}
+                title={item.title || "新对话"}
+              >
+                <IconMessage size={15} />
+                <span className="chat-history-title">{item.title || "新对话"}</span>
+                <time>{shortDate(item.updatedAt)}</time>
+              </button>
+              <button
+                className="chat-history-delete"
+                onClick={(event) => deleteConversation(item.id, event)}
+                disabled={state.loading.chat}
+                aria-label={`删除对话 ${item.title || "新对话"}`}
+                title="删除这个对话"
+              >
+                <IconTrash size={13} />
+              </button>
+            </div>
           ))}
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
