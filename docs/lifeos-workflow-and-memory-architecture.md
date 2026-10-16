@@ -221,7 +221,7 @@ ai-memory 是目标架构中的项目工作连续性组件，不是 LifeOS 用�
 
 **目标架构会实际使用 TencentDB Agent Memory 的 L1-L3 认知能力。** TencentDB 负责已审核原子记忆及其场景/画像层；LifeOS 负责授权、候选审核、scope 约束和编排。这样保留 TencentDB 的核心价值，同时避免 LifeOS 与 TencentDB 永久双写同一份 active 认知。
 
-当前阶段 2–7 的 `.lifeos/memory.json` 是已工作的本地 MVP，当前运行仍以它为准；它是过渡期实现而非最终要求的第三套权威。阶段 9 需验证 TencentDB v3 接口能否承接“LifeOS 用户先审核、随后写入 L1”的流程，验证通过后再做一次性迁移与切换。切换前不把 TencentDB 描述为已接入，也不启用生产双写。
+当前阶段 2–7 的 `.lifeos/memory.json` 是已工作的本地 MVP，当前运行仍以它为准；它是过渡期实现而非最终要求的第三套权威。阶段 9 已接入 TencentDB/ai-memory 适配器及受控运行时召回，审批后同步也会尝试写 TencentDB。上游草稿 PR #1604 提供 SQLite/Mongo 的 create-only 能力，但 TCVDB 不支持；目标 Gateway 部署版本尚未验收，LifeOS create 开关保持关闭。L2/L3 与迁移/切换也未完成。切换前不启用生产双写，且本地 store 仍是运行时权威。
 
 建议采用以下逻辑层次：
 
@@ -273,13 +273,13 @@ LifeOS 区分候选记忆与已采纳记忆，并区分“不再用于当前理�
 
 组合发生在两个时刻：
 
-### 6.1 读取时的受控联合召回（目标能力，尚未实现）
+### 6.1 读取时的受控联合召回（已接入 MVP，生产验收未完成）
 
-目标上 Memory Router 会按任务模式组合 TencentDB 的长期认知与 ai-memory 的当前项目上下文。当前 `ChatRuntime` 只调用本地 LifeOS `MemoryManager`；两个外部后端都尚未接入。各自适配器保留原生调用能力，但交给模型的结果必须统一携带身份、scope、provenance 和边界长度。
+目标上 Memory Router 会按任务模式组合 TencentDB 的长期认知与 ai-memory 的当前项目上下文。当前 `ChatRuntime` 先调用本地 LifeOS `MemoryManager`；若有配置，会按显式 scope 查询 TencentDB，并只接受本地仍 active 的 ID；仅进入 Agent 执行路径且有明确 project scope 时，才查询 ai-memory。外部查询失败会降级为本地结果。真实 Gateway/ai-memory 服务的隔离、延迟、provenance 和故障行为仍需阶段 9 验收。
 
 ### 6.2 写入时的显式候选审核（LifeOS 已实现 MVP）
 
-来源记录或外部项目证据先通过 LifeOS 候选流程并由用户审核。目标上审核通过的 L1 写入 TencentDB，再由 TencentDB 基于 approved L1 生成可追溯的 L2/L3；项目 wiki/handoff 继续由 ai-memory 管理。当前 MVP 的候选与 active Memory 仍落在 LifeOS 本地 store，外部写入及切换尚未实现。
+来源记录或外部项目证据先通过 LifeOS 候选流程并由用户审核。当前审核后会尝试同步 L1 到 TencentDB；已有远端 ID 的更新走 `/v3/atomic/update`，新建需要上游 `/v3/atomic/create`，但 LifeOS 默认关闭该功能，且 TCVDB backend 当前不支持。TencentDB 基于 approved L1 生成可追溯 L2/L3、项目 wiki/handoff 由 ai-memory 管理，以及本地 active Memory 的迁移/切换均未完成。候选和运行时 active allowlist 仍在 LifeOS 本地 store。
 
 ```mermaid
 flowchart LR

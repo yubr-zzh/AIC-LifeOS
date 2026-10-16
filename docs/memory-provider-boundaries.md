@@ -40,7 +40,7 @@ flowchart LR
     CTX --> AGENT
 ```
 
-这是目标链路，不是当前代码现状。当前 `ChatRuntime` 仍只调用 LifeOS 本地 `MemoryManager`，既没有调用 `ai-memory`，也没有调用 TencentDB。图中 L0/L1/L2/L3 具体写入和生成 API 必须经阶段 9 的接口核对与测试后才能落为代码。
+这是目标链路，不是完整的当前代码现状。当前 `ChatRuntime` 先用本地 `MemoryManager`，配置后会受控查询 TencentDB；Agent 项目任务在显式 project scope 下会查询 ai-memory。用户批准的 Memory 会尝试同步 TencentDB，但新建 L1 的 Gateway 路由尚未验收且默认关闭；L0、L2/L3 生成 API 和生产切换仍需阶段 9 核实。
 
 ## 适配边界
 
@@ -64,8 +64,9 @@ flowchart LR
 - 项目和场景必须通过 `LIFEOS_TDAI_SCOPE_MAP` 显式映射为 `team_id`、`agent_id`、`user_id`、`session_id`。未映射的范围不会查询或写入 TencentDB；不得回退到全局身份。
 - 映射格式示例：`{"project:lifeos":{"team_id":"...","agent_id":"...","user_id":"...","session_id":"..."}}`。每个映射必须且只能包含这四个非空字符串字段。
 - 每条已同步记忆会记录远端身份映射指纹。映射改变后，更新/删除会 fail closed，避免按新身份操作旧远端记录。
-- 新记忆写入依赖 Gateway 的 `POST /v3/atomic/create`。`LIFEOS_TDAI_ALLOW_ATOMIC_CREATE` 默认关闭；只有部署的 Gateway 明确支持该端点并通过隔离验收后才可开启。更新仍使用 `/v3/atomic/update`，不以 upsert 代替 create。
-- 当前证据仅覆盖合成数据下单条记录的真实 Gateway 生命周期；多条首次 create 的上游问题仍未解决。LifeOS 本地记录继续保留为权威，失败写入保持 pending，可在问题修复后重试。
+- 新记忆写入需要 Gateway 的 create 能力。上游草稿 PR [#1604](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1604) 的提交 `9979d4e` 已加入 `POST /v3/atomic/create` 及 Python/TypeScript SDK：SQLite 采用主键约束下的 insert-only，Mongo standalone/replica set 用 `insertOne`，相同请求可幂等重试、不同 payload 冲突；Mongo sharded 和不支持该能力的 backend fail closed。**TCVDB 当前返回 501，不支持 create。** 这些代码/API 文档不代表目标部署已经包含该版本，也不等于已完成真实 Gateway 验收。
+- LifeOS 的 `LIFEOS_TDAI_ALLOW_ATOMIC_CREATE` 仍默认关闭。只在目标 Gateway 版本与存储 backend 确认支持、且隔离验收完成后才可开启；本轮用户明确跳过真实 Gateway 端到端验收，因此不启用。更新仍使用 `/v3/atomic/update`，不以 upsert 代替 create。
+- LifeOS 本地记录仍是运行时权威；同步失败保持 pending 并可重试。TencentDB 新建写入、L2/L3 generation refs 和切换行为尚未在目标部署完成验收。
 
 ## 迁移与切换原则
 
@@ -78,11 +79,13 @@ flowchart LR
 
 L0 的保存策略、候选审批如何映射 TencentDB 写 API、跨系统纠正/撤回/删除语义是阶段 9 必须用实际接口验证的阻塞设计点，当前文档不假设已解决。
 
-## 阶段 9 后续实施次序
+## 阶段 9 当前状态与后续次序
 
-1. **TencentDB vertical slice（认知核心）**：隔离测试实例；确认 v3 读写/身份/生成引用和审核前置写入方案；用合成数据完成一条 LifeOS candidate → 用户批准 → L1 → L2/L3 → 带来源召回链路。
-2. **ai-memory project slice（项目连续性）**：为一个测试项目配置稳定身份映射；接入项目检索、handoff/page 引用；验证相邻项目隔离和 provider 故障不阻断本地 Memory。
-3. **LifeOS Router 组合**：两个不同适配器按任务模式组合；保留原生能力差异，但在上下文输出中统一 provenance、scope 与限长元数据。
+当前代码已有 loopback-only 的两个适配器、TencentDB 的 scope 身份映射与指纹绑定、审批后同步/重试，以及 ChatRuntime 中受控的外部召回。TencentDB 返回结果还必须匹配 LifeOS 本地 active ID；ai-memory 仅在 Agent 项目执行路径和显式项目范围下查询。它们尚未成为切换后的权威后端，真实服务隔离验收、TencentDB 新建/L2-L3、迁移与回滚均未完成。
+
+1. **核实 TencentDB Gateway API**：代码/API 文档层面已在上游 PR #1604 核实 create 及其 backend 限制；目标部署版本、TCVDB create 能力和 L2/L3 generation refs 仍待确认。
+2. **TencentDB vertical slice（认知核心）**：本轮按用户要求跳过真实 Gateway 端到端验收；它仍是启用 create、迁移或切换权威之前的必需验收门槛。
+3. **ai-memory project slice（项目连续性）**：为一个测试项目配置稳定身份映射；用真实服务验证项目检索、handoff/page 引用、相邻项目隔离和 provider 故障降级。
 4. **迁移与回滚**：对现有 LifeOS active Memory 做一次性导入、对照、切换/回滚计划，完成前禁止生产双写。
 5. **阶段 10 再评估召回质量与成本/效率**：先测正确性、隔离与来源可解释性，再量化延迟、LLM/embedding 成本及缓存收益。
 
@@ -94,7 +97,8 @@ L0 的保存策略、候选审批如何映射 TencentDB 写 API、跨系统纠�
 
 ## 当前未实现项
 
-- 两个外部系统的运行时适配、身份映射、服务配置、授权界面及统一 Router 调用。
+- 目标 Gateway 的原子 create 能力验收（TCVDB 当前不支持）、L2/L3 generation refs 与来源可追溯验证。
+- ai-memory 真实服务的项目映射与故障/隔离验收；统一 Router 的完整长度预算与来源格式验证。
 - TencentDB 侧 candidate/approval gate 的具体映射；L0 原始内容使用复制还是引用的保留策略。
 - 从 LifeOS 本地 active Memory 到 TencentDB 的迁移与单点切换。
 - `ai-memory` 外部项目召回在不同任务模式下的选择/限额策略。
