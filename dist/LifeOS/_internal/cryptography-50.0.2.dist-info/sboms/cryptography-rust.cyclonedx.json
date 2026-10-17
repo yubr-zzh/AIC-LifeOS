@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:e897e02d-5261-4bee-83cd-71f88dc949ee",
+  "serialNumber": "urn:uuid:1b7f322d-027b-45b4-b3b3-f5cfe34791ab",
   "metadata": {
-    "timestamp": "2026-08-25T19:34:05.075250700Z",
+    "timestamp": "2026-09-30T12:11:03.015452300Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -20,24 +20,24 @@
     ],
     "component": {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust#cryptography-rust@0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust#cryptography-rust@0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-rust",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-rust@0.50.1?download_url=file://.",
+      "purl": "pkg:cargo/cryptography-rust@0.50.2?download_url=file://.",
       "components": [
         {
           "type": "library",
-          "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust#cryptography-rust@0.50.1 bin-target-0",
+          "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust#cryptography-rust@0.50.2 bin-target-0",
           "name": "cryptography_rust",
-          "version": "0.50.1",
-          "purl": "pkg:cargo/cryptography-rust@0.50.1?download_url=file://.#src/lib.rs"
+          "version": "0.50.2",
+          "purl": "pkg:cargo/cryptography-rust@0.50.2?download_url=file://.#src/lib.rs"
         }
       ]
     },
@@ -51,101 +51,101 @@
   "components": [
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-cffi#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-cffi#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-cffi",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-cffi@0.50.1?download_url=file://cryptography-cffi"
+      "purl": "pkg:cargo/cryptography-cffi@0.50.2?download_url=file://cryptography-cffi"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-crypto#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-crypto#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-crypto",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-crypto@0.50.1?download_url=file://cryptography-crypto"
+      "purl": "pkg:cargo/cryptography-crypto@0.50.2?download_url=file://cryptography-crypto"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-keepalive#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-keepalive#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-keepalive",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-keepalive@0.50.1?download_url=file://cryptography-keepalive"
+      "purl": "pkg:cargo/cryptography-keepalive@0.50.2?download_url=file://cryptography-keepalive"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-key-parsing#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-key-parsing#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-key-parsing",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-key-parsing@0.50.1?download_url=file://cryptography-key-parsing"
+      "purl": "pkg:cargo/cryptography-key-parsing@0.50.2?download_url=file://cryptography-key-parsing"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-openssl#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-openssl#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-openssl",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-openssl@0.50.1?download_url=file://cryptography-openssl"
+      "purl": "pkg:cargo/cryptography-openssl@0.50.2?download_url=file://cryptography-openssl"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-x509",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-x509@0.50.1?download_url=file://cryptography-x509"
+      "purl": "pkg:cargo/cryptography-x509@0.50.2?download_url=file://cryptography-x509"
     },
     {
       "type": "library",
-      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509-verification#0.50.1",
+      "bom-ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509-verification#0.50.2",
       "author": "The cryptography developers <cryptography-dev@python.org>",
       "name": "cryptography-x509-verification",
-      "version": "0.50.1",
+      "version": "0.50.2",
       "scope": "required",
       "licenses": [
         {
           "expression": "Apache-2.0 OR BSD-3-Clause"
         }
       ],
-      "purl": "pkg:cargo/cryptography-x509-verification@0.50.1?download_url=file://cryptography-x509-verification"
+      "purl": "pkg:cargo/cryptography-x509-verification@0.50.2?download_url=file://cryptography-x509-verification"
     },
     {
       "type": "library",
@@ -730,16 +730,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2",
       "author": "PyO3 Project and Contributors <https://github.com/PyO3>",
       "name": "pyo3-build-config",
-      "version": "0.29.0",
+      "version": "0.29.2",
       "description": "Build configuration for the PyO3 ecosystem",
       "scope": "excluded",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c5e2a7d2f0d013342f295c048ad19237add5154a55b1c5a254c0ec93d4109078"
+          "content": "f41027e41b4bd03f6e60f9f417fe24a6341a6bb744edd62b6f709f2a52ea30e9"
         }
       ],
       "licenses": [
@@ -747,7 +747,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/pyo3-build-config@0.29.0",
+      "purl": "pkg:cargo/pyo3-build-config@0.29.2",
       "externalReferences": [
         {
           "type": "website",
@@ -761,16 +761,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.2",
       "author": "PyO3 Project and Contributors <https://github.com/PyO3>",
       "name": "pyo3-ffi",
-      "version": "0.29.0",
+      "version": "0.29.2",
       "description": "Python-API bindings for the PyO3 ecosystem",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "ca85c467da1bbc8d866eea5deff9cf29ea5f7785054a17da36e65bda9c05845b"
+          "content": "e591a95526fead067432c3b3a33fc74770b87b1e04e73671090d9c2055a2b327"
         }
       ],
       "licenses": [
@@ -778,7 +778,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/pyo3-ffi@0.29.0",
+      "purl": "pkg:cargo/pyo3-ffi@0.29.2",
       "externalReferences": [
         {
           "type": "website",
@@ -796,16 +796,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.2",
       "author": "PyO3 Project and Contributors <https://github.com/PyO3>",
       "name": "pyo3-macros-backend",
-      "version": "0.29.0",
+      "version": "0.29.2",
       "description": "Code generation for PyO3 package",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "4ca3a1557399783172dc5bf39cfca835157732532cba56b71d2292161e53b362"
+          "content": "571575aa3749fa6216757dd47d2a3e7ef360f329a40f0666a9fbd14889024952"
         }
       ],
       "licenses": [
@@ -813,7 +813,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/pyo3-macros-backend@0.29.0",
+      "purl": "pkg:cargo/pyo3-macros-backend@0.29.2",
       "externalReferences": [
         {
           "type": "website",
@@ -827,16 +827,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.2",
       "author": "PyO3 Project and Contributors <https://github.com/PyO3>",
       "name": "pyo3-macros",
-      "version": "0.29.0",
+      "version": "0.29.2",
       "description": "Proc macros for PyO3 package",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "9ac53762fd065daa3194dd09337a38bd793a188100fd1a9304c4ab312d901771"
+          "content": "73225868fc1cd84eef2c3c230ddb91273bf1de46aeb8a4248da76d32a0924a1c"
         }
       ],
       "licenses": [
@@ -844,7 +844,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/pyo3-macros@0.29.0",
+      "purl": "pkg:cargo/pyo3-macros@0.29.2",
       "externalReferences": [
         {
           "type": "website",
@@ -858,16 +858,16 @@
     },
     {
       "type": "library",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.0",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.2",
       "author": "PyO3 Project and Contributors <https://github.com/PyO3>",
       "name": "pyo3",
-      "version": "0.29.0",
+      "version": "0.29.2",
       "description": "Bindings to Python interpreter",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "cd274650b21d4bfc26a0a47587962c1edb425f69287324355cd040c3ea66071c"
+          "content": "4688ddedf473e32662b9b067670129a8afb8c18e351482c70d62ba4a88171e8b"
         }
       ],
       "licenses": [
@@ -875,7 +875,7 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "purl": "pkg:cargo/pyo3@0.29.0",
+      "purl": "pkg:cargo/pyo3@0.29.2",
       "externalReferences": [
         {
           "type": "documentation",
@@ -1111,63 +1111,63 @@
   ],
   "dependencies": [
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust#cryptography-rust@0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust#cryptography-rust@0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#asn1@0.24.1",
         "registry+https://github.com/rust-lang/crates.io-index#base64@0.23.0",
         "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-cffi#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-crypto#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-keepalive#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-key-parsing#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-openssl#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509-verification#0.50.1",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-cffi#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-crypto#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-keepalive#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-key-parsing#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-openssl#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509-verification#0.50.2",
         "registry+https://github.com/rust-lang/crates.io-index#foreign-types-shared@0.1.1",
         "registry+https://github.com/rust-lang/crates.io-index#openssl@0.10.81",
         "registry+https://github.com/rust-lang/crates.io-index#openssl-sys@0.9.117",
         "registry+https://github.com/rust-lang/crates.io-index#pem@4.0.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.2",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2",
         "registry+https://github.com/rust-lang/crates.io-index#self_cell@1.3.0"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-cffi#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-cffi#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#cc@1.4.0",
         "registry+https://github.com/rust-lang/crates.io-index#openssl-sys@0.9.117",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0"
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.2",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-crypto#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-crypto#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#openssl@0.10.81"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-keepalive#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-keepalive#0.50.2",
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.0"
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.2"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-key-parsing#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-key-parsing#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#asn1@0.24.1",
         "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-crypto#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-openssl#0.50.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509#0.50.1",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-crypto#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-openssl#0.50.2",
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509#0.50.2",
         "registry+https://github.com/rust-lang/crates.io-index#openssl@0.10.81",
         "registry+https://github.com/rust-lang/crates.io-index#openssl-sys@0.9.117",
         "registry+https://github.com/rust-lang/crates.io-index#pem@4.0.0"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-openssl#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-openssl#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
         "registry+https://github.com/rust-lang/crates.io-index#foreign-types@0.3.2",
@@ -1177,16 +1177,16 @@
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#asn1@0.24.1"
       ]
     },
     {
-      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509-verification#0.50.1",
+      "ref": "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509-verification#0.50.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#asn1@0.24.1",
-        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpmxvUr3/cryptography-50.0.1/src/rust/cryptography-x509#0.50.1"
+        "path+file:///D:/a/cryptography/cryptography/wheelhouse/.tmpDVLRSL/cryptography-50.0.2/src/rust/cryptography-x509#0.50.2"
       ]
     },
     {
@@ -1291,20 +1291,20 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#target-lexicon@0.13.5"
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.189",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0"
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2"
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
         "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.107",
@@ -1313,23 +1313,23 @@
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.107",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.0",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros-backend@0.29.2",
         "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.47",
         "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.119"
       ]
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.0",
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.29.2",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.189",
         "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
         "registry+https://github.com/rust-lang/crates.io-index#portable-atomic@1.14.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.0",
-        "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.0"
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-build-config@0.29.2",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-ffi@0.29.2",
+        "registry+https://github.com/rust-lang/crates.io-index#pyo3-macros@0.29.2"
       ]
     },
     {

@@ -2,26 +2,26 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "version": 1,
-  "serialNumber": "urn:uuid:38a86832-548a-46d0-aad0-ee76bd39056a",
+  "serialNumber": "urn:uuid:fd5505e0-bfbb-4b63-a519-d916bdf43baf",
   "metadata": {
-    "timestamp": "2026-08-25T18:11:00Z"
+    "timestamp": "2026-09-29T23:08:25Z"
   },
   "components": [
     {
       "type": "library",
       "name": "openssl",
-      "version": "4.0.2",
-      "purl": "pkg:generic/openssl@4.0.2?download_url=https://github.com/openssl/openssl/releases/download/openssl-4.0.2/openssl-4.0.2.tar.gz",
+      "version": "4.0.3",
+      "purl": "pkg:generic/openssl@4.0.3?download_url=https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8"
+          "content": "325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9"
         }
       ],
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.2/openssl-4.0.2.tar.gz"
+          "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz"
         }
       ],
       "properties": [
