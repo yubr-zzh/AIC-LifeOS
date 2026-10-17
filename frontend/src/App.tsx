@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./state/store";
 import { useAgentStore } from "./state/agentStore";
 import { useAgentStream } from "./hooks/useAgentStream";
@@ -17,6 +17,7 @@ import { PermissionsPanel } from "./panels/PermissionsPanel";
 import { DataFlowView } from "./panels/DataFlowView";
 import { SettingsPage } from "./panels/SettingsPage";
 import { WorkCalendar } from "./components/WorkCalendar";
+import { TodayOverviewCards } from "./components/TodayOverviewCards";
 import { AccountMenu, AuthGate } from "./components/AuthGate";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
@@ -255,13 +256,10 @@ function SectionContent({
   if (active === "settings") return <SettingsPage dark={dark} onDarkChange={onDarkChange} />;
   if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
   if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
-  return <HomePage store={store} onNavigate={onNavigate} />;
+  return <HomePage onNavigate={onNavigate} />;
 }
 
-function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void }) {
-  const completed = 2;
-  const total = 4;
-  const progress = useMemo(() => `${Math.round((completed / total) * 100)}%`, []);
+function HomePage({ onNavigate }: { onNavigate: (id: SectionId) => void }) {
   const today = new Intl.DateTimeFormat("zh-CN", { weekday: "short", month: "long", day: "numeric" }).format(new Date());
   return <div className="home-grid">
     <section className="focus-card content-card">
@@ -271,8 +269,7 @@ function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; o
       <button className="green-button" onClick={() => onNavigate("daily-plan")}>开始今日规划 <span>→</span></button>
       <div className="leaf-decoration" aria-hidden="true">✳</div>
     </section>
-    <section className="content-card progress-card"><div className="card-heading"><div><span className="card-kicker">今日进度</span><h2>{progress}</h2></div><span className="progress-ring">{completed}/{total}</span></div><div className="progress-track"><span style={{ width: progress }} /></div><p>已完成 {completed} 项，还有 2 项等待你的注意。</p><button className="text-button" onClick={() => onNavigate("daily-plan")}>查看今日清单 →</button></section>
-    <section className="content-card today-card"><div className="card-heading"><div><span className="card-kicker">接下来</span><h2>今日安排</h2></div><span className="soft-count">4 件</span></div><Task label="写下本周的阶段目标" done /><Task label="完成课程阅读 · 45 分钟" done /><Task label="整理项目反馈" /><Task label="晚间复盘" /></section>
+    <TodayOverviewCards onViewPlan={() => onNavigate("daily-plan")} />
     <section className="content-card rhythm-card"><div className="card-heading"><div><span className="card-kicker">生活节奏</span><h2>给自己留一点余地</h2></div><span className="soft-count">本周 · 4 / 7 天</span></div><p className="pulse-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p><div className="week-dots"><span className="filled" /><span className="filled" /><span className="filled" /><span className="filled" /><span /><span /><span /></div><div className="rhythm-footer"><span>本周已经记录了 4 个值得记住的瞬间</span><button className="text-button" onClick={() => onNavigate("diary")}>写一篇日记 →</button></div></section>
     <section className="content-card quote-card"><span className="quote-mark">“</span><p>真正重要的不是把每件事都做好，而是知道此刻什么值得被做好。</p><span className="quote-source">— 今日提醒</span></section>
     <section className="content-card recent-card"><div className="card-heading"><div><span className="card-kicker">最近记录</span><h2>工作台动态</h2></div><button className="text-button" onClick={() => onNavigate("feedback")}>查看全部</button></div><div className="recent-row"><span className="recent-icon">↗</span><div><strong>完成了一次对话</strong><small>刚刚 · 已写入事件队列</small></div><span className="recent-status">已记录</span></div><div className="recent-row"><span className="recent-icon">✦</span><div><strong>收到一个新的反馈</strong><small>昨天 · 关于复盘流程</small></div><span className="recent-status">待处理</span></div></section>
@@ -366,5 +363,3 @@ function DiaryPage() { const draft = useEntryDraft("diary", {}); const moods = [
 function InsightPage() { const draft = useEntryDraft("insight", {}); return <div className="insight-layout"><section className="content-card insight-editor"><div className="card-heading"><div><span className="card-kicker">心得 / 体验</span><h2>记录一个正在发酵的想法</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div><input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} /><textarea className="big-editor insight-text" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存心得"} <span>→</span></button></div></section><aside className="content-card insight-aside"><span className="card-kicker">你的知识花园</span><h3>心得会在时间里长出新的连接。</h3><p>把体验留下来，未来的你会更容易看见自己走过的路。</p><div className="insight-count"><strong>SQLite</strong><span>结构化保存</span></div></aside></div>; }
 
 function AdminPage({ store }: { store: ReturnType<typeof useStore> }) { return <div className="admin-page"><div className="admin-banner"><div><span className="card-kicker">系统后台</span><h2>工程信息集中在这里</h2><p>普通使用页面保持安静。只有进入后台，才会看到 Agent、事件、记忆和 Trace 等运行细节。</p></div><span className="admin-badge">开发者视图</span></div><div className="admin-flow"><DataFlowView store={store} /></div><div className="admin-grid"><RuntimeRail store={store} /><EventsPanel store={store} /><MemoryPanel store={store} /><SkillsPanel store={store} /><PermissionsPanel store={store} /><TracePanel store={store} /></div></div>; }
-
-function Task({ label, done = false }: { label: string; done?: boolean }) { return <div className={`task-row ${done ? "task-done" : ""}`}><span className="task-check">{done ? "✓" : ""}</span><span>{label}</span>{done ? <small>完成</small> : null}</div>; }
