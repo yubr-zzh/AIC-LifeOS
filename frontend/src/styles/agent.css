@@ -360,3 +360,44 @@
 .agent-activity-panel .panel-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
 .agent-activity-panel .panel-body::-webkit-scrollbar { width: 8px; }
 .agent-activity-panel .panel-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--bd-3); }
+/* ---- 对话 / Agent 可拖拽分栏 ---- */
+.chat-split-grid.resizable { gap: 0; align-items: stretch; min-height: 620px; }
+.chat-split-grid.resizable > .chat-page-grid,
+.chat-split-grid.resizable > .agp { min-width: 0; }
+.chat-split-grid.resizable > .agp { height: 100%; max-height: min(760px, calc(100dvh - 128px)); }
+.chat-split-resizer {
+  position: relative; z-index: 5; width: 10px; min-width: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: col-resize; touch-action: none; outline: none;
+}
+.chat-split-resizer::before {
+  content: ""; width: 1px; height: calc(100% - 18px);
+  border-radius: 999px; background: var(--bd-2);
+  transition: width .15s ease, background-color .15s ease;
+}
+.chat-split-resizer:hover::before,
+.chat-split-resizer:focus-visible::before,
+.chat-split-grid.dragging .chat-split-resizer::before { width: 3px; background: var(--accent); }
+.chat-split-grip {
+  position: absolute; width: 4px; height: 38px; border-radius: 999px;
+  background: var(--bd-3); opacity: 0; transition: opacity .15s ease;
+}
+.chat-split-resizer:hover .chat-split-grip,
+.chat-split-resizer:focus-visible .chat-split-grip,
+.chat-split-grid.dragging .chat-split-grip { opacity: 1; background: var(--accent); }
+.chat-split-grid.dragging > .chat-page-grid,
+.chat-split-grid.dragging > .agp { pointer-events: none; }
+body.chat-split-resizing { cursor: col-resize; user-select: none; }
+body.chat-split-resizing * { cursor: col-resize !important; }
+
+/* Agent 输入区：即使尚未连接也允许编辑草稿，只限制发送。 */
+.agc { flex: 0 0 auto; position: relative; z-index: 2; }
+.agc textarea { pointer-events: auto; cursor: text; }
+.agc textarea:disabled { cursor: not-allowed; opacity: .65; }
+.agc-hint { margin-right: auto; color: var(--fg-3); font-size: 10.5px; }
+
+@media (max-width: 760px) {
+  .chat-split-grid.resizable { grid-template-columns: 1fr !important; min-height: 0; }
+  .chat-split-resizer { display: none; }
+  .chat-split-grid.resizable > .agp { height: auto; max-height: none; }
+}

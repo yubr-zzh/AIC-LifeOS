@@ -15,6 +15,7 @@ import { DailyReminderCard } from "./components/DailyReminderCard";
 import { EntryHistory } from "./components/EntryHistory";
 import { InboxButton } from "./components/InboxButton";
 import { MarkdownEditor } from "./components/MarkdownEditor";
+import { ResizableChatSplit } from "./components/ResizableChatSplit";
 import { extractPlanItems, localDateKey } from "./utils/planItems";
 import { AccountMenu, AuthGate } from "./components/AuthGate";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
@@ -228,12 +229,12 @@ function SectionContent({
       <>
         <AgentPeekBar store={agent} api={api} onOpen={() => agent.setLayout("split")} />
         {agent.state.layout === "split" ? (
-          <div className="chat-split-grid">
-            {zuo}
-            <AgentPanel store={agent} api={api}
+          <ResizableChatSplit
+            chat={zuo}
+            agent={<AgentPanel store={agent} api={api}
               onCandidateCreated={() => void store.refreshAll()}
-              onCollapse={() => agent.setLayout("collapsed")} />
-          </div>
+              onCollapse={() => agent.setLayout("collapsed")} />}
+          />
         ) : (
           zuo
         )}

@@ -165,7 +165,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
       </div>
 
       <AgentComposer
-        disabled={!kai || !active}
+        canSend={Boolean(kai && active)}
         busy={api.busy}
         canInterrupt={Boolean(active) && !["idle", "ended", "attention", "waiting_input"].includes(active!.state)}
         onSend={(t) => active && void api.act.send(active.sessionId, { text: t }).catch(() => undefined)}
