@@ -34,6 +34,9 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   const { state, dispatch, active, streaming, todo } = store;
   const box = useRef<HTMLDivElement>(null);
   const [genzi, setGenzi] = useState(true);
+  const [memoryOpen, setMemoryOpen] = useState(true);
+
+  useEffect(() => { setMemoryOpen(true); }, [active?.sessionId]);
 
   const lie = active ? state.messages[active.sessionId] ?? [] : [];
 
@@ -57,15 +60,18 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   const dai = Object.values(state.pending).filter((p) => !state.resolved[p.requestId]);
   const wen = Object.values(state.questions).filter((q) => !state.questionClosed[q.questionId]);
   const kai = state.conn === "open";
+  const working = Boolean(active && (active.state === "thinking" || active.state === "working" || active.state === "backoff"));
 
   return (
     <section className="agp">
       <header className="agp-head">
         <div className="agp-title">
+          {working ? <span className="agent-spinner" aria-label="Agent 正在工作" /> : null}
           <strong>Agent 交互</strong>
           {active ? <span className="agp-mode mono">{active.effectiveMode}</span> : null}
         </div>
         <div className="agp-head-btns">
+          {active ? <button className="btn-ghost sm" onClick={() => setMemoryOpen((value) => !value)} title={memoryOpen ? "收起记忆提炼" : "打开记忆提炼"}>{memoryOpen ? "收起记忆" : "记忆"}</button> : null}
           <button
             className="btn-ghost sm"
             onClick={() => active && void api.act.interrupt(active.sessionId)}
@@ -82,8 +88,8 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
 
       <StatusBar session={active} store={store} />
       <DeviceBanner store={store} />
-      {active ? <AgentMemoryCapture sessionId={active.sessionId}
-        onCandidateCreated={onCandidateCreated} /> : null}
+      {active && memoryOpen ? <AgentMemoryCapture sessionId={active.sessionId}
+        onCandidateCreated={onCandidateCreated} onClose={() => setMemoryOpen(false)} /> : null}
 
       {state.notices.length > 0 ? (
         <div className="agp-notices">
@@ -153,7 +159,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           </div>
         ) : null}
 
-        {active && active.state === "ended" && todo === 0 ? (
+        {active && active.state === "ended" && active.batchTotal > 0 && active.batchDone >= active.batchTotal && todo === 0 ? (
           <div className="agp-end">本次委派已结束</div>
         ) : null}
       </div>
@@ -177,6 +183,7 @@ function StatusBar({ session, store }: { session: AgentSession | null; store: Ag
     <div className="agp-bar">
       <span className={`pill ${session ? STATE_TONE[session.state] : "idle"} sm`}>
         <span className="dot" />
+        {session && (session.state === "thinking" || session.state === "working") ? <span className="agent-spinner small" aria-hidden="true" /> : null}
         {session ? STATE_LABEL[session.state] : CONNECTION_LABEL[state.conn]}
       </span>
       {session && session.batchTotal > 0 ? (

@@ -335,3 +335,28 @@
   .apr-rail { width: 4px; }
   .nav-badge { margin-left: 6px; }
 }
+
+/* ---- Working indicator ---- */
+.agent-spinner {
+  display: inline-block; width: 12px; height: 12px; flex: 0 0 auto;
+  border: 2px solid var(--bd-2); border-top-color: var(--accent);
+  border-radius: 50%; animation: agent-spin .75s linear infinite;
+}
+.agent-spinner.small { width: 9px; height: 9px; border-width: 1.5px; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+
+/* ---- Memory capture panel with explicit dismissal ---- */
+.agent-memory-capture { padding: 12px; border-top: 1px solid var(--bd-1); }
+.agent-memory-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agent-memory-head > div { display: flex; align-items: center; gap: 5px; }
+.agent-memory-close {
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--fg-3); font-size: 17px; cursor: pointer;
+}
+.agent-memory-close:hover { background: var(--st-failed-bg); color: var(--st-failed); }
+
+/* ---- Activity panel at the bottom: at most 20 rows, internal scroll ---- */
+.ags > .panel.agent-activity-panel { grid-column: 1 / -1; }
+.agent-activity-panel .panel-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
+.agent-activity-panel .panel-body::-webkit-scrollbar { width: 8px; }
+.agent-activity-panel .panel-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--bd-3); }

@@ -132,12 +132,13 @@ describe("三个 Bridge 按钮连点（真点，真传输层）", () => {
     fireEvent.click(screen.getByRole("button", { name: /启动 Bridge/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: /停止 Bridge/ })).toBeTruthy());
 
-    // 2. 停止 Bridge —— 旧代码在这里 403：它复用了已被 1 消费掉的那枚
+    // 2. 连接并打开对话 —— setDelegation 也是消费型端点
+    await lianJie();
+    await waitFor(() => expect(songChu).toHaveLength(2));
+
+    // 3. 停止 Bridge —— 必须重新现取，复用上一枚会 403
     fireEvent.click(screen.getByRole("button", { name: /停止 Bridge/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: /启动 Bridge/ })).toBeTruthy());
-
-    // 3. 连接并打开对话 —— setDelegation 也是消费型端点
-    await lianJie();
     await waitFor(() => expect(songChu).toHaveLength(3));
 
     // 三枚互不相同：真后端上一枚用掉即作废，复用必 403

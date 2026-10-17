@@ -179,6 +179,25 @@ export function ChatPanel({ store, agent, api }: Props) {
     store.dispatch({ type: "REPLACE_MESSAGES", messages: conversation.messages });
   };
 
+  const removeConversation = (conversationId: string) => {
+    if (state.loading.chat) return;
+    const target = history.find((item) => item.id === conversationId);
+    if (!window.confirm(`删除对话「${target?.title || "新对话"}」？删除后无法恢复。`)) return;
+    const next = history.filter((item) => item.id !== conversationId);
+    setHistory(next);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* local history is best-effort */ }
+    if (conversationId === activeId) {
+      if (next[0]) openConversation(next[0]);
+      else startNew();
+    }
+  };
+
+  const discardCurrent = () => {
+    if (state.loading.chat) return;
+    const current = history.find((item) => item.id === activeId);
+    if (!current) { startNew(); return; }
+    removeConversation(activeId);
+  };
   const showWelcome = state.messages.length === 0 ||
     (state.messages.length === 1 && state.messages[0].id === WELCOME_ID);
 
@@ -199,12 +218,15 @@ export function ChatPanel({ store, agent, api }: Props) {
         <div className="chat-history-label">最近对话</div>
         <div className="chat-history-list">
           {history.map((item) => (
-            <button key={item.id} className={`chat-history-item ${item.id === activeId ? "active" : ""}`}
-              onClick={() => openConversation(item)} disabled={state.loading.chat}>
-              <IconMessage size={15} />
-              <span className="chat-history-title">{item.title || "新对话"}</span>
-              <time>{shortDate(item.updatedAt)}</time>
-            </button>
+            <div key={item.id} className={`chat-history-item ${item.id === activeId ? "active" : ""}`}>
+              <button type="button" className="chat-history-open" onClick={() => openConversation(item)} disabled={state.loading.chat}>
+                <IconMessage size={15} />
+                <span className="chat-history-title">{item.title || "新对话"}</span>
+                <time>{shortDate(item.updatedAt)}</time>
+              </button>
+              <button type="button" className="chat-history-delete" title="删除对话" aria-label={`删除对话：${item.title || "新对话"}`}
+                onClick={() => removeConversation(item.id)} disabled={state.loading.chat}>×</button>
+            </div>
           ))}
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
@@ -217,7 +239,9 @@ export function ChatPanel({ store, agent, api }: Props) {
             <strong>{titleFor(state.messages)}</strong>
             <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
           </div>
-          <div className="chat-context-wrap">
+          <div className="chat-toolbar-right">
+            <button type="button" className="chat-delete-current" title="删除当前对话" aria-label="删除当前对话" onClick={discardCurrent} disabled={state.loading.chat}>删除</button>
+            <div className="chat-context-wrap">
             <button className={`chat-context ${scopeKind !== "global" ? "selected" : ""}`}
               onClick={() => setContextOpen((open) => !open)} aria-expanded={contextOpen}>
               <span className="context-dot" />
@@ -248,6 +272,7 @@ export function ChatPanel({ store, agent, api }: Props) {
                 <button onClick={() => setContextOpen(false)}>完成</button>
               </div>
             ) : null}
+            </div>
           </div>
         </header>
 

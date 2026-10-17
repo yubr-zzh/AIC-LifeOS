@@ -56,10 +56,10 @@ export function AgentActivityPanel() {
     return () => { huo = false; clearInterval(ji); };
   }, []);
 
-  const lie = (events ?? []).slice(-40).reverse();
+  const lie = (events ?? []).slice(-20).reverse();
 
   return (
-    <Panel title="Agent 活动" subtitle="bridge.localbus 展示旁路 · 7.7.2" dense>
+    <Panel title="Agent 活动" subtitle="最近 20 条 · 每 8 秒自动刷新" dense className="agent-activity-panel">
       {cuo ? (
         <div className="state-empty">连不上主服务：{cuo}</div>
       ) : lie.length === 0 ? (

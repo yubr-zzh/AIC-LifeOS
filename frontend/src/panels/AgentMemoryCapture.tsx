@@ -5,9 +5,10 @@ import {
   type AgentEvidence,
 } from "../api/client";
 
-export function AgentMemoryCapture({ sessionId, onCandidateCreated }: {
+export function AgentMemoryCapture({ sessionId, onCandidateCreated, onClose }: {
   sessionId: string;
   onCandidateCreated?: () => void;
+  onClose?: () => void;
 }) {
   const [items, setItems] = useState<AgentEvidence[]>([]);
   const [selected, setSelected] = useState("");
@@ -40,7 +41,7 @@ export function AgentMemoryCapture({ sessionId, onCandidateCreated }: {
     setBusy(true);
     try {
       await proposeAgentMemoryCandidate(selected, claim.trim(), projectId.trim());
-      setMessage("已提交为记忆候选，请到系统后台的 Memory 面板审核。");
+      setMessage("已提交为记忆候选，等待后续审核入口接入。");
       setClaim("");
       onCandidateCreated?.();
     } catch (error) {
@@ -50,9 +51,14 @@ export function AgentMemoryCapture({ sessionId, onCandidateCreated }: {
     }
   };
 
-  return <section style={{ padding: 12, borderTop: "1px solid var(--bd-1)" }}>
-    <strong>从执行结果提炼记忆</strong>
-    <button type="button" className="btn-ghost sm" onClick={() => void refresh()}>刷新结果</button>
+  return <section className="agent-memory-capture">
+    <div className="agent-memory-head">
+      <strong>从执行结果提炼记忆</strong>
+      <div>
+        <button type="button" className="btn-ghost sm" onClick={() => void refresh()}>刷新结果</button>
+        {onClose ? <button type="button" className="agent-memory-close" aria-label="关闭记忆面板" title="关闭记忆面板" onClick={onClose}>×</button> : null}
+      </div>
+    </div>
     {items.length === 0 ? <p>此会话还没有可提炼的结果。</p> : items.map((item) =>
       <label key={item.id} style={{ display: "block", marginTop: 8 }}>
         <input type="radio" name={`evidence-${sessionId}`} value={item.id}
