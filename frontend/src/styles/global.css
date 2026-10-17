@@ -711,7 +711,114 @@ body:has(.chat-host) { overflow: hidden; height: 100dvh; }
 /* Conversation: calm, content-first workspace; diagnostics stay in System. */
 .page-intro-chat { display: none; }
 
-/* ── Home (asymmetric bento, no 6-card grid anti-pattern) ── */
+/* ── Side-nav collapse toggle (主导航收起) ── */
+.lifeos-shell { transition: padding 200ms ease; }
+.side-nav {
+  width: 240px;
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 12px 14px;
+  border-right: 1px solid #cfe2cf;
+  background: #e6f1e3;
+  transition: width 200ms ease, flex-basis 200ms ease;
+}
+.brand-block { display: flex; align-items: center; gap: 8px; padding: 0 4px 6px; }
+.brand-block .brand-text { flex: 1 1 auto; min-width: 0; }
+.brand-block .side-nav-toggle { flex: 0 0 24px; }
+.side-nav-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border: 1px solid #cfe2cf; border-radius: var(--r-1);
+  background: #f3f8f2; color: #5b7a64;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.side-nav-toggle:hover { background: #d8e8d2; color: #2d4a36; }
+
+.lifeos-shell.is-nav-collapsed .side-nav {
+  width: 60px;
+  flex: 0 0 60px;
+  padding: 18px 8px 14px;
+}
+.lifeos-shell.is-nav-collapsed .brand-caption,
+.lifeos-shell.is-nav-collapsed .brand-text { display: none; }
+.lifeos-shell.is-nav-collapsed .side-nav-toggle svg { transform: rotate(180deg); }
+.lifeos-shell.is-nav-collapsed .nav-group-title { display: none; }
+.lifeos-shell.is-nav-collapsed .nav-item {
+  justify-content: center;
+  padding: 9px 0;
+  gap: 0;
+}
+.lifeos-shell.is-nav-collapsed .nav-item .nav-label,
+.lifeos-shell.is-nav-collapsed .nav-item .nav-dot,
+.lifeos-shell.is-nav-collapsed .nav-item .nav-badge { display: none; }
+.lifeos-shell.is-nav-collapsed .nav-item .nav-icon {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: var(--r-1);
+  background: transparent;
+}
+.lifeos-shell.is-nav-collapsed .nav-item.active .nav-icon {
+  background: #fffefa;
+  border-color: #b9d1bb;
+  color: #1a3a23;
+}
+.lifeos-shell.is-nav-collapsed .side-footer-line,
+.lifeos-shell.is-nav-collapsed .side-footer-sub { display: none; }
+.lifeos-shell.is-nav-collapsed .side-footer { padding: 8px 0; display: flex; justify-content: center; }
+.lifeos-shell.is-nav-collapsed .side-footer .status-orb { margin: 0; }
+.lifeos-shell.is-nav-collapsed .dev-footer-link {
+  justify-content: center;
+  padding: 4px 0;
+  font-size: 0;
+}
+.lifeos-shell.is-nav-collapsed .dev-footer-link svg { margin: 0; }
+
+/* ── Chat history collapse toggle (对话历史栏收起) ── */
+.chat-history {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 12px 12px;
+  border-right: 1px solid #edf0e9;
+  background: #fafbf7;
+  transition: padding 200ms ease;
+}
+.chat-history-head {
+  display: flex; align-items: stretch; gap: 6px;
+  margin-bottom: 10px;
+}
+.chat-history-head .chat-new { flex: 1 1 auto; }
+.chat-history-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; min-height: 44px;
+  border: 1px solid #dce6d9; border-radius: 12px;
+  background: #fff; color: #365b3d;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.chat-history-toggle:hover { background: #f0f3eb; }
+.chat-history-toggle svg { transform: rotate(180deg); }
+.chat-workspace.is-history-collapsed .chat-history {
+  display: none;
+}
+.chat-workspace.is-history-collapsed .chat-workspace { grid-template-columns: 0 minmax(0, 1fr); }
+.chat-history-show {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid #dce6d9; border-radius: var(--r-1);
+  background: #fff; color: #5b7a64;
+  cursor: pointer;
+  margin-right: 8px;
+}
+.chat-history-show:hover { background: #f0f3eb; color: #2d4a36; }
+.chat-history-show svg { transform: rotate(-90deg); }
+
+@media (max-width: 760px) {
+  .lifeos-shell.is-nav-collapsed .side-nav { width: 0; padding: 0; border-right: 0; overflow: hidden; }
+}
 .home-hero {
   grid-column: 1 / -1;
   display: flex;

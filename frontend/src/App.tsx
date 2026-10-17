@@ -22,6 +22,7 @@ import {
   IconBolt,
   IconCalendar,
   IconCheck,
+  IconChevron,
   IconCircleDot,
   IconHome,
   IconInbox,
@@ -48,6 +49,13 @@ type SectionId =
   | "insight"
   | "memory"
   | "settings";
+
+const NAV_COLLAPSED_KEY = "lifeos.nav.collapsed.v1";
+
+function readNavCollapsed(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try { return localStorage.getItem(NAV_COLLAPSED_KEY) === "1"; } catch { return false; }
+}
 
 type NavIcon = "home" | "message" | "calendar" | "book" | "spark" | "bolt";
 const navigation: { group: string; items: { id: SectionId; label: string; icon: NavIcon; hint?: string }[] }[] = [
@@ -117,6 +125,7 @@ export default function App() {
   const [active, setActive] = useState<SectionId>(initialSection);
   const [dark, setDark] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(readNavCollapsed);
   const todayLabel = useMemo(() => {
     const fmt = new Intl.DateTimeFormat("zh-CN", { weekday: "long", month: "long", day: "numeric" });
     return fmt.format(new Date());
@@ -140,16 +149,35 @@ export default function App() {
     if (typeof window !== "undefined") window.location.hash = `#/${id}`;
   };
 
+  const toggleNav = () => {
+    setNavCollapsed((current) => {
+      const next = !current;
+      if (typeof localStorage !== "undefined") {
+        try { localStorage.setItem(NAV_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* best effort */ }
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
+    <div className={`lifeos-shell ${dark ? "theme-night" : ""}${navCollapsed ? " is-nav-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className="side-nav">
         <div className="brand-block">
           <div className="brand-mark"><IconBolt size={17} /></div>
-          <div>
+          <div className="brand-text">
             <div className="brand-name">LifeOS</div>
             <div className="brand-caption">你的个人操作系统</div>
           </div>
+          <button
+            className="side-nav-toggle"
+            onClick={toggleNav}
+            title={navCollapsed ? "展开导航" : "收起导航"}
+            aria-label={navCollapsed ? "展开导航" : "收起导航"}
+            aria-expanded={!navCollapsed}
+          >
+            <IconChevron size={14} />
+          </button>
         </div>
 
         <nav className="main-nav" aria-label="主导航">
