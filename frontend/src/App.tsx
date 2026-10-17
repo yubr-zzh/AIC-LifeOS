@@ -280,13 +280,10 @@ function SectionContent({
   onOpenInbox: () => void;
 }) {
   if (active === "chat") {
-    // 对话整页：左侧 session 列表（已含删除），右侧消息流。
-    // AgentPanel 仍在 admin/agents 路由使用，聊天内 Agent 活动走 ChatPanel 自己的 inline trace。
+    // 对话整页：直接占满主区，不再套 content-card（Impeccable 黑名单：卡片当容器）。
     return (
-      <div className="chat-page-grid">
-        <section className="content-card chat-card">
-          <ChatPanel store={store} agent={agent} api={api} />
-        </section>
+      <div className="chat-host">
+        <ChatPanel store={store} agent={agent} api={api} />
       </div>
     );
   }
