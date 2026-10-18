@@ -100,6 +100,8 @@ class MemoryManager:
         confidence_method=None,
         category=None,
         occurred_at=None,
+        valid_from=None,
+        valid_until=None,
     ):
         store = self._read()
         normalized_ref = normalize_source_ref(source_ref)
@@ -128,6 +130,8 @@ class MemoryManager:
                     and normalize_scope(candidate.get("scope")) == normalized_scope
                     and candidate.get("confidence") == confidence
                     and candidate.get("confidence_method") == confidence_method
+                    and candidate.get("valid_from") == valid_from
+                    and candidate.get("valid_until") == valid_until
                 ):
                     return candidate
         candidate = await MemoryUpdater(store).propose(
@@ -140,6 +144,8 @@ class MemoryManager:
             confidence_method=confidence_method,
             category=category,
             occurred_at=occurred_at,
+            valid_from=valid_from,
+            valid_until=valid_until,
         )
         if source_event_id:
             candidate["source_event_id"] = source_event_id
@@ -204,6 +210,7 @@ class MemoryManager:
                 "confidence": None,
                 "confidence_method": None,
                 "version_of": memory_id,
+                "confirmed_at": datetime.utcnow().isoformat(),
                 "status": "active",
                 "created_at": datetime.utcnow().isoformat(),
             }

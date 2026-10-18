@@ -10,6 +10,7 @@ from lifeos.memory.schema import (
     normalize_scope,
     normalize_source_ref,
     validate_confidence,
+    validate_validity,
 )
 
 
@@ -53,6 +54,8 @@ class MemoryUpdater:
         confidence_method: str | None = None,
         category: str | None = None,
         occurred_at: str | None = None,
+        valid_from: str | None = None,
+        valid_until: str | None = None,
     ):
         if not isinstance(source, str) or source not in MEMORY_SOURCES:
             raise ValueError(f"unknown memory source: {source}")
@@ -64,6 +67,7 @@ class MemoryUpdater:
         if not isinstance(category, str) or category not in MEMORY_CATEGORIES:
             raise ValueError(f"unsupported memory category: {category}")
         validate_confidence(confidence, confidence_method)
+        validate_validity(valid_from, valid_until)
         normalized_scope = normalize_scope(scope)
         if scope is None and source == "direct":
             normalized_scope = {
@@ -81,6 +85,8 @@ class MemoryUpdater:
             "confidence": confidence,
             "confidence_method": confidence_method,
             "occurred_at": occurred_at,
+            "valid_from": valid_from,
+            "valid_until": valid_until,
             "content": content,
             "trace_id": trace_id,
             "status": "candidate",
@@ -99,6 +105,10 @@ class MemoryUpdater:
             "confidence": candidate.get("confidence"),
             "confidence_method": candidate.get("confidence_method"),
             "occurred_at": candidate.get("occurred_at"),
+            "valid_from": candidate.get("valid_from"),
+            "valid_until": candidate.get("valid_until"),
+            "confirmed_at": _now(),
+            "promotion": candidate.get("promotion"),
             "content": candidate["content"],
             "trace_id": candidate.get("trace_id"),
             "status": "active",
@@ -107,5 +117,5 @@ class MemoryUpdater:
         category = entry["category"]
         self.store.setdefault(category, []).append(entry)
         candidate["status"] = "committed"
-        candidate["committed_at"] = _now()
+        candidate["committed_at"] = entry["confirmed_at"]
         return entry
