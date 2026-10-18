@@ -481,6 +481,7 @@ class CoreRegressionTests(unittest.TestCase):
             "kind": "structured_entry",
             "record_id": "daily-review-1",
             "record_kind": "daily_review",
+            "revision": "rev-7",
         }
         scope = {
             "kind": "scenario",
@@ -499,6 +500,8 @@ class CoreRegressionTests(unittest.TestCase):
                 confidence=0.8,
                 confidence_method="user_confirmed",
                 occurred_at="2026-10-01T00:00:00+08:00",
+                valid_from="2026-10-01T00:00:00+08:00",
+                valid_until="2027-01-01T00:00:00+08:00",
             )
         )
         committed = run(memory.commit_candidate(candidate["id"]))
@@ -510,6 +513,10 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(committed["scope"], scope)
         self.assertEqual(committed["confidence_method"], "user_confirmed")
         self.assertEqual(committed["occurred_at"], "2026-10-01T00:00:00+08:00")
+        self.assertEqual(committed["valid_from"], "2026-10-01T00:00:00+08:00")
+        self.assertEqual(committed["valid_until"], "2027-01-01T00:00:00+08:00")
+        self.assertTrue(committed["confirmed_at"])
+        self.assertEqual(committed["source_ref"]["revision"], "rev-7")
         self.assertEqual(run(memory.retrieve("small runnable examples"))["user"], [])
         learning_hits = run(
             memory.retrieve(
@@ -781,13 +788,16 @@ class CoreRegressionTests(unittest.TestCase):
         MemoryManager(self.path)
         reopened = memory._read()
 
-        self.assertEqual(migrated["schema_version"], 3)
+        self.assertEqual(migrated["schema_version"], 4)
         self.assertEqual(migrated["user"][0]["scope"]["kind"], "global")
         self.assertEqual(migrated["user"][0]["source_ref"], None)
         self.assertEqual(migrated["user"][0]["content"], {"preference": "short"})
         self.assertEqual(migrated["user"][0]["status"], "active")
         self.assertEqual(first_backup_count, 1)
-        self.assertEqual(reopened["schema_version"], 3)
+        self.assertEqual(reopened["schema_version"], 4)
+        self.assertIsNone(reopened["user"][0]["confirmed_at"])
+        self.assertIsNone(reopened["user"][0]["valid_from"])
+        self.assertIsNone(reopened["user"][0]["promotion"])
         self.assertEqual(len(reopened["backups"]), first_backup_count)
 
     def test_schema_v2_memory_store_migrates_lifecycle_status_once(self):
@@ -810,7 +820,7 @@ class CoreRegressionTests(unittest.TestCase):
         MemoryManager(self.path)
         reopened = memory._read()
 
-        self.assertEqual(first["schema_version"], 3)
+        self.assertEqual(first["schema_version"], 4)
         self.assertEqual(first["user"][0]["status"], "active")
         self.assertEqual(first["backups"][0]["store"]["schema_version"], 2)
         self.assertEqual(len(reopened["backups"]), backup_count)

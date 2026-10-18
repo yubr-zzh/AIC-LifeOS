@@ -202,6 +202,12 @@ class TencentDBMemoryAdapter:
             "category": item.get("category"),
             "confidence": item.get("confidence"),
             "occurred_at": item.get("occurred_at"),
+            "confirmed_at": item.get("confirmed_at"),
+            "valid_from": item.get("valid_from"),
+            "valid_until": item.get("valid_until"),
+            "promotion": item.get("promotion"),
+            "version_of": item.get("version_of"),
+            "superseded_by": item.get("superseded_by"),
         }
         return {
             **coordinates,
@@ -333,6 +339,12 @@ class TencentDBMemoryAdapter:
                     "scope": metadata.get("scope"),
                     "confidence": metadata.get("confidence"),
                     "occurred_at": metadata.get("occurred_at"),
+                    "confirmed_at": metadata.get("confirmed_at"),
+                    "valid_from": metadata.get("valid_from"),
+                    "valid_until": metadata.get("valid_until"),
+                    "promotion": metadata.get("promotion"),
+                    "version_of": metadata.get("version_of"),
+                    "superseded_by": metadata.get("superseded_by"),
                     "status": "active",
                     "provider": "tencentdb",
                 }
