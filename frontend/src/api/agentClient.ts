@@ -12,7 +12,6 @@ import {
   CreateSessionRequest,
   DecideRequest,
   DownFrame,
-  ErrorFrame,
   PermissionMode,
   ResultFrame,
 } from "./agentTypes";
@@ -358,20 +357,37 @@ export function openAgentStream(a: StreamOptions): StreamHandle {
     for (const lei of MING) {
       src.addEventListener(lei, (ev) => {
         if (dai !== zhao) return;
-        const zhen = ev as MessageEvent<string>;
+        // EventSource 把**传输层错误**也派发成 "error" 事件，它与后端
+        // `event: error` 的正常消息帧同名。传输错误没有 data 字段，先挡掉；
+        // 否则 JSON.parse(undefined) 会被误报成「收到无法解析的帧」。
+        const data = (ev as MessageEvent<unknown>).data;
+        if (typeof data !== "string" || data.length === 0) return;
+
+        let zhen: DownFrame;
         try {
-          a.onFrame(JSON.parse(zhen.data) as DownFrame);
+          zhen = JSON.parse(data) as DownFrame;
         } catch {
-          a.onFrame({
-            type: "error", sessionId: null, streamSeq: 0,
-            code: "internal", message: "收到无法解析的帧", recoverable: true,
-          });
+          // 坏帧不进入业务状态，也不弹不可行动的用户提示；主动走一次重连，
+          // 让新连接的 snapshot 把状态补齐。持续坏帧由指数退避兜住。
+          src?.close();
+          src = null;
+          chonglian(dai);
+          return;
         }
+        if (zhen === null || typeof zhen !== "object" || typeof zhen.type !== "string") return;
+
+        // **不要把这个调用放进上面的 try。** reducer 抛错时若被同一层 catch
+        // 接住，会再次被伪装成 JSON 解析失败，掩盖真正的页面异常。
+        a.onFrame(zhen);
       });
     }
 
-    src.onerror = () => {
+    src.onerror = (ev) => {
       if (shut || dai !== zhao) return;
+      // 后端也可以发 `event: error` 的**业务错误帧**，浏览器会用同一个事件名
+      // 派发 MessageEvent。它由上面的类型监听器处理，不是传输层断开——这里
+      // 若再走重连路径，会把一条可恢复的业务错误升级成一次无谓的重连风暴。
+      if (typeof (ev as MessageEvent<unknown> | undefined)?.data === "string") return;
       src?.close();
       src = null;
       // EventSource 不区分 401 与网络抖动，readyState 也分不出来。

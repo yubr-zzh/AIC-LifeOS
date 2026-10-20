@@ -269,7 +269,7 @@ function HomePage({ onNavigate }: { onNavigate: (id: SectionId) => void }) {
   </div>;
 }
 
-function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; content?: string }) {
+export function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; content?: string }) {
   const initialRef = useRef(initial);
   const [entries, setEntries] = useState<StructuredEntry[]>([]);
   const [id, setId] = useState<string>();
@@ -280,6 +280,7 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
   const [metadata, setMetadata] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -290,6 +291,7 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
       setContent(initialRef.current.content ?? "");
       setMood(null);
       setMetadata({});
+      setSaveFeedback(null);
     };
     listEntries(kind).then((rows) => {
       if (!alive) return;
@@ -324,6 +326,7 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
     setContent(entry.content);
     setMood(entry.mood ?? null);
     setMetadata(entry.metadata ?? {});
+    setSaveFeedback({ tone: "success", text: `已打开 ${entry.entry_date.slice(0, 10)} 的历史记录` });
   };
 
   const startNew = () => {
@@ -333,10 +336,12 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
     setContent(initialRef.current.content ?? "");
     setMood(null);
     setMetadata({});
+    setSaveFeedback(null);
   };
 
   const save = async (overrides: Partial<{ title: string; content: string; mood: string | null; metadata: Record<string, unknown> }> = {}) => {
     setSaving(true);
+    setSaveFeedback(null);
     try {
       const entry = await saveEntry({
         id,
@@ -355,20 +360,32 @@ function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; con
       setMetadata(entry.metadata ?? {});
       setEntries((previous) => [entry, ...previous.filter((row) => row.id !== entry.id)]
         .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.updated_at.localeCompare(a.updated_at)));
+      setSaveFeedback({
+        tone: "success",
+        text: `已保存到本地 SQLite · ${entry.entry_date.slice(0, 10)} · 记录 #${entry.id.slice(0, 8)}`,
+      });
+      return entry;
+    } catch (error) {
+      setSaveFeedback({
+        tone: "error",
+        text: `保存失败：${error instanceof Error ? error.message : String(error)}`,
+      });
+      return undefined;
     } finally {
       setSaving(false);
     }
   };
 
-  return { id, entries, entryDate, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, save, openEntry, startNew };
+  return { id, entries, entryDate, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, saveFeedback, save, openEntry, startNew };
 }
 
 function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", { content: phase ? "建立一个更稳定的学习与创作节奏。" : "" });
   const previewItems = extractPlanItems(draft.content);
+  const kindLabel = phase ? "阶段规划" : "每日规划";
   return <div className="planning-layout">
     <section className="content-card editor-card">
-      <div className="card-heading"><div><span className="card-kicker">{phase ? "阶段规划" : "每日规划"}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的事项"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div>
+      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的事项"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div>
       <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300}
         ariaLabel={phase ? "阶段规划编辑器" : "每日规划编辑器"}
         placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "用列表写下今天要做的事，每行一条；每日复盘会自动读取这些事项。"} />
@@ -377,9 +394,15 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
         {previewItems.length > 0 ? <ol>{previewItems.slice(0, 8).map((item) => <li key={item}>{item}</li>)}</ol> : <p>使用列表（- 事项）或直接换行书写，复盘页会按行生成勾选项。</p>}
       </div>
       <div className="editor-footer"><span>内容保存在本地 SQLite · 支持 Markdown</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
+      {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
-    <aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？把它放在第一行，复盘时会自动成为检查项。"}</p></aside>
+    <div className="entry-side-rail">
+      <aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？把它放在第一行，复盘时会自动成为检查项。"}</p></aside>
+      <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
+        kicker="历史规划 · 本地 SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
+        newLabel={phase ? "＋ 新建阶段规划" : "＋ 新建每日规划"} />
+    </div>
   </div>;
 }
 
@@ -447,9 +470,10 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
   const checkedCount = planItems.filter((item) => item.done).length + extras.filter((item) => item.done).length;
   const totalCount = planItems.length + extras.length;
 
+  const kindLabel = phase ? "阶段性复盘" : "每日复盘";
   return <div className="review-layout">
     <section className="content-card review-prompts">
-      <div className="card-heading"><div><span className="card-kicker">{phase ? "阶段性复盘" : "每日复盘"}</span><h2>{phase ? "回看这段路，哪些目标真正完成了？" : "对照今天的计划，收好这一天。"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
+      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "回看这段路，哪些目标真正完成了？" : "对照今天的计划，收好这一天。"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
       <div className="review-plan-panel">
         <div className="review-plan-heading"><div><span className="card-kicker">{phase ? "阶段计划承接" : "今日计划承接"}</span><strong>{planLoading ? "正在读取计划…" : planEntry ? `${checkedCount}/${totalCount} 条已完成` : "没有找到对应的计划"}</strong></div>{planEntry ? <span className="review-plan-source">{planEntry.entry_date.slice(0, 10)}</span> : null}</div>
         {planLoading ? <p className="state-empty">正在读取计划事项…</p> : planItems.length === 0 ? <p className="review-empty">计划中还没有可读取的事项。可以先在规划页用列表写下计划，也可以直接在下面添加。</p> : (
@@ -474,9 +498,15 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
       </div>
       <div className="review-editor-section"><span className="card-kicker">自由复盘</span><MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={240} ariaLabel={phase ? "阶段复盘编辑器" : "每日复盘编辑器"} placeholder="写下今天发生了什么、有什么发现，以及明天想怎样继续…" /></div>
       <div className="review-actions"><span className="editor-note">勾选与文字会一起保存到本地 SQLite。</span><button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></div>
+      {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
-    <aside className="content-card side-tip"><span className="card-kicker">复盘不是审判</span><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside>
+    <div className="entry-side-rail">
+      <aside className="content-card side-tip"><span className="card-kicker">复盘不是审判</span><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside>
+      <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
+        kicker="历史复盘 · 本地 SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
+        newLabel={phase ? "＋ 新建阶段复盘" : "＋ 新建每日复盘"} />
+    </div>
   </div>;
 }
 function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: boolean; store: ReturnType<typeof useStore> }) {

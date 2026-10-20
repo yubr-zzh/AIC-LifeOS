@@ -1,4 +1,4 @@
-# LifeOS 桌面版（软件 v2.0.2）
+# LifeOS 桌面版（软件 v2.0.3）
 
 LifeOS 是一个本地优先的个人智能体操作系统：前台 Chat Agent 与后台 Global Agent 协作，配合可靠事件总线、两阶段记忆写入、反思引擎与技能进化。软件 v2.0 以 **Windows 桌面应用**形态交付——pywebview（WebView2）壳 + 内嵌后端 + 本地 Agent bridge，双击即用，数据全部留在本机。
 
@@ -22,7 +22,7 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 - **本地 Agent**：bridge 独立进程 + 信任根目录确认 + 目录选择对话框；claude CLI「检测本机优先、捆绑兜底」双策略。
 - **Agent 进化闭环**：事件总线 → 反思引擎 → 记忆候选（两阶段写入）→ 技能候选检测与评估 → MCP 工具接入。
 - **今日工作台**：今日安排可勾选并联动进度，内置 20 组每日提醒；右上角 Inbox 汇总本机 Agent 的完成与待确认通知。
-- **记录与复盘**：每日/阶段规划与复盘使用轻量 Markdown 编辑器，复盘自动承接对应计划事项并支持额外事项；日记与心得提供历史记录切换。
+- **记录与复盘**：每日/阶段规划与复盘使用轻量 Markdown 编辑器，复盘自动承接对应计划事项并支持额外事项；规划与复盘页右侧展示可直接点击回看的历史记录，可新建多条并在保存后看到本地 SQLite 落点与记录编号。
 - **工作历**：以 GitHub contribution graph 风格汇总全年规划、复盘、日记与心得记录。
 - **对话分栏**：LifeOS 对话与 Agent 对话之间支持左右拖拽调整宽度，比例保存在本机，双击分隔条可恢复默认。
 - **本地 Agent 协作**：Agent 活动面板固定于页面底部、最多展示 20 条并内滚；未连接时仍可编辑输入草稿，工作时显示转圈状态，记忆提炼面板可关闭，委派结束仅在整批任务完成后显示。
@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.2.exe`（安装器）。
+产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.3.exe`（安装器）。
 
 ## 开发调试
 

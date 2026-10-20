@@ -267,7 +267,7 @@ export interface ErrorFrame extends ScopedFrame {
   recoverable: boolean;
 }
 
-/** 前端自己造的流级错误（收到无法解析的帧）。没有会话可言。 */
+/** 流级错误（可能没有会话）。传输断线由 `onState` 表示，不伪装成业务帧。 */
 export interface StreamErrorFrame extends GlobalFrame {
   type: "error";
   code: string;
