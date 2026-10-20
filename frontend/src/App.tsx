@@ -131,7 +131,7 @@ export default function App() {
   // 登录闸（方案 6.4）：未登录渲染登录页/首启向导，任何 401 都会被切回来。
   return (
     <AuthGate>
-    <div className={`lifeos-shell ${dark ? "theme-night" : ""} ${navCollapsed ? "nav-collapsed" : ""}`}>
+    <div className={`lifeos-shell ${dark ? "theme-night" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${active === "chat" ? "chat-view" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className={`side-nav ${navCollapsed ? "collapsed" : ""}`} aria-label="主导航侧栏">
         <div className="brand-block">
