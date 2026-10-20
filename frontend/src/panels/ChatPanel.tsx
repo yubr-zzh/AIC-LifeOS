@@ -6,6 +6,7 @@ import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
 import { IconSend, IconCopy, IconMessage } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
+import { CopyTextButton } from "../components/CopyTextButton";
 import { DelegationCard } from "./DelegationCard";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
@@ -339,7 +340,10 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
     return (
       <div className="arrival chat-message user-message">
         <div className="chat-message-content">{msg.content}</div>
-        <div className="chat-message-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+        <div className="chat-message-foot">
+          <CopyTextButton text={msg.content} />
+          <span className="chat-message-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        </div>
       </div>
     );
   }
@@ -358,6 +362,7 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
               {msg.agent_enabled ? "执行型 Agent 路径" : "文本回答"}
             </span>
           ) : null}
+          {!pending && msg.content ? <CopyTextButton text={msg.content} className="assistant-copy" /> : null}
         </div>
         {msg.decision_reason ? (
           <details className="chat-route-details">

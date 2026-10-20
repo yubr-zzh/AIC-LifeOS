@@ -749,7 +749,11 @@ textarea { resize: vertical; }
 .conversation-memory-form textarea, .conversation-memory-form input, .conversation-memory-form select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--bd-1); border-radius: 9px; background: #fff; color: var(--fg-1); }
 .conversation-memory-form textarea { resize: vertical; }
 .conversation-memory-notice { color: var(--fg-2); font-size: 12px; line-height: 1.5; }
-.chat-messages { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; }
+.chat-messages { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: #c9c3b4 transparent; scrollbar-gutter: stable; }
+.chat-messages::-webkit-scrollbar { width: 10px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #c9c3b4; background-clip: padding-box; }
+.chat-messages::-webkit-scrollbar-thumb:hover { background: #a9a293; background-clip: padding-box; }
 .chat-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; width: min(660px, calc(100% - 36px)); min-height: 100%; margin: 0 auto; padding: 42px 0 30px; text-align: center; }
 .chat-welcome-mark { display: grid; width: 54px; height: 54px; place-items: center; margin-bottom: 20px; border: 1px solid #e5e2d6; border-radius: 18px; background: #f4f3ec; color: #788c5d; }
 .chat-eyebrow { color: #c15f3f; font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
@@ -763,7 +767,12 @@ textarea { resize: vertical; }
 .chat-message { max-width: 100%; }
 .user-message { align-self: flex-end; max-width: min(78%, 620px); }
 .chat-message-content { padding: 12px 16px; border: 1px solid #e5e2d6; border-radius: 18px 18px 5px 18px; background: #f0eee6; color: #141413; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-message-time { margin-top: 5px; padding: 0 3px; color: #a1a69b; font-size: 10px; text-align: right; }
+.chat-message-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 5px; }
+.chat-message-time { padding: 0 3px; color: #a1a69b; font-size: 10px; text-align: right; }
+.copy-text-button { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 2px 7px; border: 1px solid #e2dfd3; border-radius: 7px; background: #faf9f4; color: #8a877a; font-size: 10px; line-height: 1; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; }
+.copy-text-button:hover { border-color: #d6d2c3; background: #f3f1e9; color: #c15f3f; }
+.copy-text-button svg { flex: 0 0 auto; }
+.assistant-copy { margin-left: auto; }
 .assistant-message { display: flex; align-self: flex-start; gap: 11px; width: 100%; }
 .assistant-avatar { display: grid; flex: 0 0 auto; width: 29px; height: 29px; place-items: center; border: 1px solid #e5e2d6; border-radius: 10px; background: #f4f3ec; color: #788c5d; }
 .assistant-body { min-width: 0; flex: 1; }
@@ -810,6 +819,10 @@ textarea { resize: vertical; }
 .theme-night .assistant-content, .theme-night .chat-message-content { color: #e3dfd4; }
 .theme-night .chat-toolbar-title span, .theme-night .chat-welcome p, .theme-night .chat-history-foot,
 .theme-night .chat-history-empty, .theme-night .chat-message-time, .theme-night .chat-compose-hint { color: #a29d8f; }
+.theme-night .copy-text-button { border-color: #4a453e; background: #332f2a; color: #a29d8f; }
+.theme-night .copy-text-button:hover { border-color: #6a6459; background: #3b3731; color: #e4a183; }
+.theme-night .chat-messages { scrollbar-color: #625c51 transparent; }
+.theme-night .chat-messages::-webkit-scrollbar-thumb { background: #625c51; background-clip: padding-box; }
 .theme-night .chat-history-item { color: #c6c1b4; }
 .theme-night .chat-history-item:hover, .theme-night .chat-history-item.active { background: #332f2a; border-color: #4a453e; color: #e5e1d6; }
 .theme-night .chat-new, .theme-night .chat-context, .theme-night .chat-prompts button,
@@ -1133,6 +1146,7 @@ button.activity-day { cursor: pointer; }
 .auth-field-group { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .auth-field-group input { padding: 8px 10px; border: 1px solid var(--bd-1, #d6d3c4); border-radius: 8px; font-size: 12.5px; }
 .auth-remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #3e3d37; }
+.auth-remember-note { color: #8a877a; font-size: 10.5px; line-height: 1.45; }
 .auth-strength { font-size: 11.5px; }
 .auth-strength.s0, .auth-strength.s1 { color: #b0574f; }
 .auth-strength.s2 { color: #a8842f; }

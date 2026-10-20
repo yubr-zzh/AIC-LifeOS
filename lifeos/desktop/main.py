@@ -12,6 +12,7 @@ server 的 import 放在函数体内，谁把这个模块提前 import 了也不
 from __future__ import annotations
 
 import ctypes
+import json
 import os
 import socket
 import sys
@@ -113,6 +114,67 @@ class ZhuoMianApi:
         mu = Path(os.environ["LIFEOS_HOME"])
         mu.mkdir(parents=True, exist_ok=True)
         os.startfile(str(mu))  # noqa: S606 - 仅本机、固定指向自己的数据根
+
+    @staticmethod
+    def _remember_path() -> Path:
+        return Path(os.environ["LIFEOS_HOME"]) / "security" / "remembered-login.json"
+
+    def remember_login(self, username: str, password: str):
+        """把 30 天免登录所需的账号密码用 Windows DPAPI 加密后落盘。
+
+        **绝不保存明文。** DPAPI 绑定当前 Windows 用户，复制文件到别的账户
+        也解不开。浏览器模式没有这个 API，仍由 30 天会话 Cookie 负责免登录。
+        """
+        if os.name != "nt":
+            return {"ok": False, "reason": "windows_only"}
+        username = str(username or "").strip()
+        password = str(password or "")
+        if not username or not password:
+            return {"ok": False, "reason": "empty_credentials"}
+        from lifeos.llm.profiles import _protect_api_key
+        from lifeos.storage.atomic import write_json
+
+        payload = json.dumps({
+            "username": username,
+            "password": password,
+            "saved_at": time.time(),
+        }, ensure_ascii=False)
+        path = self._remember_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(path, {"schemaVersion": 1, "protected": _protect_api_key(payload)})
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        return {"ok": True}
+
+    def get_remembered_login(self):
+        """读取 30 天内的加密凭据；过期、损坏或非 Windows 一律返回 None。"""
+        if os.name != "nt":
+            return None
+        path = self._remember_path()
+        try:
+            from lifeos.llm.profiles import _unprotect_api_key
+            wrapper = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(_unprotect_api_key(str(wrapper["protected"])))
+            saved_at = float(payload.get("saved_at") or 0)
+            username = str(payload.get("username") or "")
+            password = str(payload.get("password") or "")
+            if not username or not password or time.time() - saved_at > 30 * 24 * 3600:
+                self.forget_login()
+                return None
+            return {"username": username, "password": password}
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            self.forget_login()
+            return None
+
+    def forget_login(self):
+        """删除已记住的登录凭据。"""
+        try:
+            self._remember_path().unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {"ok": True}
 
 
 JIU_GEN_MING = "LifeOS"   # v1.0 的旧数据根名，首启整体迁移到 .lifeOS
@@ -224,7 +286,11 @@ def main() -> int:
     api = ZhuoMianApi()
     webview.create_window("LifeOS", f"http://127.0.0.1:{kou}/",
                           js_api=api, width=1280, height=820)
-    webview.start()
+    # private_mode=False 才允许 WebView2 跨启动保留 Cookie / localStorage。
+    # 没有它，后端即使发了 30 天 Cookie，关窗后仍会被 WebView 丢弃。
+    storage = Path(os.environ["LIFEOS_HOME"]) / "webview"
+    storage.mkdir(parents=True, exist_ok=True)
+    webview.start(private_mode=False, storage_path=str(storage))
     # 关窗收尾（方案 4.3）：先停 bridge（两段式，杀干净 claude 孤儿），
     # 再停主服务与网关。daemon 线程兜底——任何一步卡死也不会吊住退出。
     from lifeos.api import bridge_admin

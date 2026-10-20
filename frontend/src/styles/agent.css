@@ -69,7 +69,11 @@
   padding: 5px 10px; border-bottom: 1px solid var(--bd-1);
   background: var(--bg-1); font-size: 11px; color: var(--fg-2);
 }
-.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent; scrollbar-gutter: stable; }
+.agp-body::-webkit-scrollbar { width: 10px; }
+.agp-body::-webkit-scrollbar-track { background: transparent; }
+.agp-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--bd-3); background-clip: padding-box; }
+.agp-body::-webkit-scrollbar-thumb:hover { background: var(--bd-4); background-clip: padding-box; }
 .agp-hint { margin: 0; color: var(--fg-3); font-size: 12px; line-height: 1.7; }
 .agp-off {
   border: 1px dashed var(--bd-3); border-radius: var(--r-1);
@@ -95,11 +99,13 @@
 .agp-notice button { background: none; border: 0; cursor: pointer; color: var(--fg-3); }
 
 /* ---- 消息气泡 ---- */
-.agb { border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
+.agb { position: relative; border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
 .agb-role {
   font-size: 10px; letter-spacing: .04em; color: var(--fg-3);
-  padding: 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+  padding: 3px 68px 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
 }
+.agb-copy { position: absolute; z-index: 2; top: 2px; right: 4px; min-height: 19px; padding: 1px 5px; font-size: 9px; }
+.agb-copy span { display: none; }
 .agb-text { padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
 .agb-user { background: var(--bg-2); }
 .agb-user .agb-role { background: var(--bg-3); }

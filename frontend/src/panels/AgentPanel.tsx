@@ -12,6 +12,7 @@ import { AgentApprovalCard } from "./AgentApprovalCard";
 import { AgentComposer } from "./AgentComposer";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
+import { CopyTextButton } from "../components/CopyTextButton";
 
 interface Props {
   store: AgentStore;
@@ -120,6 +121,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         {streaming && streaming.sessionId === active?.sessionId ? (
           <div className={`agb agb-${streaming.kind}`}>
             <div className="agb-role mono">{streaming.kind === "thinking" ? "thinking" : "assistant"}</div>
+            {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
             <div className="agb-text">{streaming.text}</div>
           </div>
         ) : null}
@@ -251,6 +253,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
         <div className="agb-role mono">
           tool_use · {m.toolName}
         </div>
+        <CopyTextButton text={toolInputText(m.toolInput)} className="agb-copy" />
         <pre className="agb-io mono">{toolInputText(m.toolInput)}</pre>
       </div>
     );
@@ -259,6 +262,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className={`agb agb-result ${m.isError ? "bad" : ""}`}>
         <div className="agb-role mono">tool_result{m.isError ? " · 失败" : ""}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
         <pre className="agb-io mono">{m.text}</pre>
       </div>
     );
@@ -267,6 +271,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className="agb agb-thinking">
         <div className="agb-role mono">thinking</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
         <div className="agb-text">{m.text}</div>
       </div>
     );
@@ -275,6 +280,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className={`agb agb-sys ${m.isError ? "bad" : ""}`}>
         <div className="agb-role mono">result{m.isError ? " · 失败" : ""}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
         <div className="agb-text">{m.text}</div>
       </div>
     );
@@ -283,6 +289,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className="agb agb-sys">
         <div className="agb-role mono">permission_resolved</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
         <div className="agb-text">{m.text}</div>
       </div>
     );
@@ -291,6 +298,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className="agb agb-sys">
         <div className="agb-role mono">{m.kind}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
         <div className="agb-text">{m.text}</div>
       </div>
     );
@@ -298,6 +306,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
   return (
     <div className={`agb agb-${m.role}`}>
       <div className="agb-role mono">{m.role}</div>
+      <CopyTextButton text={m.text} className="agb-copy" />
       <div className="agb-text">{m.text}</div>
     </div>
   );

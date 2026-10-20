@@ -13,6 +13,7 @@ import os
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,7 +21,7 @@ from unittest import mock
 from lifeos.api import bridge_admin
 from lifeos.api import kanmen
 from lifeos.bridge.adapters.claude_code import resolve_claude_runtime
-from lifeos.desktop.main import _kong_kou, _shu_ju_gen
+from lifeos.desktop.main import ZhuoMianApi, _kong_kou, _shu_ju_gen
 
 
 class KanMenTest(unittest.TestCase):
@@ -243,6 +244,45 @@ class ZhuoMianZhiLianTest(unittest.TestCase):
             zi, xiang = self._fa("/agent-api/agents")
             self.assertEqual(zi, 502)
             self.assertEqual(xiang["error"]["code"], "agent_unavailable")
+
+
+@unittest.skipUnless(os.name == "nt", "DPAPI 仅 Windows 可用")
+class JiZhuMiMaTest(unittest.TestCase):
+    def test_jia_mi_bao_cun_30_tian_nei_ke_du_qu(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            os.environ, {"LIFEOS_HOME": tmp}, clear=False
+        ):
+            api = ZhuoMianApi()
+            now = time.time()
+            with mock.patch("lifeos.desktop.main.time.time", return_value=now):
+                self.assertEqual(api.remember_login("admin", "password123"), {"ok": True})
+            path = Path(tmp) / "security" / "remembered-login.json"
+            self.assertNotIn("password123", path.read_text(encoding="utf-8"))
+            with mock.patch("lifeos.desktop.main.time.time", return_value=now + 29 * 24 * 3600):
+                self.assertEqual(api.get_remembered_login(), {
+                    "username": "admin", "password": "password123",
+                })
+
+    def test_guo_qi_hou_zi_dong_qing_chu(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            os.environ, {"LIFEOS_HOME": tmp}, clear=False
+        ):
+            api = ZhuoMianApi()
+            now = time.time()
+            with mock.patch("lifeos.desktop.main.time.time", return_value=now):
+                api.remember_login("admin", "password123")
+            with mock.patch("lifeos.desktop.main.time.time", return_value=now + 31 * 24 * 3600):
+                self.assertIsNone(api.get_remembered_login())
+            self.assertFalse((Path(tmp) / "security" / "remembered-login.json").exists())
+
+    def test_zhu_dong_wang_ji(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            os.environ, {"LIFEOS_HOME": tmp}, clear=False
+        ):
+            api = ZhuoMianApi()
+            api.remember_login("admin", "password123")
+            self.assertEqual(api.forget_login(), {"ok": True})
+            self.assertIsNone(api.get_remembered_login())
 
 
 class ShuJuGenQianYiTest(unittest.TestCase):

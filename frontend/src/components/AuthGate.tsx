@@ -24,6 +24,21 @@ import {
 
 const QIANG_DU = ["太短（至少 8 位）", "弱", "中", "强"];
 
+interface RememberedLogin {
+  username: string;
+  password: string;
+}
+
+interface DesktopLoginApi {
+  get_remembered_login?: () => Promise<RememberedLogin | null>;
+  remember_login?: (username: string, password: string) => Promise<{ ok: boolean }>;
+  forget_login?: () => Promise<{ ok: boolean }>;
+}
+
+function desktopLoginApi(): DesktopLoginApi | undefined {
+  return (window as unknown as { pywebview?: { api?: DesktopLoginApi } }).pywebview?.api;
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [zhuang, setZhuang] = useState<"checking" | "setup" | "login" | "ok">("checking");
 
@@ -107,10 +122,35 @@ function LoginView({ onDone }: { onDone: () => void }) {
   const [cuo, setCuo] = useState("");
   const [mang, setMang] = useState(false);
 
+  useEffect(() => {
+    let alive = true;
+    const loadRemembered = async () => {
+      const api = desktopLoginApi();
+      if (!api?.get_remembered_login) return;
+      try {
+        const saved = await api.get_remembered_login();
+        if (alive && saved?.username && saved.password) {
+          setUsername(saved.username);
+          setPassword(saved.password);
+          setRemember(true);
+        }
+      } catch { /* 记住密码失败时退回手动登录 */ }
+    };
+    if (desktopLoginApi()) void loadRemembered();
+    else window.addEventListener("pywebviewready", loadRemembered, { once: true });
+    return () => {
+      alive = false;
+      window.removeEventListener("pywebviewready", loadRemembered);
+    };
+  }, []);
+
   const tiJiao = async () => {
     setMang(true); setCuo("");
     try {
       await login(username.trim(), password, remember);
+      const api = desktopLoginApi();
+      if (remember) await api?.remember_login?.(username.trim(), password).catch(() => undefined);
+      else await api?.forget_login?.().catch(() => undefined);
       onDone();
     } catch (e) {
       setCuo(e instanceof Error ? e.message : String(e));
@@ -131,8 +171,9 @@ function LoginView({ onDone }: { onDone: () => void }) {
         </label>
         <label className="auth-remember">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          记住我（30 天内免登录）
+          记住密码（30 天内免登录）
         </label>
+        <span className="auth-remember-note">登录信息使用 Windows DPAPI 加密保存在本机，不保存明文密码。</span>
         {cuo ? <div role="alert" className="auth-error">{cuo}</div> : null}
         <button className="green-button" type="submit" disabled={!username.trim() || !password || mang}>
           {mang ? "登录中…" : "登录"}
@@ -275,6 +316,7 @@ export function AccountMenu() {
             className="green-button"
             onClick={async () => {
               await logout().catch(() => {});
+              await desktopLoginApi()?.forget_login?.().catch(() => undefined);
               window.dispatchEvent(new CustomEvent("lifeos:unauthorized"));
             }}
           >退出登录</button>
@@ -299,6 +341,7 @@ function GaiKouLingForm({ csrf, onDone }: { csrf: string; onDone: () => void }) 
         setMang(true); setCuo("");
         try {
           await changePassword(jiu, xin, csrf);
+          await desktopLoginApi()?.forget_login?.().catch(() => undefined);
           onDone();
         } catch (err) {
           setCuo(err instanceof Error ? err.message : String(err));
