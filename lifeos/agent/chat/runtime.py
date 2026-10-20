@@ -5,6 +5,8 @@ import asyncio
 from lifeos.agent.context import AgentContextStore
 from lifeos.agent.planner.planner import Planner
 from lifeos.memory.schema import normalize_scope
+from lifeos.memory.query_context import SessionQueryContext
+from lifeos.memory.temporal import resolve_as_of
 
 
 class ChatRuntime:
@@ -30,20 +32,26 @@ class ChatRuntime:
         # 下一轮对话时进大模型上下文。**只追加文本，不产生任何指向 Bridge 的调用**
         # （7.7.1 的关键约束：主服务不能自己下发下一条指令）。
         self.agent_context = agent_context or AgentContextStore()
+        self.query_context = SessionQueryContext()
 
     async def handle_message(self, user_input: str, session_id: str | None = None,
                              memory_scope: dict | None = None, routing_policy: str = "auto"):
         trace_id = self.trace.start(user_input)
         resolved_scope = normalize_scope(memory_scope) if memory_scope is not None else None
-        chunks = await self.memory.retrieve(user_input, scope=resolved_scope)
+        retrieval_query = self.query_context.add_and_build(session_id, user_input, resolved_scope)
+        historical_as_of = resolve_as_of(retrieval_query)
+        try:
+            chunks = await self.memory.retrieve(retrieval_query, scope=resolved_scope, as_of=historical_as_of)
+        except TypeError:
+            # Keep compatibility with memory adapters that predate as_of.
+            chunks = await self.memory.retrieve(retrieval_query, scope=resolved_scope)
         if self.external_memory is not None:
             try:
                 allowed_memory_ids = self.memory.active_memory_ids()
-                external = await asyncio.to_thread(
-                    self.external_memory.retrieve,
-                    user_input,
-                    scope=resolved_scope,
-                    allowed_memory_ids=allowed_memory_ids,
+                # External providers currently expose current-state retrieval only.
+                external = {} if historical_as_of is not None else await asyncio.to_thread(
+                    self.external_memory.retrieve, retrieval_query,
+                    scope=resolved_scope, allowed_memory_ids=allowed_memory_ids,
                 )
                 for category, entries in external.items():
                     existing = {item.get("id") for item in chunks.get(category, [])}

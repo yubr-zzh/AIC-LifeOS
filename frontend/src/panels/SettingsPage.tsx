@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ModelProviderSettings } from "./ModelProviderSettings";
 import type { AgentRoutingPolicy } from "../api/types";
+import { IconContrast } from "../components/Icons";
 
 type Section = "models" | "appearance" | "agent";
 const ROUTING_POLICY_KEY = "lifeos-agent-routing-policy";
@@ -38,7 +39,7 @@ export function SettingsPage({ dark, onDarkChange }: Props) {
           <span><strong>模型与 API</strong><small>Provider、密钥与默认模型</small></span>
         </button>
         <button className={section === "appearance" ? "active" : ""} onClick={() => setSection("appearance")}>
-          <span className="settings-nav-mark">◐</span>
+          <span className="settings-nav-mark"><IconContrast size={16} /></span>
           <span><strong>外观</strong><small>主题与显示偏好</small></span>
         </button>
         <button className={section === "agent" ? "active" : ""} onClick={() => setSection("agent")}>

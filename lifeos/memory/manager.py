@@ -43,9 +43,9 @@ class MemoryManager:
             if migrated:
                 self._write(store)
 
-    async def retrieve(self, query, scope=None):
+    async def retrieve(self, query, scope=None, as_of=None, strategy="hybrid"):
         store = self._read()
-        return await MemoryRetriever(store).retrieve(query, scope=scope)
+        return await MemoryRetriever(store, strategy=strategy).retrieve(query, scope=scope, as_of=as_of)
 
     def profile_view(self):
         """Return a fresh, non-persisted profile view from the current store."""

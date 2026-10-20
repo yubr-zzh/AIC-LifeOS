@@ -640,6 +640,42 @@ body:has(.chat-host) { overflow: hidden; height: 100dvh; }
 .header-icon-button { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid #d8e7d6; border-radius: 10px; background: #f7fbf5; color: #66826b; font-size: 16px; }
 .header-icon-button:hover { background: #e8f3e6; color: #2f7745; border-color: #b9d6ba; }
 .avatar { width: 34px; height: 34px; display: grid; place-items: center; margin-left: 4px; border-radius: 50%; color: #fff; background: #82ad88; font-size: 12px; font-weight: 700; }
+.avatar-wrap { position: relative; }
+.avatar { cursor: pointer; padding: 0; border: 0; font: inherit; }
+.avatar:hover { background: #6b9872; }
+.avatar:focus-visible { box-shadow: 0 0 0 2px var(--bg-0), 0 0 0 4px #6b9872; }
+.avatar > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.avatar-popover {
+  position: absolute;
+  right: 0; top: calc(100% + 8px); z-index: 50;
+  width: 260px; padding: 14px;
+  border: 1px solid #d9e8d8; border-radius: var(--r-2);
+  background: #fbfdf9;
+  box-shadow: 0 14px 28px rgba(44, 91, 51, .14);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.avatar-popover-head { display: flex; flex-direction: column; gap: 2px; }
+.avatar-popover-head strong { color: #1a3a23; font-size: 13px; }
+.avatar-popover-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px; color: #4a6250;
+}
+.avatar-popover-row > input {
+  height: 28px; padding: 0 8px;
+  border: 1px solid #d3e2d2; border-radius: var(--r-1);
+  background: #fff; color: var(--fg-1); font: inherit; font-size: 12px;
+}
+.avatar-popover-row > input:focus { outline: none; border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
+.avatar-popover-row > button { padding: 4px 10px; }
+.avatar-reset {
+  align-self: flex-end; padding: 4px 10px;
+  border: 1px solid #d3e2d2; border-radius: var(--r-1);
+  background: transparent; color: #5b7a64; font-size: 11px;
+}
+.avatar-reset:hover { background: #f3f8f2; color: #1a3a23; }
 .settings-popover { position: absolute; right: 42px; top: 60px; z-index: 10; display: flex; flex-direction: column; gap: 8px; width: 220px; padding: 16px; border: 1px solid #cfe2cf; border-radius: 12px; background: #fbfdf9; box-shadow: 0 14px 28px rgba(44, 91, 51, .14); color: #6f8874; font-size: 11px; }
 .settings-popover strong { color: #275c36; font-size: 13px; }
 .workspace-main { width: min(1180px, calc(100% - 84px)); margin: 0 auto; padding: 40px 0 64px; }
@@ -1556,7 +1592,8 @@ button.activity-day { cursor: pointer; }
 .settings-sidebar > button > span:last-child { display: grid; gap: 3px; }
 .settings-sidebar > button strong { font-size: 12px; font-weight: 650; }
 .settings-sidebar > button small { color: var(--fg-3); font-size: 10px; }
-.settings-nav-mark { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--bd-1); border-radius: 9px; background: var(--bg-1); color: var(--accent-dim); font-size: 11px; font-weight: 700; }
+.settings-nav-mark { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--bd-1); border-radius: 9px; background: var(--bg-1); color: var(--accent-dim); font-size: 11px; font-weight: 700; line-height: 1; }
+.settings-nav-mark > svg { display: block; }
 .settings-sidebar-foot { display: flex; align-items: center; gap: 8px; margin: 22px 3px 0; padding-top: 14px; border-top: 1px solid var(--bd-1); color: var(--fg-3); font-size: 10px; }
 .settings-section { display: flex; flex-direction: column; gap: 18px; }
 .settings-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 2px 0 17px; border-bottom: 1px solid var(--bd-1); }
@@ -1817,3 +1854,67 @@ button.activity-day { cursor: pointer; }
   min-width: 0;
 }
 .ags-activity-payload .muted { color: #94a99a; margin-right: 2px; }
+
+/* ── Date chips (横向"每天一条"切换) ── */
+.date-chips {
+  display: flex; align-items: stretch; gap: 8px;
+  margin: 0 0 16px;
+}
+.date-chips-scroll {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: thin;
+}
+.date-chips-scroll::-webkit-scrollbar { height: 4px; }
+.date-chips-scroll::-webkit-scrollbar-thumb { background: #d3e2d2; border-radius: 2px; }
+.date-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid #d3e2d2; border-radius: 9px;
+  background: #fffefa; color: #5b7a64;
+  font: inherit; cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  min-width: 64px;
+}
+.date-chip:hover { background: #f0f5ea; }
+.date-chip.is-today { border-color: #b9d1bb; }
+.date-chip.is-active {
+  background: #4f9f68; border-color: #4f9f68; color: #fff;
+}
+.date-chip-main { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.date-chip-sub { font-size: 10px; opacity: 0.8; line-height: 1.2; }
+.date-chips-new {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 10px;
+  border: 1px dashed #b9d1bb; border-radius: 9px;
+  background: transparent; color: #2d4a36;
+  font-size: 11px; cursor: pointer;
+}
+.date-chips-new:hover { background: #f0f5ea; }
+
+/* ── Save status (保存反馈条) ── */
+.save-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-family: var(--font-mono);
+  padding: 4px 10px; border-radius: 999px;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.save-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; opacity: 0.6;
+}
+.save-status.is-idle { background: #f3f8f2; color: #94a99a; }
+.save-status.is-saving { background: #fef3c5; color: #846a1f; }
+.save-status.is-saving .save-status-dot { animation: save-pulse 1.2s ease-in-out infinite; }
+.save-status.is-saved { background: #d8e8d2; color: #1a3a23; }
+.save-status.is-error { background: #fbe9e7; color: #8a3a2f; }
+@keyframes save-pulse { 0%, 100% { opacity: 0.4 } 50% { opacity: 1 } }
+
+/* ── editor-footer 改成两段：左边状态条，右边按钮 ── */
+.editor-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px;
+}
