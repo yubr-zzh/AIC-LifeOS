@@ -27,8 +27,13 @@ interface LocalConversation {
 }
 
 const HISTORY_KEY = "lifeos.chat.history.v1";
+const HISTORY_COLLAPSED_KEY = "lifeos.chat.historyCollapsed.v1";
 const ROUTING_POLICY_KEY = "lifeos-agent-routing-policy";
 const WELCOME_ID = "system-welcome";
+
+function readHistoryCollapsed(): boolean {
+  try { return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1"; } catch { return false; }
+}
 
 function readRoutingPolicy(): AgentRoutingPolicy {
   try {
@@ -85,6 +90,7 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [contextOpen, setContextOpen] = useState(false);
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
+  const [historyCollapsed, setHistoryCollapsed] = useState(readHistoryCollapsed);
   const [activeId, setActiveId] = useState(() => newConversationId());
   const [historyReady, setHistoryReady] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -130,6 +136,10 @@ export function ChatPanel({ store, agent, api }: Props) {
   useEffect(() => {
     try { localStorage.setItem(ROUTING_POLICY_KEY, routingPolicy); } catch { /* preference is best-effort */ }
   }, [routingPolicy]);
+
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_COLLAPSED_KEY, historyCollapsed ? "1" : "0"); } catch { /* preference is best-effort */ }
+  }, [historyCollapsed]);
 
   useEffect(() => {
     if (scroller.current) {
@@ -210,8 +220,8 @@ export function ChatPanel({ store, agent, api }: Props) {
   };
 
   return (
-    <div className="chat-workspace">
-      <aside className="chat-history" aria-label="对话历史">
+    <div className={`chat-workspace ${historyCollapsed ? "history-collapsed" : ""}`}>
+      {!historyCollapsed ? <aside id="chat-history-panel" className="chat-history" aria-label="对话历史">
         <button className="chat-new" onClick={startNew} disabled={state.loading.chat}>
           <span aria-hidden="true">＋</span> 新建对话
         </button>
@@ -231,13 +241,21 @@ export function ChatPanel({ store, agent, api }: Props) {
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
         <div className="chat-history-foot">历史仅保存在此浏览器</div>
-      </aside>
+      </aside> : null}
 
       <section className="chat-conversation" aria-label="当前对话">
         <header className="chat-toolbar">
-          <div className="chat-toolbar-title">
-            <strong>{titleFor(state.messages)}</strong>
-            <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
+          <div className="chat-toolbar-left">
+            <button type="button" className="chat-history-toggle" onClick={() => setHistoryCollapsed((value) => !value)}
+              title={historyCollapsed ? "显示对话历史" : "隐藏对话历史"}
+              aria-label={historyCollapsed ? "显示对话历史" : "隐藏对话历史"}
+              aria-expanded={!historyCollapsed} aria-controls="chat-history-panel">
+              <span aria-hidden="true">{historyCollapsed ? "☰" : "‹"}</span>
+            </button>
+            <div className="chat-toolbar-title">
+              <strong>{titleFor(state.messages)}</strong>
+              <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
+            </div>
           </div>
           <div className="chat-toolbar-right">
             <button type="button" className="chat-delete-current" title="删除当前对话" aria-label="删除当前对话" onClick={discardCurrent} disabled={state.loading.chat}>删除</button>

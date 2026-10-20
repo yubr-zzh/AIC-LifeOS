@@ -11,6 +11,7 @@ export interface AuthStatus {
   initialized: boolean;
   authenticated: boolean;
   username: string | null;
+  avatar: string | null;
   csrf: string;
 }
 
@@ -76,6 +77,19 @@ export async function logout(): Promise<void> {
   await duHou(res);
 }
 
+export async function saveAvatar(
+  avatar: string | null,
+  csrf: string,
+): Promise<{ ok: boolean; avatar: string | null }> {
+  const res = await fetch("/api/auth/profile", {
+    method: "PUT",
+    headers: { "content-type": "application/json", "X-LifeOS-CSRF": csrf },
+    body: JSON.stringify({ avatar }),
+  });
+  await duHou(res);
+  return (await res.json()) as { ok: boolean; avatar: string | null };
+}
+
 export async function changePassword(
   oldPassword: string,
   newPassword: string,
@@ -118,7 +132,7 @@ export async function revokeSession(
   await duHou(res);
 }
 
-/** 口令强度提示（方案 6.4）。0–3：弱/中/强。只提示，不拦提交（服务端是唯一裁判）。 */
+/** 密码强度提示（方案 6.4）。0–3：弱/中/强。只提示，不拦提交（服务端是唯一裁判）。 */
 export function kouLingQiangDu(a: string): number {
   if (a.length < 8) return 0;
   let fen = 1;

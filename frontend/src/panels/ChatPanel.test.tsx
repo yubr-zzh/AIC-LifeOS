@@ -26,6 +26,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("ChatPanel 侧栏收起", () => {
+  it("可以隐藏并恢复最近对话侧栏，并记住选择", async () => {
+    render(<ChatPanel store={dummyStore()} />);
+    const hide = screen.getByRole("button", { name: "隐藏对话历史" });
+    fireEvent.click(hide);
+    expect(screen.queryByRole("complementary", { name: "对话历史" })).toBeNull();
+    expect(localStorage.getItem("lifeos.chat.historyCollapsed.v1")).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: "显示对话历史" }));
+    expect(screen.getByRole("complementary", { name: "对话历史" })).toBeTruthy();
+  });
+});
+
 describe("ChatPanel 会话删除", () => {
   it("每个历史会话都有删除按钮，删除后从列表消失", async () => {
     localStorage.setItem("lifeos.chat.history.v1", JSON.stringify([

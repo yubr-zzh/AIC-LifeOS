@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import socket
@@ -140,7 +141,7 @@ class DengLuTest(DengLuJiLei):
             status, shen, _ = self.qing("POST", "/api/auth/login",
                                         {"username": ming, "password": "wrong-pass"})
             self.assertEqual(status, 401)
-            self.assertEqual(shen["error"]["message"], "用户名或口令不正确")
+            self.assertEqual(shen["error"]["message"], "用户名或密码不正确")
 
     def test_wu_ci_shi_bai_suo_ding(self):
         for _ in range(5):
@@ -216,6 +217,55 @@ class KouLingTest(DengLuJiLei):
         status, _, _ = self.qing(
             "PUT", "/api/auth/password",
             {"old_password": "wrong-pass", "new_password": "newpass45678"},
+            a4=self.ling, a5={"X-LifeOS-CSRF": self._ma()})
+        self.assertEqual(status, 400)
+
+    def test_gai_mi_ma_hou_xin_mi_ma_ke_deng_lu(self):
+        self.ling = self.deng_ru()
+        status, shen, _ = self.qing(
+            "PUT", "/api/auth/password",
+            {"old_password": "password123", "new_password": "newpass45678"},
+            a4=self.ling, a5={"X-LifeOS-CSRF": self._ma()})
+        self.assertEqual(status, 200, shen)
+        status, _, tou = self.qing(
+            "POST", "/api/auth/login",
+            {"username": "admin", "password": "newpass45678"})
+        self.assertEqual(status, 200)
+        self.assertTrue(self._ling_cong(tou))
+
+
+class TouXiangTest(DengLuJiLei):
+    def setUp(self):
+        super().setUp()
+        self.qing("POST", "/api/auth/setup",
+                  {"username": "admin", "password": "password123"})
+        self.ling = self.deng_ru()
+
+    def _ma(self) -> str:
+        _, shen, _ = self.qing("GET", "/api/auth/status", a4=self.ling)
+        return shen["csrf"]
+
+    def test_tou_xiang_ke_bao_cun_qing_chu_bing_sui_zhuang_tai_fan_hui(self):
+        avatar = "data:image/png;base64," + base64.b64encode(b"avatar-bytes").decode("ascii")
+        status, shen, _ = self.qing(
+            "PUT", "/api/auth/profile", {"avatar": avatar},
+            a4=self.ling, a5={"X-LifeOS-CSRF": self._ma()})
+        self.assertEqual(status, 200, shen)
+        self.assertEqual(shen["avatar"], avatar)
+        _, zhuang, _ = self.qing("GET", "/api/auth/status", a4=self.ling)
+        self.assertEqual(zhuang["avatar"], avatar)
+
+        status, shen, _ = self.qing(
+            "PUT", "/api/auth/profile", {"avatar": None},
+            a4=self.ling, a5={"X-LifeOS-CSRF": self._ma()})
+        self.assertEqual(status, 200, shen)
+        self.assertIsNone(shen["avatar"])
+        _, zhuang, _ = self.qing("GET", "/api/auth/status", a4=self.ling)
+        self.assertIsNone(zhuang["avatar"])
+
+    def test_tou_xiang_ge_shi_cuo_wu_400(self):
+        status, _, _ = self.qing(
+            "PUT", "/api/auth/profile", {"avatar": "not-an-image"},
             a4=self.ling, a5={"X-LifeOS-CSRF": self._ma()})
         self.assertEqual(status, 400)
 

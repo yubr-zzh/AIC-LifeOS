@@ -5,7 +5,7 @@ bridge token 仍是设备级凭据（设备层），不因登录体系升级。�
 仍靠 CSRF + Origin 白名单约束——本模块不夸大威胁模型。
 
 存储纪律：
-- `accounts.json` 存 PBKDF2 哈希，绝不存口令本身；
+- `accounts.json` 存 PBKDF2 哈希，绝不存密码本身；
 - `sessions/<token_sha256>.json` **只存 token 的哈希**——盘上拿到文件也偷不走
   可用的会话（方案 6.1「存哈希不存原文」）；
 - 全部走标准库（hashlib/secrets/hmac），零第三方依赖哲学不变。
@@ -13,9 +13,12 @@ bridge token 仍是设备级凭据（设备层），不因登录体系升级。�
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import threading
 import time
@@ -34,6 +37,10 @@ CUO_SHANG_XIAN = 5
 SUO_MIAO = 60
 
 COOKIES_MING = "lifeos_session"
+# 头像以 data URL 存入账户文件。前端会先缩放到 192px，这里再兜一层大小限制，
+# 避免 accounts.json 被一张原图撑大。200 KiB 对头像足够。
+TOU_XIANG_MAX = 200 * 1024
+_TOU_XIANG_RE = re.compile(r"^data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
 
 # 账户名允许的形态：与 dangqian.he_fa 同一套白名单——用户名将来要进路径
 # 与日志，宁可开账时挡掉，不留「登录成功了才发现写不了盘」的形状。
@@ -41,7 +48,7 @@ ZI_FU = he_fa
 
 
 class ZhangHuBiao:
-    """accounts.json 的门面。线程安全：登录与改口令可能并发。"""
+    """accounts.json 的门面。线程安全：登录与改密码可能并发。"""
 
     def __init__(self, a1: str | Path):
         self.path = Path(a1)
@@ -82,7 +89,7 @@ class ZhangHuBiao:
             # 模块边界统一成 ValueError：调用方（HTTP 端点）只捕这一种。
             raise ValueError(f"用户名不合法：{exc}") from exc
         if len(a2) < 8:
-            raise ValueError("口令至少 8 位")
+            raise ValueError("密码至少 8 位")
         with self._suo:
             if not self.kong():
                 raise ValueError("已存在账户，不能重复初始化")
@@ -98,7 +105,7 @@ class ZhangHuBiao:
             return {k: hu[k] for k in ("username", "created_at", "role")}
 
     def yan_zheng(self, a1: str, a2: str) -> bool:
-        """口令校验。**统一失败语义**：用户不存在与口令不对都做一次哈希，
+        """密码校验。**统一失败语义**：用户不存在与密码不对都做一次哈希，
         耗时对齐，不给「用户名是否存在」留时间侧信道。"""
         with self._suo:
             hu = self._zhao(a1)
@@ -109,19 +116,63 @@ class ZhangHuBiao:
             return hmac.compare_digest(hu["pw_hash"], self._ha_xi(a2, yan))
 
     def gai_kou_ling(self, a1: str, a2: str, a3: str) -> None:
-        """改口令。验旧 → 写新。调用方负责吊销旧会话。"""
+        """改密码。验旧 → 写新。调用方负责吊销旧会话。"""
         if len(a3) < 8:
-            raise ValueError("口令至少 8 位")
+            raise ValueError("密码至少 8 位")
         with self._suo:
-            hu = self._zhao(a1)
+            # **必须修改同一份列表再落盘。** 先 `_zhao()` 取一份、再
+            # `_xie(self._du())` 重新读取，会把刚才的修改丢掉。
+            accounts = self._du()
+            hu = next((x for x in accounts if x.get("username") == a1), None)
             if hu is None:
                 raise KeyError(f"账户不存在：{a1}")
             yan = bytes.fromhex(hu["pw_salt"])
             if not hmac.compare_digest(hu["pw_hash"], self._ha_xi(a2, yan)):
-                raise ValueError("旧口令不正确")
+                raise ValueError("旧密码不正确")
             hu["pw_salt"] = secrets.token_bytes(16).hex()
             hu["pw_hash"] = self._ha_xi(a3, bytes.fromhex(hu["pw_salt"]))
-            self._xie(self._du())
+            self._xie(accounts)
+
+    @staticmethod
+    def _zheng_tou_xiang(a1: Any) -> str | None:
+        """校验头像 data URL。空值 = 移除头像。"""
+        if a1 is None or a1 == "":
+            return None
+        if not isinstance(a1, str):
+            raise ValueError("头像格式不正确")
+        match = _TOU_XIANG_RE.fullmatch(a1)
+        if match is None:
+            raise ValueError("头像仅支持 PNG、JPEG 或 WebP 图片")
+        try:
+            raw = base64.b64decode(match.group(1), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("头像图片数据不正确") from exc
+        if len(raw) > TOU_XIANG_MAX:
+            raise ValueError("头像图片过大，请换一张更小的图片")
+        return a1
+
+    def ge_ren_zi_liao(self, a1: str) -> dict[str, Any]:
+        """返回可安全下发给前端的个人资料，不含任何密码字段。"""
+        with self._suo:
+            hu = next((x for x in self._du() if x.get("username") == a1), None)
+        if hu is None:
+            raise KeyError(f"账户不存在：{a1}")
+        return {"username": hu.get("username"), "avatar": hu.get("avatar")}
+
+    def she_zhi_tou_xiang(self, a1: str, a2: Any) -> dict[str, Any]:
+        """设置或移除头像。返回最终头像值。"""
+        avatar = self._zheng_tou_xiang(a2)
+        with self._suo:
+            accounts = self._du()
+            hu = next((x for x in accounts if x.get("username") == a1), None)
+            if hu is None:
+                raise KeyError(f"账户不存在：{a1}")
+            if avatar is None:
+                hu.pop("avatar", None)
+            else:
+                hu["avatar"] = avatar
+            self._xie(accounts)
+        return {"avatar": avatar}
 
 
 class HuiHuaBiao:
@@ -199,7 +250,7 @@ class HuiHuaBiao:
         return n
 
     def chu_yong_hu_wai(self, a1: str, a2: str) -> int:
-        """吊销某用户除当前会话外的全部会话（改口令时用，方案 6.2）。"""
+        """吊销某用户除当前会话外的全部会话（改密码时用，方案 6.2）。"""
         dang = self._zhi_wen(a2) if a2 else None
         n = 0
         with self._suo:

@@ -5,6 +5,7 @@ import {
   kouLingQiangDu,
   login,
   logout,
+  saveAvatar,
   setupAccount,
 } from "./authClient";
 
@@ -23,7 +24,7 @@ afterEach(() => {
 describe("authClient", () => {
   it("authStatus parses the backend shape", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => okRes({
-      initialized: true, authenticated: false, username: null, csrf: "tok-1",
+      initialized: true, authenticated: false, username: null, avatar: null, csrf: "tok-1",
     })));
     const s = await authStatus();
     expect(s.initialized).toBe(true);
@@ -43,10 +44,10 @@ describe("authClient", () => {
 
   it("surfaces the backend error message on login failure", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
-      JSON.stringify({ error: { code: "unauthorized", message: "用户名或口令不正确" } }),
+      JSON.stringify({ error: { code: "unauthorized", message: "用户名或密码不正确" } }),
       { status: 401, headers: { "content-type": "application/json" } },
     )));
-    await expect(login("admin", "wrong", false)).rejects.toThrow("用户名或口令不正确");
+    await expect(login("admin", "wrong", false)).rejects.toThrow("用户名或密码不正确");
   });
 
   it("broadcasts lifeos:unauthorized on any 401", async () => {
@@ -76,6 +77,19 @@ describe("authClient", () => {
     await setupAccount("admin", "password123");
     expect(url).toBe("/api/auth/setup");
     expect(body).toEqual({ username: "admin", password: "password123" });
+  });
+
+  it("saveAvatar sends the data URL with the CSRF header", async () => {
+    let body: unknown;
+    let initSeen: RequestInit | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_u, init) => {
+      initSeen = init;
+      body = JSON.parse(String(init?.body));
+      return okRes({ ok: true, avatar: "data:image/jpeg;base64,AAAA" });
+    }));
+    await saveAvatar("data:image/jpeg;base64,AAAA", "csrf-1");
+    expect(body).toEqual({ avatar: "data:image/jpeg;base64,AAAA" });
+    expect((initSeen?.headers as Record<string, string>)["X-LifeOS-CSRF"]).toBe("csrf-1");
   });
 
   it("kouLingQiangDu grades by length and character classes", () => {

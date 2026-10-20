@@ -90,6 +90,8 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
 
 sectionMeta.settings = { eyebrow: "系统 · 设置", title: "让 LifeOS 按你的方式工作", description: "管理模型 Provider、API 连接和工作区外观。" };
 
+const NAV_COLLAPSED_KEY = "lifeos.nav.collapsed.v1";
+
 export default function App() {
   const store = useStore();
   const agent = useAgentStore();
@@ -97,6 +99,9 @@ export default function App() {
   const [active, setActive] = useState<SectionId>("home");
   const [dark, setDark] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem(NAV_COLLAPSED_KEY) === "1"; } catch { return false; }
+  });
   const meta = sectionMeta[active];
   const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
   const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
@@ -114,6 +119,10 @@ export default function App() {
     store.dispatch({ type: "APPEND_AGENT_SUMMARY", text: bao.title, traceId: bao.traceId });
   }, [bao, store]);
 
+  useEffect(() => {
+    try { localStorage.setItem(NAV_COLLAPSED_KEY, navCollapsed ? "1" : "0"); } catch { /* preference is best-effort */ }
+  }, [navCollapsed]);
+
   const select = (id: SectionId) => {
     setActive(id);
     setSettingsOpen(false);
@@ -122,18 +131,23 @@ export default function App() {
   // 登录闸（方案 6.4）：未登录渲染登录页/首启向导，任何 401 都会被切回来。
   return (
     <AuthGate>
-    <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
+    <div className={`lifeos-shell ${dark ? "theme-night" : ""} ${navCollapsed ? "nav-collapsed" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
-      <aside className="side-nav">
+      <aside className={`side-nav ${navCollapsed ? "collapsed" : ""}`} aria-label="主导航侧栏">
         <div className="brand-block">
           <div className="brand-mark"><IconBolt size={17} /></div>
-          <div>
+          <div className="brand-copy">
             <div className="brand-name">LifeOS</div>
             <div className="brand-caption">你的个人操作系统</div>
           </div>
+          <button type="button" className="side-collapse-toggle" onClick={() => setNavCollapsed((value) => !value)}
+            title={navCollapsed ? "展开主导航" : "收起主导航"} aria-label={navCollapsed ? "展开主导航" : "收起主导航"}
+            aria-expanded={!navCollapsed} aria-controls="main-navigation">
+            {navCollapsed ? "»" : "«"}
+          </button>
         </div>
 
-        <nav className="main-nav" aria-label="主导航">
+        <nav id="main-navigation" className="main-nav" aria-label="主导航">
           {navigation.map((group) => (
             <div className="nav-group" key={group.group}>
               <div className="nav-group-title">{group.group}</div>
@@ -143,7 +157,8 @@ export default function App() {
                   className={`nav-item ${active === item.id ? "active" : ""}`}
                   onClick={() => select(item.id)}
                   aria-current={active === item.id ? "page" : undefined}
-                  title={item.hint}
+                  aria-label={item.label}
+                  title={item.hint ?? item.label}
                 >
                   <span className="nav-icon" aria-hidden="true"><NavIconGlyph name={item.icon} /></span>
                   <span className="nav-label">{item.label}</span>
@@ -182,7 +197,7 @@ export default function App() {
           ) : null}
         </header>
 
-        <main id="main-content" className="workspace-main">
+        <main id="main-content" className={`workspace-main ${active === "chat" ? "workspace-main-chat" : ""}`}>
           <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
