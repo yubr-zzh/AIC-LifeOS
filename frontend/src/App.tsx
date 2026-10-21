@@ -18,6 +18,7 @@ import { MarkdownEditor } from "./components/MarkdownEditor";
 import { ResizableChatSplit } from "./components/ResizableChatSplit";
 import { extractPlanItems, localDateKey } from "./utils/planItems";
 import { AccountMenu, AuthGate } from "./components/AuthGate";
+import brandMark from "./assets/lifeos-mark.png";
 import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
@@ -41,7 +42,7 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     items: [
       { id: "home", label: "今日概览", icon: "home" },
       { id: "chat", label: "对话", icon: "message", hint: "与 LifeOS 对话" },
-      { id: "agents", label: "本地 Agent", icon: "bolt", hint: "发现、连接、运行本机 Agent" },
+      { id: "agents", label: "Agent", icon: "bolt", hint: "发现、连接、运行本机 Agent" },
     ],
   },
   {
@@ -73,7 +74,7 @@ const sectionMeta = {
   "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
   "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
   chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
-  agents: { eyebrow: "连接 · 本地 Agent", title: "把执行交给你机器上的 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
+  agents: { eyebrow: "协作 · 本机 Agent", title: "让本机 Agent 帮你完成工作", description: "LifeOS 负责规划，Agent 负责执行，关键操作始终由你确认。" },
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
   diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
   insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
@@ -103,6 +104,9 @@ export default function App() {
     try { return localStorage.getItem(NAV_COLLAPSED_KEY) === "1"; } catch { return false; }
   });
   const meta = sectionMeta[active];
+  const crumb = active === "settings"
+    ? "设置"
+    : navigation.flatMap((group) => group.items).find((item) => item.id === active)?.label ?? "工作台";
   const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
   const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
   const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
@@ -135,10 +139,10 @@ export default function App() {
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <aside className={`side-nav ${navCollapsed ? "collapsed" : ""}`} aria-label="主导航侧栏">
         <div className="brand-block">
-          <div className="brand-mark"><IconBolt size={17} /></div>
+          <div className="brand-mark"><img src={brandMark} alt="" /></div>
           <div className="brand-copy">
             <div className="brand-name">LifeOS</div>
-            <div className="brand-caption">你的个人操作系统</div>
+            <div className="brand-caption">规划、复盘与执行</div>
           </div>
           <button type="button" className="side-collapse-toggle" onClick={() => setNavCollapsed((value) => !value)}
             title={navCollapsed ? "展开主导航" : "收起主导航"} aria-label={navCollapsed ? "展开主导航" : "收起主导航"}
@@ -174,13 +178,13 @@ export default function App() {
 
         <div className="side-footer">
           <div className="side-footer-line"><span className="status-orb" />系统运行良好</div>
-          <div className="side-footer-sub">本地工作区 · 数据已同步</div>
+          <div className="side-footer-sub">工作区 · 数据已同步</div>
         </div>
       </aside>
 
       <div className="content-shell">
         <header className="workspace-header">
-          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.eyebrow.split(" · ")[0]}</strong></div>
+          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{crumb}</strong></div>
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
             <InboxButton agent={agent} onOpenAgent={() => { agent.setLayout("split"); select("chat"); }} />
@@ -395,8 +399,7 @@ export function useEntryDraft(kind: StructuredEntryKind, initial: { title?: stri
 }
 
 function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
-  const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", { content: phase ? "建立一个更稳定的学习与创作节奏。" : "" });
-  const previewItems = extractPlanItems(draft.content);
+  const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", {});
   const kindLabel = phase ? "阶段规划" : "每日规划";
   return <div className="planning-layout">
     <section className="content-card editor-card">
@@ -404,10 +407,6 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
       <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300}
         ariaLabel={phase ? "阶段规划编辑器" : "每日规划编辑器"}
         placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "用列表写下今天要做的事，每行一条；每日复盘会自动读取这些事项。"} />
-      <div className="plan-item-preview">
-        <div><span className="card-kicker">复盘时会读取</span><strong>{previewItems.length > 0 ? `${previewItems.length} 条事项` : "尚未形成事项"}</strong></div>
-        {previewItems.length > 0 ? <ol>{previewItems.slice(0, 8).map((item) => <li key={item}>{item}</li>)}</ol> : <p>使用列表（- 事项）或直接换行书写，复盘页会按行生成勾选项。</p>}
-      </div>
       <div className="editor-footer"><span>内容保存在本地 SQLite · 支持 Markdown</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
       {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
@@ -415,15 +414,28 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
     <div className="entry-side-rail">
       <aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？把它放在第一行，复盘时会自动成为检查项。"}</p></aside>
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
-        kicker="历史规划 · 本地 SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
+        kicker="历史规划 · SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
         newLabel={phase ? "＋ 新建阶段规划" : "＋ 新建每日规划"} />
     </div>
   </div>;
 }
 
+export function collectPlanItems(
+  entries: StructuredEntry[],
+  savedChecks: { text: string; done?: boolean }[] = [],
+): { id: string; text: string; done: boolean }[] {
+  return entries.flatMap((entry) =>
+    extractPlanItems(entry.content).map((text, index) => ({
+      id: `${entry.id}-${index}`,
+      text,
+      done: Boolean(savedChecks.find((item) => item.text === text)?.done),
+    })),
+  );
+}
+
 function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const draft = useEntryDraft(phase ? "phase_review" : "daily_review", {});
-  const [planEntry, setPlanEntry] = useState<StructuredEntry | null>(null);
+  const [planEntries, setPlanEntries] = useState<StructuredEntry[]>([]);
   const [planLoading, setPlanLoading] = useState(true);
   const [planItems, setPlanItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [extras, setExtras] = useState<{ id: string; text: string; done: boolean }[]>([]);
@@ -435,27 +447,20 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
     setPlanLoading(true);
     listEntries(phase ? "phase_plan" : "daily_plan").then((rows) => {
       if (!alive) return;
-      const today = localDateKey();
-      const entry = phase ? rows[0] ?? null : rows.find((row) => row.entry_date.slice(0, 10) === today) ?? null;
-      setPlanEntry(entry);
+      setPlanEntries(rows);
       setPlanLoading(false);
-    }).catch(() => { if (alive) { setPlanEntry(null); setPlanLoading(false); } });
+    }).catch(() => { if (alive) { setPlanEntries([]); setPlanLoading(false); } });
     return () => { alive = false; };
   }, [phase]);
 
   useEffect(() => {
     if (!draft.loaded) return;
-    const key = `${planEntry?.id ?? "none"}:${draft.id ?? "new"}:${draft.entryDate}`;
+    const key = `${planEntries.map((entry) => entry.id).join(",") || "none"}:${draft.id ?? "new"}:${draft.entryDate}`;
     if (applied.current === key) return;
     const savedChecks = Array.isArray(draft.metadata.checks)
       ? draft.metadata.checks.filter((item): item is { text: string; done?: boolean } => Boolean(item) && typeof (item as { text?: unknown }).text === "string")
       : [];
-    const source = extractPlanItems(planEntry?.content ?? "");
-    setPlanItems(source.map((text, index) => ({
-      id: `plan-${index}`,
-      text,
-      done: Boolean(savedChecks.find((item) => item.text === text)?.done),
-    })));
+    setPlanItems(collectPlanItems(planEntries, savedChecks));
     const savedExtras = Array.isArray(draft.metadata.extras)
       ? draft.metadata.extras.filter((item): item is { id?: string; text: string; done?: boolean } => Boolean(item) && typeof (item as { text?: unknown }).text === "string")
       : [];
@@ -465,7 +470,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
       done: Boolean(item.done),
     })));
     applied.current = key;
-  }, [draft.entryDate, draft.id, draft.loaded, draft.metadata, planEntry]);
+  }, [draft.entryDate, draft.id, draft.loaded, draft.metadata, planEntries]);
 
   const togglePlan = (id: string) => setPlanItems((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
   const toggleExtra = (id: string) => setExtras((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
@@ -477,7 +482,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
   };
   const save = () => void draft.save({
     metadata: {
-      planEntryId: planEntry?.id ?? null,
+      planEntryIds: planEntries.map((entry) => entry.id),
       checks: planItems.map(({ text, done }) => ({ text, done })),
       extras: extras.map(({ id: extraId, text, done }) => ({ id: extraId, text, done })),
     },
@@ -490,8 +495,8 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
     <section className="content-card review-prompts">
       <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "回看这段路，哪些目标真正完成了？" : "对照今天的计划，收好这一天。"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
       <div className="review-plan-panel">
-        <div className="review-plan-heading"><div><span className="card-kicker">{phase ? "阶段计划承接" : "今日计划承接"}</span><strong>{planLoading ? "正在读取计划…" : planEntry ? `${checkedCount}/${totalCount} 条已完成` : "没有找到对应的计划"}</strong></div>{planEntry ? <span className="review-plan-source">{planEntry.entry_date.slice(0, 10)}</span> : null}</div>
-        {planLoading ? <p className="state-empty">正在读取计划事项…</p> : planItems.length === 0 ? <p className="review-empty">计划中还没有可读取的事项。可以先在规划页用列表写下计划，也可以直接在下面添加。</p> : (
+        <div className="review-plan-heading"><div><span className="card-kicker">{phase ? "阶段计划承接" : "每日计划承接"}</span><strong>{planLoading ? "正在读取计划…" : planEntries.length ? `已读取 ${planEntries.length} 份计划 · ${checkedCount}/${totalCount} 条已完成` : "还没有可读取的计划"}</strong></div>{planEntries.length ? <span className="review-plan-source">{planEntries.length} 份</span> : null}</div>
+        {planLoading ? <p className="state-empty">正在读取计划事项…</p> : planItems.length === 0 ? <p className="review-empty">还没有可读取的计划条目。可以先在规划页写下计划，也可以直接在下面补充。</p> : (
           <div className="review-check-list">
             {planItems.map((item) => <label key={item.id} className={`review-check ${item.done ? "done" : ""}`}>
               <input type="checkbox" checked={item.done} onChange={() => togglePlan(item.id)} />
@@ -519,7 +524,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
     <div className="entry-side-rail">
       <aside className="content-card side-tip"><span className="card-kicker">复盘不是审判</span><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside>
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
-        kicker="历史复盘 · 本地 SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
+        kicker="历史复盘 · SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
         newLabel={phase ? "＋ 新建阶段复盘" : "＋ 新建每日复盘"} />
     </div>
   </div>;

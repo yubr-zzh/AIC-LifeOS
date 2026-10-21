@@ -46,10 +46,18 @@ import {
 import type { FeedbackRating, MemoryScope } from "../api/types";
 import type { DelegationPlan } from "../api/agentTypes";
 
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  size: number;
+  content: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatAttachment[];
   trace_id?: string;
   tool_calls?: ToolCall[];
   tool_results?: ToolResult[];
@@ -150,7 +158,7 @@ const initialState: AppState = {
       id: "system-welcome",
       role: "assistant",
       content:
-        "LifeOS Chat Agent online. Send a message to start a turn — I will retrieve memory, respond, and publish a conversation.completed event for the Global Agent.",
+        "LifeOS 已就绪。发来一条消息，我会结合你的记忆回答，并把值得沉淀的内容交给后台整理。",
       created_at: isoNow(),
     },
   ],
@@ -383,14 +391,15 @@ export function useStore() {
 
   const sendMessage = useCallback(
     async (text: string, memoryScope?: MemoryScope, sessionId?: string,
-      routingPolicy: AgentRoutingPolicy = "auto") => {
+      routingPolicy: AgentRoutingPolicy = "auto", attachments: ChatAttachment[] = []) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed && attachments.length === 0) return;
 
       const userMsg: ChatMessage = {
         id: rid("msg"),
         role: "user",
         content: trimmed,
+        attachments,
         created_at: isoNow(),
       };
       dispatch({ type: "APPEND_MESSAGE", message: userMsg });
@@ -426,7 +435,10 @@ export function useStore() {
 
       let chatRes: ChatResponse;
       try {
-        chatRes = await sendChat(trimmed, undefined, memoryScope, sessionId, routingPolicy);
+        const attachmentContext = attachments.length
+          ? `\n\n附件内容：\n${attachments.map((file) => `--- ${file.name} ---\n${file.content}`).join("\n\n")}`
+          : "";
+        chatRes = await sendChat(`${trimmed}${attachmentContext}`.trim(), undefined, memoryScope, sessionId, routingPolicy);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`chat failed: ${msg}`);

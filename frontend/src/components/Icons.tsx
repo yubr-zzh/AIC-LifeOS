@@ -25,6 +25,9 @@ const wrap = (path: React.ReactNode, viewBox = "0 0 24 24", p: IconProps) => (
   </svg>
 );
 
+export const IconPaperclip = (p: IconProps) =>
+  wrap(<path d="M20.5 11.5l-8.4 8.4a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-2.8-2.8l8.4-8.4" />, "0 0 24 24", p);
+
 export const IconSend = (p: IconProps) =>
   wrap(<path d="M3 11l18-8-8 18-2-8-8-2z" />, "0 0 24 24", p);
 
@@ -75,6 +78,12 @@ export const IconReject = (p: IconProps) =>
     "0 0 24 24",
     p,
   );
+
+export const IconPencil = (p: IconProps) =>
+  wrap(<><path d="M4 20l4.5-1 10.8-10.8a2.1 2.1 0 0 0-3-3L5.5 16 4 20z" /><path d="M14.5 6.5l3 3" /></>, "0 0 24 24", p);
+
+export const IconPanelLeft = (p: IconProps) =>
+  wrap(<><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /><path d="M15.5 9l-3 3 3 3" /></>, "0 0 24 24", p);
 
 export const IconChevron = (p: IconProps) =>
   wrap(<path d="M9 6l6 6-6 6" />, "0 0 24 24", p);

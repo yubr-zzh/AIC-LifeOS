@@ -43,7 +43,7 @@ export function AgentComposer({ disabled, canSend = true, busy, canInterrupt, pl
         disabled={disabled}
       />
       <div className="agc-btns">
-        {!canSend && !disabled ? <span className="agc-hint">先在「本地 Agent」连接一个会话</span> : null}
+        {!canSend && !disabled ? <span className="agc-hint">先在「Agent」连接一个会话</span> : null}
         {canInterrupt ? (
           <button className="btn-ghost" onClick={onInterrupt} disabled={busy === "interrupt"} title="停止当前回合，剩余指令不再下发">
             中断

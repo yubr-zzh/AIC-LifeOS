@@ -26,6 +26,28 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("ChatPanel 对话管理", () => {
+  it("可以给当前对话重命名", async () => {
+    localStorage.setItem("lifeos.chat.history.v1", JSON.stringify([
+      { id: "c-1", title: "原对话", customTitle: true, updatedAt: new Date().toISOString(), messages: [message("m1", "内容")] },
+    ]));
+    vi.spyOn(window, "prompt").mockReturnValue("项目讨论");
+    render(<ChatPanel store={dummyStore()} />);
+    await waitFor(() => expect(screen.getAllByText("原对话").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "重命名对话：原对话" }));
+    expect(screen.getAllByText("项目讨论").length).toBeGreaterThan(0);
+  });
+
+  it("可以选择文本文件并显示在输入框上方", async () => {
+    const { container } = render(<ChatPanel store={dummyStore()} />);
+    const file = new File(["附件内容"], "note.txt", { type: "text/plain" });
+    Object.defineProperty(file, "text", { value: async () => "附件内容" });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByText("note.txt")).toBeTruthy());
+  });
+});
+
 describe("ChatPanel 侧栏收起", () => {
   it("可以隐藏并恢复最近对话侧栏，并记住选择", async () => {
     render(<ChatPanel store={dummyStore()} />);

@@ -12,7 +12,7 @@ vi.mock("./api/client", async (importOriginal) => {
 });
 
 import { listEntries, saveEntry } from "./api/client";
-import { useEntryDraft } from "./App";
+import { collectPlanItems, useEntryDraft } from "./App";
 
 const listMock = vi.mocked(listEntries);
 const saveMock = vi.mocked(saveEntry);
@@ -79,6 +79,15 @@ describe("useEntryDraft", () => {
       text: "保存失败：disk full",
     });
     expect(result.current.saving).toBe(false);
+  });
+
+  it("复盘聚合所有规划记录中的条目", () => {
+    const first = { ...row("p-1", "- 完成报告\n- 整理资料", "daily_plan"), entry_date: "2026-10-20" };
+    const second = { ...row("p-2", "- 回复邮件", "daily_plan"), entry_date: "2026-10-19" };
+    const items = collectPlanItems([first, second], [{ text: "完成报告", done: true }]);
+    expect(items.map((item) => item.text)).toEqual(["完成报告", "整理资料", "回复邮件"]);
+    expect(items[0].done).toBe(true);
+    expect(new Set(items.map((item) => item.id)).size).toBe(3);
   });
 
   it("点击历史记录会载入其内容，历史列表本身不被覆盖", async () => {

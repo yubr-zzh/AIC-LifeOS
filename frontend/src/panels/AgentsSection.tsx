@@ -10,7 +10,7 @@ import {
   zaiZhuoMian,
   type BridgeInfo,
 } from "../api/agentClient";
-import { PERMISSION_MODES, tunnelLabel, type AgentDescriptor, type PermissionMode } from "../api/agentTypes";
+import { PERMISSION_MODES, permissionModeLabel, tunnelLabel, type AgentDescriptor, type PermissionMode } from "../api/agentTypes";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
 import { AgentActivityPanel } from "./AgentActivityPanel";
@@ -141,7 +141,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </span>
         </div>
         <p className="ags-desc">
-          LifeOS 负责规划，Bridge 负责在你选定的目录里执行。指令、审批和结果都留在本机，
+          LifeOS 负责规划，Bridge 在你选定的目录中执行。指令、审批和结果都留在当前设备，
           浏览器拿不到 Bridge 的任何凭据。
         </p>
         {geli !== undefined ? (
@@ -235,7 +235,8 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         <div className="ags-head">
           <div>
             <span className="card-kicker">连接</span>
-            <h2>选一个 Agent 并给它一个目录</h2>
+            <h2>连接本机 Agent</h2>
+            <p className="ags-lead">选择 Agent，指定它工作的文件夹，然后开始对话。</p>
           </div>
         </div>
         <div className="ags-form">
@@ -261,7 +262,6 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
             <span>工作目录</span>
             <div className="ags-cwd-row">
               <input
-                list="ags-dirs"
                 value={cwd}
                 placeholder="D:/Github本地/AIC-LifeOS"
                 onChange={(e) => {
@@ -279,13 +279,8 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
                 浏览…
               </button>
             </div>
-            <datalist id="ags-dirs">
-              {(state.catalog?.suggestedDirs ?? []).map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
             <small>
-              点「浏览…」弹本机目录选择窗，也可以手动输入。目录须落在信任根内；信任根外的先出黄字，确认后放行。
+              用「浏览…」选择文件夹，或直接输入路径。不在信任范围内的目录需要先确认。
             </small>
             {weiXin ? (
               <p className="ags-note warn">
@@ -302,7 +297,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
             <select value={mode} onChange={(e) => setMode(e.target.value as PermissionMode)}>
               {modeOptions.map((m) => (
                 <option key={m.value} value={m.value} title={m.hint}>
-                  {m.label}
+                  {permissionModeLabel(agentId, m.value)}
                 </option>
               ))}
             </select>
@@ -378,7 +373,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
                 ? PERMISSION_MODES.filter((m) => agents.find((a) => a.agentId === active.agentId)?.moshi?.includes(m.value))
                 : PERMISSION_MODES).map((m) => (
                 <option key={m.value} value={m.value}>
-                  {m.label}
+                  {permissionModeLabel(active.agentId, m.value)}
                 </option>
               ))}
             </select>
