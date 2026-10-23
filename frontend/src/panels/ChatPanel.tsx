@@ -324,14 +324,12 @@ export function ChatPanel({ store, agent, api }: Props) {
 
         <div ref={scroller} className="chat-messages scroll" aria-live="polite">
           {showWelcome ? (
-            <div className="chat-welcome">
-              <div className="chat-welcome-mark"><IconMessage size={22} /></div>
-              <span className="chat-eyebrow">LifeOS · 你的第二大脑</span>
-              <h2>今天想从哪里开始？</h2>
-              <p>聊聊正在思考的事，或把一个想法变成可以行动的下一步。</p>
+            <div className="chat-intro">
+              <div className="chat-intro-mark"><IconMessage size={16} /></div>
+              <p className="chat-intro-line">从这里开始。把正在想的事说给我，或者从一个具体的下一步开始。</p>
               <div className="chat-prompts">
                 {["帮我梳理今天最重要的事", "基于我的项目记忆继续推进", "把一个想法拆成行动步骤"].map((prompt) => (
-                  <button key={prompt} onClick={() => { setText(prompt); }} disabled={state.loading.chat}>{prompt}<span>→</span></button>
+                  <button key={prompt} onClick={() => setText(prompt)} disabled={state.loading.chat}>{prompt}</button>
                 ))}
               </div>
             </div>

@@ -78,10 +78,6 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     items: [{ id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" }],
   },
   {
-    group: "系统",
-    items: [],
-  },
-  {
     group: "记录",
     items: [{ id: "calendar", label: "工作历", icon: "calendar", hint: "回看每日记录" }],
   },
@@ -188,6 +184,11 @@ export default function App() {
           <div className="side-footer-line"><span className="status-orb" />系统运行良好</div>
           <div className="side-footer-sub">本地工作区 · 数据已同步</div>
         </div>
+        <div className="dev-footer">
+          <button className="dev-footer-link" onClick={() => select("memory")} title="Memory 候选 / 生命周期 / 撤回 / 画像">
+            <IconSpark size={11} /> Memory
+          </button>
+        </div>
       </aside>
 
       <div className="content-shell">
@@ -242,28 +243,21 @@ function SectionContent({
   onDarkChange: (dark: boolean) => void;
 }) {
   if (active === "chat") {
-    // 对话保持内容优先；运行指标留在系统后台，执行面板按需展开。
+    // 对话整页：直接占满主区，不再套 content-card（Impeccable 黑名单：卡片当容器）。
+    // Agent 侧栏按需展开，只有用户主动打开时才出现，不参与默认布局。
     const zuo = (
-      <div className="chat-page-grid">
-        <section className="content-card chat-card">
-          <ChatPanel store={store} agent={agent} api={api} />
-        </section>
+      <div className="chat-host">
+        <ChatPanel store={store} agent={agent} api={api} />
       </div>
     );
+    if (agent.state.layout !== "split") return zuo;
     return (
-      <>
-        <AgentPeekBar store={agent} api={api} onOpen={() => agent.setLayout("split")} />
-        {agent.state.layout === "split" ? (
-          <div className="chat-split-grid">
-            {zuo}
-            <AgentPanel store={agent} api={api}
-              onCandidateCreated={() => void store.refreshAll()}
-              onCollapse={() => agent.setLayout("collapsed")} />
-          </div>
-        ) : (
-          zuo
-        )}
-      </>
+      <div className="chat-split-grid">
+        {zuo}
+        <AgentPanel store={agent} api={api}
+          onCandidateCreated={() => void store.refreshAll()}
+          onCollapse={() => agent.setLayout("collapsed")} />
+      </div>
     );
   }
   if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
