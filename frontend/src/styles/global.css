@@ -746,6 +746,29 @@ body:has(.chat-host) { overflow: hidden; height: 100dvh; }
 
 /* Conversation: calm, content-first workspace; diagnostics stay in System. */
 .page-intro-chat { display: none; }
+/* Page intro: one functional title + one line of context. No eyebrow, no date block —
+   面包屑和日期只在顶栏出现一次（craft-floor：每节标题前不加小标签）。 */
+.page-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 24px;
+}
+.page-intro h1 {
+  margin: 0;
+  color: #1a3a25;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+}
+.page-intro p {
+  max-width: 64ch;
+  margin: 0;
+  color: #5c7763;
+  font-size: 13px;
+  line-height: 1.65;
+}
 
 /* ── Side-nav collapse toggle (主导航收起) ── */
 .lifeos-shell { transition: padding 200ms ease; }
@@ -1566,7 +1589,7 @@ button.activity-day { cursor: pointer; }
 .admin-grid > .panel .panel-header { background: #f1f8ef; border-color: #e1ecdf; }
 .theme-night .admin-banner, .theme-night .admin-flow > .panel, .theme-night .admin-grid > .panel { background: #25372a; border-color: #38563d; }
 @media (max-width: 1080px) { .workspace-main { width: min(100% - 48px, 900px); } .secondary-panels { grid-template-columns: 1fr 1fr; } .secondary-panels > :last-child { display: none; } }
-@media (max-width: 760px) { .lifeos-shell { display: block; } .side-nav { width: 100%; min-height: auto; padding: 15px 14px 10px; border-right: 0; border-bottom: 1px solid #cfe2cf; } .brand-block { padding: 0 6px 15px; } .main-nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; } .main-nav::-webkit-scrollbar { display: none; } .nav-group { display: contents; } .nav-group-title, .nav-item .nav-dot, .side-footer { display: none; } .nav-item { width: auto; min-height: 44px; flex: 0 0 auto; padding: 9px 12px; } .nav-item .nav-icon { display: inline-flex; } .workspace-header { height: 62px; padding: 0 18px; } .sync-label, .avatar { display: none; } .settings-popover { right: 18px; } .workspace-main { width: calc(100% - 28px); padding: 30px 0 40px; } .page-intro { align-items: flex-start; } .intro-date { display: none; } .home-grid, .planning-layout, .review-layout, .feedback-layout, .diary-layout, .insight-layout { grid-template-columns: 1fr; } .secondary-panels { grid-template-columns: 1fr; } .secondary-panels > :last-child { display: flex; } .side-tip, .review-aside, .diary-aside, .insight-aside { min-height: 180px; } .side-tip h3, .review-aside h3, .diary-aside h3, .insight-aside h3 { margin-top: 45px; } .admin-grid { grid-template-columns: 1fr; grid-template-rows: none; } .admin-grid > .panel { min-height: 250px; } .admin-banner { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .lifeos-shell { display: block; } .side-nav { width: 100%; min-height: auto; padding: 15px 14px 10px; border-right: 0; border-bottom: 1px solid #cfe2cf; } .brand-block { padding: 0 6px 15px; } .main-nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; } .main-nav::-webkit-scrollbar { display: none; } .nav-group { display: contents; } .nav-group-title, .nav-item .nav-dot, .side-footer { display: none; } .nav-item { width: auto; min-height: 44px; flex: 0 0 auto; padding: 9px 12px; } .nav-item .nav-icon { display: inline-flex; } .workspace-header { height: 62px; padding: 0 18px; } .sync-label, .avatar { display: none; } .settings-popover { right: 18px; } .workspace-main { width: calc(100% - 28px); padding: 30px 0 40px; } .page-intro { align-items: flex-start; } .home-grid, .planning-layout, .review-layout, .feedback-layout, .diary-layout, .insight-layout { grid-template-columns: 1fr; } .secondary-panels { grid-template-columns: 1fr; } .secondary-panels > :last-child { display: flex; } .side-tip, .review-aside, .diary-aside, .insight-aside { min-height: 180px; } .side-tip h3, .review-aside h3, .diary-aside h3, .insight-aside h3 { margin-top: 45px; } .admin-grid { grid-template-columns: 1fr; grid-template-rows: none; } .admin-grid > .panel { min-height: 250px; } .admin-banner { align-items: flex-start; flex-direction: column; } }
 
 @media (max-width: 760px) {
   body { font-size: 16px; }

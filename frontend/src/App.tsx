@@ -84,19 +84,19 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
 ];
 
 const sectionMeta = {
-  calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
-  home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
-  "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
-  "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
-  "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
-  "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
-  chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
-  agents: { eyebrow: "连接 · 本地 Agent", title: "把执行交给你机器上的 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
-  feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
-  diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
-  insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
-  memory: { eyebrow: "开发 · 记忆", title: "候选审核与生命周期", description: "候选、生命周期、纠正 / 撤回、画像重建、Markdown 镜像。" },
-} as Record<SectionId, { eyebrow: string; title: string; description: string }>;
+  calendar: { crumb: "记录", title: "工作历", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
+  home: { crumb: "工作台", title: "今日概览", description: "把计划变成行动，把行动留下痕迹。" },
+  "daily-plan": { crumb: "计划", title: "每日规划", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
+  "daily-review": { crumb: "复盘", title: "每日复盘", description: "记录发生过什么，也看见自己做得好的地方。" },
+  "phase-plan": { crumb: "计划", title: "阶段性规划", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
+  "phase-review": { crumb: "复盘", title: "阶段性复盘", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
+  chat: { crumb: "工作台", title: "对话", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
+  agents: { crumb: "工作台", title: "本地 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
+  feedback: { crumb: "反馈", title: "反馈", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
+  diary: { crumb: "记录", title: "日记", description: "不必写得完整，想到什么就从哪里开始。" },
+  insight: { crumb: "记录", title: "心得 / 体验", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
+  memory: { crumb: "开发", title: "记忆候选", description: "候选、生命周期、纠正 / 撤回、画像重建、Markdown 镜像。" },
+} as Record<SectionId, { crumb: string; title: string; description: string }>;
 
 function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "home") return <IconHome size={17} />;
@@ -107,7 +107,7 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   return <IconSpark size={17} />;
 }
 
-sectionMeta.settings = { eyebrow: "系统 · 设置", title: "让 LifeOS 按你的方式工作", description: "管理模型 Provider、API 连接和工作区外观。" };
+sectionMeta.settings = { crumb: "系统", title: "设置", description: "管理模型 Provider、API 连接和工作区外观。" };
 
 export default function App() {
   const store = useStore();
@@ -122,9 +122,6 @@ export default function App() {
   const [dark, setDark] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const meta = sectionMeta[active];
-  const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
-  const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
-  const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
 
   // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左栏。
   // agentStore 不能反向 import 主 store，所以由同时持有两者的这一层搭桥。
@@ -193,7 +190,7 @@ export default function App() {
 
       <div className="content-shell">
         <header className="workspace-header">
-          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.eyebrow.split(" · ")[0]}</strong></div>
+          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.crumb}</strong></div>
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
             <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
@@ -211,12 +208,8 @@ export default function App() {
 
         <main id="main-content" className="workspace-main">
           <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
-            <div>
-              <div className="page-eyebrow">{meta.eyebrow}</div>
-              <h1>{meta.title}</h1>
-              <p>{meta.description}</p>
-            </div>
-            <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
+            <h1>{meta.title}</h1>
+            <p>{meta.description}</p>
           </div>
           <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} dark={dark} onDarkChange={setDark} />
         </main>
