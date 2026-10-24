@@ -48,6 +48,40 @@ describe("ChatPanel 对话管理", () => {
   });
 });
 
+describe("ChatPanel 对话内容精简", () => {
+  it("不显示路由说明、回答类型、feedback 行和历史位置提示，复制按钮位于消息底部", async () => {
+    const assistant = {
+      id: "a-1",
+      role: "assistant" as const,
+      content: "这是一条回答",
+      created_at: new Date().toISOString(),
+      trace_id: "trace-1",
+      execution: "succeeded" as const,
+      decision: "self_plan" as const,
+      decision_reason: "你选择了自规划模式。",
+      agent_enabled: false,
+      plan_steps: [{ id: 1, title: "读取相关资源", detail: "限于当前工作区" }],
+
+    };
+    const store = dummyStore();
+    store.state.messages = [assistant];
+    localStorage.setItem("lifeos.chat.history.v1", JSON.stringify([
+      { id: "c-1", title: "回答测试", customTitle: true, updatedAt: new Date().toISOString(), messages: [assistant] },
+    ]));
+
+    const { container } = render(<ChatPanel store={store} />);
+    await screen.findByText("这是一条回答");
+
+    expect(screen.queryByText("为什么这样处理")).toBeNull();
+    expect(screen.queryByText("文本回答")).toBeNull();
+    expect(screen.queryByText("feedback")).toBeNull();
+    expect(screen.queryByText("历史仅保存在此浏览器")).toBeNull();
+    expect(container.querySelector(".context-dot")).toBeNull();
+    const copy = screen.getByRole("button", { name: "复制" });
+    expect(copy.parentElement?.className).toContain("assistant-message-foot");
+  });
+});
+
 describe("ChatPanel 侧栏收起", () => {
   it("可以隐藏并恢复最近对话侧栏，并记住选择", async () => {
     render(<ChatPanel store={dummyStore()} />);

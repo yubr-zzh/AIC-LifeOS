@@ -50,4 +50,4 @@ if ($claudeSrc -and (Test-Path $claudeSrc)) {
 }
 
 Write-Host "== 4/4 完成：dist\LifeOS\LifeOS.exe ==" -ForegroundColor Green
-Write-Host "数据目录：%LOCALAPPDATA%\LifeOS（首次启动自动创建）"
+Write-Host "数据目录：%USERPROFILE%\lifeOS（首次启动自动创建）"

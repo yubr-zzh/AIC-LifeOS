@@ -1,4 +1,4 @@
-# LifeOS 桌面版（软件 v2.0.7）
+# LifeOS 桌面版（软件 v2.0.8）
 
 LifeOS 是一个本地优先的个人智能体操作系统：前台 Chat Agent 与后台 Global Agent 协作，配合可靠事件总线、两阶段记忆写入、反思引擎与技能进化。软件 v2.0 以 **Windows 桌面应用**形态交付——pywebview（WebView2）壳 + 内嵌后端 + 本地 Agent bridge，双击即用，数据全部留在本机。
 
@@ -29,7 +29,7 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 
 ## 快速使用
 
-- **安装器**：运行 `LifeOS-Setup-x.x.exe`（Inno Setup 产物），装后从开始菜单/桌面启动；用户数据在 `%LOCALAPPDATA%\.lifeOS`（v1.x 旧目录 `LifeOS` 首启自动改名迁移，数据不丢），卸载时可选保留。
+- **安装器**：运行 `LifeOS-Setup-x.x.exe`（Inno Setup 产物），装后从开始菜单/桌面启动；用户数据在 `%USERPROFILE%\lifeOS`（首次启动会把 AppData 下的 `.lifeOS` / `LifeOS` 旧数据复制迁移，旧目录保留为备份），卸载时可选保留。
 - **免安装**：直接运行 `dist\LifeOS\LifeOS.exe`。
 
 ## 从源码构建
@@ -61,12 +61,12 @@ powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.7.exe`（安装器）。
+产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.8.exe`（安装器）。
 
 ## 开发调试
 
 ```powershell
-# 后端（LIFEOS_HOME 指定数据根，默认 .lifeos/）
+# 后端（LIFEOS_HOME 指定数据根，默认 ./lifeOS/）
 .venv\Scripts\python -m lifeos.api.server
 
 # 前端热更（5173，vite 代理 /api 到后端）
@@ -117,6 +117,6 @@ docs/               # 架构与 API 文档
 
 ## 注意事项
 
-- 运行时数据（用户信息与记忆）统一写入数据根 `.lifeOS`：开发态在仓库内 `./.lifeOS/`，打包态在 `%LOCALAPPDATA%\.lifeOS`；目录在软件第一次初始化时创建，均已忽略/不随安装目录。
+- 运行时数据（用户信息与记忆）统一写入用户工作目录下的 `./lifeOS/`：安装版使用 `%USERPROFILE%\lifeOS`，开发态使用当前工作目录下的 `lifeOS/`；首次启动会从 AppData 旧目录复制迁移，旧目录保留为备份。
 - 打包若未捆绑 claude.exe，运行时从 PATH 探测；npm 安装的 `.cmd` 垫片会被 SDK 拒绝，务必用原生 exe。
 - 主服务默认 8765，被占时向上探测至 8790；测试残留的 bridge 进程可能占住 8766-8770，可结束 `python -m lifeos.bridge.run` 进程清理。

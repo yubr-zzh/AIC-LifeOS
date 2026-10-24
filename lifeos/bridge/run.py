@@ -31,16 +31,23 @@ from lifeos.bridge.session import HuiHua
 DK = 8766  # 起始端口
 DK_CI = 8770  # 结束端口
 
-SHI_JU = ".lifeos"
+SHI_JU = "lifeOS"
 WEN_JIA = "bridge/runtime.json"
 
 
 def shu_ju_gen(a1: Path) -> Path:
-    """Bridge 的数据根（方案 4.2.3）。LIFEOS_HOME 的值**本身就是根**
-    （桌面壳传 `%LOCALAPPDATA%\\.lifeOS`），不再往下拼子目录；
-    缺省回落 `<root>/.lifeOS`，与开发形态一致。"""
+    """Bridge 的数据根。
+
+    `LIFEOS_HOME` 本身就是根（桌面壳传用户工作目录下的 `lifeOS`）。
+    未显式指定时优先 `<root>/lifeOS`；若只有旧版 `<root>/.lifeos`，继续
+    读取旧目录以保持开发与历史数据兼容。
+    """
     home = os.environ.get("LIFEOS_HOME")
-    return Path(home) if home else a1 / SHI_JU
+    if home:
+        return Path(home)
+    xin = a1 / SHI_JU
+    jiu = a1 / ".lifeos"
+    return jiu if jiu.exists() and not xin.exists() else xin
 
 
 def cun_zhen(a1: int) -> bool:
@@ -487,7 +494,7 @@ def _ban_ben(a1: str) -> str | None:
 
 def main(a0: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lifeos.bridge.run")
-    parser.add_argument("--root", default=".", help="项目根目录，用于定位 .lifeos")
+    parser.add_argument("--root", default=".", help="项目根目录，用于定位 lifeOS")
     parser.add_argument("--port", type=int, default=DK)
     args = parser.parse_args(a0)
 

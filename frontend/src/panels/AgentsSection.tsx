@@ -271,8 +271,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
               />
               <button
                 type="button"
-                className="btn-ghost sm"
-                disabled={busy}
+                className="ags-browse-button btn-ghost sm"
                 title="弹本机目录选择窗"
                 onClick={liulan}
               >
@@ -316,9 +315,9 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </label>
         ) : null}
 
-        <label className="ags-toggle">
+        <label className="ags-toggle" title="开启委派：命中任务关键词时，LifeOS 会给出可勾选的委派计划">
           <input type="checkbox" checked={cai} onChange={(e) => setCai(e.target.checked)} />
-          <span>开启委派：命中任务关键词时，LifeOS 会给出可勾选的委派计划</span>
+          <span>开启委派：命中任务时生成委派计划</span>
         </label>
 
         {tip ? <p className="ags-note err">{tip}</p> : null}

@@ -1,15 +1,13 @@
-"""数据根目录的唯一解析入口（方案 4.2.3「.lifeos 根显式化」）。
+"""数据根目录的唯一解析入口。
 
-打包态主进程 CWD 不可控（可能是 Program Files 或任意目录），继续用
-相对 CWD 的 `.lifeos` 会把数据写进安装目录——普通用户无写权限，直接翻车。
-所以全仓的根解析收口到这里：
+用户数据默认落在工作目录下的 `./lifeOS`。桌面壳会把工作目录固定为用户
+工作目录，并通过 `LIFEOS_HOME` 传入完整根路径；开发和测试形态则直接
+回落到当前工作目录。
 
-1. `LIFEOS_HOME` 环境变量优先（桌面壳启动时指向 `%LOCALAPPDATA%\\.lifeOS`，
-   双栈并存时也可各自指一个根）；
-2. 缺省回落 `./.lifeOS`（开发形态；Windows 大小写不敏感，与历史 `.lifeos`
-   同一目录，行为不变）。
+1. `LIFEOS_HOME` 环境变量优先（桌面壳与测试的显式根）；
+2. 缺省回落 `./lifeOS`。
 
-**新代码一律 import 这里，不许再写死 `.lifeos` 字面量**；旧代码里带参数
+**新代码一律 import 这里，不许再写死旧数据目录名**；旧代码里带参数
 默认值的（memory/sqlite/skills 等）在打包装配点显式传参，不在各默认值处
 分叉第二套解析。
 """
@@ -25,7 +23,9 @@ def gen_mulu() -> Path:
     home = os.environ.get("LIFEOS_HOME")
     if home:
         return Path(home)
-    return Path(".") / ".lifeOS"
+    xin = Path(".") / "lifeOS"
+    jiu = Path(".") / ".lifeOS"
+    return jiu if jiu.exists() and not xin.exists() else xin
 
 
 def qiao_gen(a1: str | Path | None = None) -> Path:

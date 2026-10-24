@@ -64,6 +64,14 @@ describe("AgentsSection 页面结构", () => {
     setup();
     expect(await screen.findByText(/最近 20 条/)).toBeTruthy();
   });
+
+  it("浏览按钮默认可用，委派提示压缩为单行", async () => {
+    setup();
+    const browse = await screen.findByRole("button", { name: "浏览…" });
+    expect((browse as HTMLButtonElement).disabled).toBe(false);
+    expect(browse.className).toContain("ags-browse-button");
+    expect(screen.getByText("开启委派：命中任务时生成委派计划")).toBeTruthy();
+  });
 });
 
 describe("AgentsSection 的凭据目录告警", () => {

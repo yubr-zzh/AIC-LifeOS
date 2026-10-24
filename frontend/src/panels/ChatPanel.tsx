@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChatAttachment, ChatMessage, Store } from "../state/store";
-import { FEEDBACK_RATINGS } from "../api/types";
-import type { AgentRoutingPolicy, FeedbackRating, MemoryScope } from "../api/types";
+import type { AgentRoutingPolicy, MemoryScope } from "../api/types";
 import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
 import { IconSend, IconCopy, IconMessage, IconPaperclip, IconPencil, IconPanelLeft } from "../components/Icons";
@@ -316,7 +315,6 @@ export function ChatPanel({ store, agent, api }: Props) {
           ))}
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
-        <div className="chat-history-foot">历史仅保存在此浏览器</div>
       </aside> : null}
 
       <section className="chat-conversation" aria-label="当前对话">
@@ -338,7 +336,6 @@ export function ChatPanel({ store, agent, api }: Props) {
             <div className="chat-context-wrap">
             <button className={`chat-context ${scopeKind !== "global" ? "selected" : ""}`}
               onClick={() => setContextOpen((open) => !open)} aria-expanded={contextOpen}>
-              <span className="context-dot" />
               {scopeKind === "project" ? (projectId.trim() || "选择项目") : scopeKind === "scenario" ? ({ learning: "学习型", project: "项目型", document: "文档型", information_execution: "信息型执行", external_operation: "外部操作型" }[scenarioType] ?? scenarioType) : "全局记忆"}
               <span aria-hidden="true">⌄</span>
             </button>
@@ -415,8 +412,8 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           {msg.attachments.map((file) => <span key={file.id}><IconPaperclip size={11} /> {file.name} <small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>)}
         </div> : null}
         <div className="chat-message-foot">
-          <CopyTextButton text={[msg.content, ...(msg.attachments ?? []).map((file) => `[附件] ${file.name}\n${file.content}`)].filter(Boolean).join("\n\n")} />
           <span className="chat-message-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+          <CopyTextButton text={[msg.content, ...(msg.attachments ?? []).map((file) => `[附件] ${file.name}\n${file.content}`)].filter(Boolean).join("\n\n")} />
         </div>
       </div>
     );
@@ -431,24 +428,7 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           <strong>LifeOS</strong>
           {pending ? <span className="chat-thinking"><span className="dot" />正在思考</span> : null}
           {errored ? <span className="chat-error">暂时遇到问题</span> : null}
-          {!pending && msg.decision ? (
-            <span className={`chat-route-badge ${msg.agent_enabled ? "agent" : "self"}`}>
-              {msg.agent_enabled ? "执行型 Agent 路径" : "文本回答"}
-            </span>
-          ) : null}
-          {!pending && msg.content ? <CopyTextButton text={msg.content} className="assistant-copy" /> : null}
         </div>
-        {msg.decision_reason ? (
-          <details className="chat-route-details">
-            <summary>为什么这样处理</summary>
-            <p>{msg.decision_reason}</p>
-          </details>
-        ) : null}
-        {msg.plan_steps?.length ? (
-          <ol className="chat-plan-steps">
-            {msg.plan_steps.map((step) => <li key={step.id}><strong>{step.title}</strong>{step.detail ? <span>{step.detail}</span> : null}</li>)}
-          </ol>
-        ) : null}
         <div className={`assistant-content ${errored ? "has-error" : ""}`}>
           {pending ? <span className="muted">正在整理思路…</span> : msg.content || <span className="muted">没有生成文字回复</span>}
         </div>
@@ -475,10 +455,12 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           <DelegationCardBox msg={msg} plan={msg.delegation} agent={agent} api={api} store={store} />
         ) : null}
         {msg.trace_id && msg.execution === "succeeded" ? (
-          <>
-            <FeedbackRow msg={msg} store={store} />
-            <ConversationMemoryCapture msg={msg} store={store} />
-          </>
+          <ConversationMemoryCapture msg={msg} store={store} />
+        ) : null}
+        {!pending && msg.content ? (
+          <div className="assistant-message-foot">
+            <CopyTextButton text={msg.content} />
+          </div>
         ) : null}
       </div>
     </div>
@@ -596,44 +578,6 @@ function DelegationCardBox({
       onSend={(zhi) => void fa(zhi)}
       onOpenPanel={() => agent.setLayout("split")}
     />
-  );
-}
-
-function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
-  const { submitRating } = store;
-  const sending = msg.feedbackSending;
-  return (
-    <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
-      <span className="mono dim" style={{ fontSize: 10, marginRight: 2 }}>
-        feedback
-      </span>
-      {FEEDBACK_RATINGS.map((r) => {
-        const active = msg.feedback === r.value;
-        return (
-          <button
-            key={r.value}
-            onClick={() => void submitRating(msg.id, r.value)}
-            disabled={sending || msg.execution === "pending"}
-            title={r.hint}
-            className={active ? "primary" : "ghost"}
-            style={{
-              borderRadius: "var(--r-pill)",
-              padding: "2px 10px",
-              fontSize: 11,
-              opacity: sending ? 0.5 : 1,
-            }}
-          >
-            {active ? "✓ " : ""}
-            {r.label}
-          </button>
-        );
-      })}
-      {msg.feedback ? (
-        <span className="mono dim" style={{ fontSize: 10 }}>
-          rated
-        </span>
-      ) : null}
-    </div>
   );
 }
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import shutil
 import socket
 import sys
 import threading
@@ -177,32 +178,65 @@ class ZhuoMianApi:
         return {"ok": True}
 
 
-JIU_GEN_MING = "LifeOS"   # v1.0 的旧数据根名，首启整体迁移到 .lifeOS
+XIN_GEN_MING = "lifeOS"    # 用户工作目录下的数据根
+JIU_GEN_MING = "LifeOS"    # v1.0 的旧数据根名
+JIU_GEN_YIN_CANG = ".lifeOS"  # v2.0.7 及更早版本的 AppData 数据根
+
+
+def _gong_zuo_gen() -> Path:
+    """返回用户工作目录；打包态避开 Program Files 等只读目录。"""
+    gong = Path.cwd()
+    if not getattr(sys, "frozen", False):
+        return gong
+    bao_hu = [
+        Path(os.environ.get("ProgramFiles") or r"C:\Program Files"),
+        Path(os.environ.get("ProgramFiles(x86)") or r"C:\Program Files (x86)"),
+        Path(os.environ.get("WINDIR") or r"C:\Windows"),
+    ]
+    try:
+        if any(gong == root or root in gong.parents for root in bao_hu):
+            return Path.home()
+        probe = gong / f".lifeos-write-test-{os.getpid()}"
+        probe.mkdir()
+        probe.rmdir()
+        return gong
+    except OSError:
+        return Path.home()
 
 
 def _shu_ju_gen() -> Path:
-    """数据根。main() 之外也要用（日志重定向先于 main 跑），单独抽出来。"""
+    """数据根。默认是用户工作目录下的 `./lifeOS`，可用 LIFEOS_HOME 覆盖。"""
     if not os.environ.get("LIFEOS_HOME"):
-        gen = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".lifeOS"
+        gen = _gong_zuo_gen() / XIN_GEN_MING
         _qian_yi_jiu_gen(gen)
         os.environ["LIFEOS_HOME"] = str(gen)
     return Path(os.environ["LIFEOS_HOME"])
 
 
 def _qian_yi_jiu_gen(xin: Path) -> None:
-    """v1.0 数据根 `%LOCALAPPDATA%\\LifeOS` → `%LOCALAPPDATA%\\.lifeOS`。
+    r"""把旧 AppData 数据复制到用户工作目录下的 `lifeOS`。
 
-    新根不存在且旧根存在时整目录改名——原子操作，账户、记忆、bridge
-    信任根一个字节不动。LIFEOS_HOME 已显式指定（双栈并存）则不动。
-    改名失败不阻断启动：数据留在旧根，下次启动再试。
+    旧目录 `%LOCALAPPDATA%\.lifeOS`（v2.0.7）与 `%LOCALAPPDATA%\LifeOS`
+    （v1.0）都兼容。先复制到同盘临时目录，完成后再原子改名，避免中断后
+    留下半个新数据根。旧目录保留为备份，不再参与运行。
     """
     if xin.exists():
         return
-    jiu = xin.parent / JIU_GEN_MING
-    if jiu.is_dir():
+    local = Path(os.environ.get("LOCALAPPDATA") or Path.home())
+    for jiu in (local / JIU_GEN_YIN_CANG, local / JIU_GEN_MING):
+        if not jiu.is_dir():
+            continue
+        tmp = xin.with_name(f"{xin.name}.migrating-{os.getpid()}")
         try:
-            os.rename(jiu, xin)
+            if tmp.exists():
+                shutil.rmtree(tmp)
+            shutil.copytree(jiu, tmp)
+            (tmp / ".migrated-from.txt").write_text(
+                f"Migrated from {jiu}\n", encoding="utf-8")
+            os.replace(tmp, xin)
+            return
         except OSError:
+            shutil.rmtree(tmp, ignore_errors=True)
             print(f"[lifeos] 数据目录迁移失败：{jiu} → {xin}", file=sys.stderr)
 
 
@@ -248,9 +282,9 @@ def main() -> int:
     if "--lifeos-bridge" in sys.argv[1:]:
         return _pao_bridge_gong()
     _dan_shi_li()
-    # 数据根：桌面态默认 %LOCALAPPDATA%\.lifeOS（方案 4.2.3）。必须在
-    # import server 之前定死——server 模块导入时就要解析存储根。
-    # 首次初始化在这里就建好 .lifeOS，后续所有用户信息与记忆都落在其中。
+    # 数据根：用户工作目录下的 ./lifeOS（默认取快捷方式工作目录，
+    # 双击 exe 时回退到用户主目录），也可用 LIFEOS_HOME 显式覆盖。
+    # 必须在 import server 之前定死——server 模块导入时就要解析存储根。
     gen = _shu_ju_gen()
     gen.mkdir(parents=True, exist_ok=True)
     # 端口：主服务 8765 起向上探测（方案 5.2 的「8765 被占最 low 翻车」预防）；

@@ -286,45 +286,57 @@ class JiZhuMiMaTest(unittest.TestCase):
 
 
 class ShuJuGenQianYiTest(unittest.TestCase):
-    """数据根统一为 .lifeOS：v1.0 旧根 %LOCALAPPDATA%\\LifeOS 首启整目录改名，
-    用户信息与记忆一个字节不丢。"""
+    """数据根迁移到用户工作目录下的 lifeOS，旧 AppData 数据不丢失。"""
 
-    def test_jiu_gen_geng_ming_qian_yi(self):
+    def test_mo_ren_qian_yi_dao_gong_zuo_mu_lu(self):
         with tempfile.TemporaryDirectory() as tmp:
-            jiu = Path(tmp) / "LifeOS"
-            jiu.mkdir()
-            (jiu / "accounts.json").write_text("{}", encoding="utf-8")
-            # LIFEOS_HOME 置空串视为未设，patch.dict 收尾会还原真实环境
-            with mock.patch.dict(os.environ,
-                                 {"LOCALAPPDATA": tmp, "LIFEOS_HOME": ""}):
+            root = Path(tmp)
+            gong = root / "gongzuo"
+            gong.mkdir()
+            appdata = root / "AppData"
+            old = appdata / ".lifeOS"
+            old.mkdir(parents=True)
+            (old / "accounts.json").write_text("{}", encoding="utf-8")
+            with mock.patch("lifeos.desktop.main._gong_zuo_gen", return_value=gong), \
+                 mock.patch.dict(os.environ,
+                                 {"LOCALAPPDATA": str(appdata), "LIFEOS_HOME": ""}):
                 gen = _shu_ju_gen()
-            self.assertEqual(gen, Path(tmp) / ".lifeOS")
+            self.assertEqual(gen, gong / "lifeOS")
             self.assertTrue((gen / "accounts.json").is_file())
-            self.assertFalse(jiu.exists())
+            self.assertIn(str(old), (gen / ".migrated-from.txt").read_text(encoding="utf-8"))
+            self.assertTrue((old / "accounts.json").is_file())
 
     def test_xin_gen_yi_cun_zai_bu_dong_jiu_gen(self):
         with tempfile.TemporaryDirectory() as tmp:
-            xin = Path(tmp) / ".lifeOS"
+            root = Path(tmp)
+            gong = root / "gongzuo"
+            gong.mkdir()
+            appdata = root / "AppData"
+            xin = gong / "lifeOS"
             xin.mkdir()
-            jiu = Path(tmp) / "LifeOS"
-            jiu.mkdir()
-            (jiu / "old.txt").write_text("x", encoding="utf-8")
-            with mock.patch.dict(os.environ,
-                                 {"LOCALAPPDATA": tmp, "LIFEOS_HOME": ""}):
+            (xin / "new.txt").write_text("new", encoding="utf-8")
+            old = appdata / ".lifeOS"
+            old.mkdir(parents=True)
+            (old / "old.txt").write_text("old", encoding="utf-8")
+            with mock.patch("lifeos.desktop.main._gong_zuo_gen", return_value=gong), \
+                 mock.patch.dict(os.environ,
+                                 {"LOCALAPPDATA": str(appdata), "LIFEOS_HOME": ""}):
                 gen = _shu_ju_gen()
             self.assertEqual(gen, xin)
-            self.assertTrue((jiu / "old.txt").is_file())
+            self.assertTrue((xin / "new.txt").is_file())
             self.assertFalse((xin / "old.txt").exists())
+            self.assertTrue((old / "old.txt").is_file())
 
     def test_xian_shi_zhi_ding_huan_jing_bu_qian_yi(self):
         with tempfile.TemporaryDirectory() as tmp:
-            ding = Path(tmp) / "zidingyi"
-            jiu = Path(tmp) / "LifeOS"
-            jiu.mkdir()
+            root = Path(tmp)
+            ding = root / "zidingyi"
+            old = root / "AppData" / ".lifeOS"
+            old.mkdir(parents=True)
             with mock.patch.dict(os.environ, {"LIFEOS_HOME": str(ding)}):
                 gen = _shu_ju_gen()
             self.assertEqual(gen, ding)
-            self.assertTrue(jiu.is_dir())
+            self.assertTrue(old.is_dir())
 
 
 if __name__ == "__main__":

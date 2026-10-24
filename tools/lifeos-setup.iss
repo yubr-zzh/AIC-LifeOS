@@ -1,12 +1,12 @@
 ; LifeOS 安装器（方案 4.1 阶段四）。Inno Setup 6 编译：
 ;   ISCC.exe tools\lifeos-setup.iss
 ; 前置：tools\build_exe.ps1 已跑完（dist\LifeOS\ 存在）。
-; 数据目录 %LOCALAPPDATA%\.lifeOS 含用户记忆数据，卸载时询问、默认保留。
+; 数据目录 %USERPROFILE%\lifeOS 含用户记忆数据，卸载时询问、默认保留。
 
 #define MyAppName "LifeOS"
-#define MyAppVersion "2.0.7"
+#define MyAppVersion "2.0.8"
 #define MyAppExeName "LifeOS.exe"
-#define MyAppDataName ".lifeOS"
+#define MyAppDataName "lifeOS"
 
 [Setup]
 AppId={{8A6C2F10-4E2B-4A9B-9C3D-LIFEOS0000001}
@@ -39,12 +39,12 @@ Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescripti
 Source: "..\dist\LifeOS\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs replacesameversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; 只清安装目录内的运行残留；数据目录在 [Code] 里询问后处理。
@@ -59,7 +59,7 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    DataDir := ExpandConstant('{localappdata}\{#MyAppDataName}');
+    DataDir := ExpandConstant('{%USERPROFILE}\{#MyAppDataName}');
     if DirExists(DataDir) then
       if MsgBox('是否同时删除用户数据目录？' #13#10 +
                 DataDir + #13#10 #13#10 +

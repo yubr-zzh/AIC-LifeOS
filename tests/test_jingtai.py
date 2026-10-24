@@ -4,7 +4,7 @@
 1. 静态托管：`/` 出 index.html、SPA fallback 只给无扩展名路径、
    带扩展名找不到 404、路径穿越被挡、/api/* 不被兜底吞掉；
 2. 静态资源豁免登录闸（页面壳要能渲染登录页），API 照旧要会话；
-3. gen_mulu：LIFEOS_HOME 优先，缺省回落 ./.lifeos（开发形态不变）；
+3. gen_mulu：LIFEOS_HOME 优先，缺省回落 ./lifeOS；
 4. Origin 运行时注入：jia_yuan 同步主服务白名单与 bridge/auth 白名单。
 """
 
@@ -135,7 +135,7 @@ class GenMuluTest(unittest.TestCase):
     def test_que_sheng_hui_luo_dang_qian_mu_lu(self):
         env = {k: v for k, v in __import__("os").environ.items() if k != "LIFEOS_HOME"}
         with unittest.mock.patch.dict("os.environ", env, clear=True):
-            self.assertEqual(gen_mulu(), Path(".") / ".lifeos")
+            self.assertEqual(gen_mulu(), Path(".") / "lifeOS")
 
 
 class YuanZhuRuTest(unittest.TestCase):

@@ -407,7 +407,7 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
       <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300}
         ariaLabel={phase ? "阶段规划编辑器" : "每日规划编辑器"}
         placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "用列表写下今天要做的事，每行一条；每日复盘会自动读取这些事项。"} />
-      <div className="editor-footer"><span>内容保存在本地 SQLite · 支持 Markdown</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
+      <div className="editor-footer actions-only"><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
       {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
@@ -517,7 +517,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
         </div> : null}
       </div>
       <div className="review-editor-section"><span className="card-kicker">自由复盘</span><MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={240} ariaLabel={phase ? "阶段复盘编辑器" : "每日复盘编辑器"} placeholder="写下今天发生了什么、有什么发现，以及明天想怎样继续…" /></div>
-      <div className="review-actions"><span className="editor-note">勾选与文字会一起保存到本地 SQLite。</span><button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></div>
+      <div className="review-actions actions-only"><button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></div>
       {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
