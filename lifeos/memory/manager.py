@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -188,6 +188,8 @@ class MemoryManager:
         """Create a user-confirmed replacement and retire the previous version."""
         if not isinstance(content, dict) or not content:
             raise ValueError("replacement memory content must be a non-empty object")
+        if reason is not None and not isinstance(reason, str):
+            raise ValueError("correction reason must be a string")
         store = self._read()
         old = self._find_memory(store, memory_id)
         if old.get("status", "active") != "active":
@@ -198,8 +200,26 @@ class MemoryManager:
                     return replacement
             raise ValueError(f"memory cannot be corrected from status: {old.get('status', 'active')}")
 
+        now = datetime.utcnow()
+        effective_at = now.replace(tzinfo=timezone.utc)
+        if old.get("valid_from"):
+            original_start = MemoryRetriever._parse_time(old["valid_from"])
+            if original_start and original_start > effective_at:
+                effective_at = original_start
+        boundary = effective_at - timedelta(microseconds=1)
+        original_end = (
+            MemoryRetriever._parse_time(old["valid_until"], end_of_day=True)
+            if old.get("valid_until") else None
+        )
+        if original_end is None or original_end > boundary:
+            old_valid_until = boundary.isoformat()
+        else:
+            # Preserve an earlier, explicitly configured expiry.
+            old_valid_until = old["valid_until"]
+
         await MemoryLifecycle(store).backup()
         replacement = deepcopy(old)
+        effective_at_text = effective_at.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
         replacement.update(
             {
                 "id": str(uuid4()),
@@ -210,18 +230,18 @@ class MemoryManager:
                 "confidence": None,
                 "confidence_method": None,
                 "version_of": memory_id,
-                "confirmed_at": datetime.utcnow().isoformat(),
+                "confirmed_at": now.isoformat(),
                 "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": now.isoformat(),
+                "valid_from": effective_at_text,
             }
         )
         if reason is not None:
-            if not isinstance(reason, str):
-                raise ValueError("correction reason must be a string")
             replacement["correction_reason"] = reason
         old["status"] = "superseded"
         old["superseded_by"] = replacement["id"]
-        old["superseded_at"] = datetime.utcnow().isoformat()
+        old["superseded_at"] = now.isoformat()
+        old["valid_until"] = old_valid_until
         store[old["category"]].append(replacement)
         store.setdefault("vector_index", {}).pop(memory_id, None)
         store["vector_index"][replacement["id"]] = replacement["content"]
