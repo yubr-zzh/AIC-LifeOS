@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
   <img src="https://img.shields.io/badge/tests-985%20cases-brightgreen?style=flat-square" alt="Tests">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </div>
 
 ---
@@ -43,7 +44,7 @@ user input → chat agent (memory recall → LLM/tools) → reply
 | --- | --- |
 | Desktop shell | Single-instance lock, port auto-probe from 8765 to 8790, bridge and child processes stop when the window closes. |
 | Accounts | Local accounts with PBKDF2 (600k rounds), HttpOnly session cookie plus CSRF gate, custom avatar, password change, 30-day remember-me encrypted with Windows DPAPI. |
-| Local agents | Bridge runs as a separate process, with trust-root confirmation and a native folder picker. Claude CLI resolution checks the machine first and falls back to the bundled copy. |
+| Local agents | Bridge runs as a separate process, with trust-root confirmation and a native folder picker. |
 | Agent loop | Event bus feeds the reflection engine, which proposes memory candidates through a two-phase write, then skill candidates get detected and evaluated, and MCP tools plug in. |
 | Today | A checkable plan for the day, 20 built-in daily reminders, and an inbox that collects agent completions and pending approvals. |
 | Journal | Daily and phase plans and reviews in a light markdown editor. Reviews inherit plan items. History sits one click away, and each save shows its SQLite record id. |
@@ -53,9 +54,41 @@ user input → chat agent (memory recall → LLM/tools) → reply
 
 ## Install
 
-Run `LifeOS-Setup-2.2.0.exe` and start LifeOS from the Start menu or the desktop shortcut. User data lives in `%USERPROFILE%\lifeOS`. The first launch copies legacy data from the old AppData folder and keeps the original as a backup. Uninstall asks before it removes any data.
+Installation steps:
+
+1. Run `LifeOS-Setup-2.2.0.exe`.
+2. Follow the wizard. Keep the default options.
+3. Start LifeOS from the Start menu or the desktop shortcut.
+4. Create your local account at first launch.
+
+Data rules:
+
+- User data lives in `%USERPROFILE%\lifeOS`.
+- First launch copies legacy data from the old AppData folder. The original stays as a backup.
+- Uninstall asks you first. It deletes data only after you confirm.
 
 Portable use: run `dist\LifeOS\LifeOS.exe` directly, with no installer.
+
+## Repository layout
+
+```text
+lifeos/
+  desktop/          # desktop shell entry: single instance, ports, shutdown order
+  api/              # main service: static hosting, login gate, tunnel gateway, devices, users
+  bridge/           # local agent process: adapters, arbitration, redaction, recovery
+  agent/            # chat agent, global agent, planning, execution
+  memory/           # two-phase memory write: recall, candidates, lifecycle
+  skills/           # skill registry, candidate detection, effect evaluation
+  reflection/       # background reflection engine
+  event/            # local reliable event queue
+  security/         # permission review
+  llm/              # unified LLM interface
+  mcp/              # MCP server registry and adapters
+frontend/           # React + TypeScript + Vite console (npm run build feeds dist)
+tools/              # build_exe.ps1, lifeos.spec, lifeos-setup.iss, verify_*.py
+tests/              # full backend test suite
+docs/               # architecture and API documents
+```
 
 ## Build from source
 
@@ -64,7 +97,6 @@ You need Windows 10 or 11 plus:
 - Python 3.11 or newer (tested on 3.13)
 - Node.js, for the frontend build
 - Inno Setup 6, only if you want the installer
-- A native `claude.exe`, optional. The SDK rejects the npm `.cmd` shim, so bundle a native exe for the packaged fallback.
 
 ```powershell
 # 1) backend virtualenv
@@ -76,13 +108,10 @@ cd frontend
 npm ci
 cd ..
 
-# 3) point at a native claude.exe to bundle (optional, PATH probing otherwise)
-$env:LIFEOS_CLAUDE_SRC = "C:\path\to\claude.exe"
-
-# 4) one-shot build: npm run build → PyInstaller → optional claude.exe bundling
+# 3) one-shot build: npm run build → PyInstaller
 powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 
-# 5) installer, optional
+# 4) installer, optional
 ISCC.exe tools\lifeos-setup.iss
 ```
 
@@ -116,27 +145,6 @@ npm run typecheck
 
 Three backend files (`tests/test_codex_lc_ji_cheng.py`, `test_liu_xing_lc_ji_cheng.py`, `test_pi_lc_ji_cheng.py`) call real external endpoints. Exclude them with `--ignore` when you work offline or in CI.
 
-## Repository layout
-
-```text
-lifeos/
-  desktop/          # desktop shell entry: single instance, ports, shutdown order
-  api/              # main service: static hosting, login gate, tunnel gateway, devices, users
-  bridge/           # local agent process: adapters, arbitration, redaction, recovery
-  agent/            # chat agent, global agent, planning, execution
-  memory/           # two-phase memory write: recall, candidates, lifecycle
-  skills/           # skill registry, candidate detection, effect evaluation
-  reflection/       # background reflection engine
-  event/            # local reliable event queue
-  security/         # permission review
-  llm/              # unified LLM interface
-  mcp/              # MCP server registry and adapters
-frontend/           # React + TypeScript + Vite console (npm run build feeds dist)
-tools/              # build_exe.ps1, lifeos.spec, lifeos-setup.iss, verify_*.py
-tests/              # full backend test suite
-docs/               # architecture and API documents
-```
-
 ## Documentation
 
 - [docs/api-contract.md](docs/api-contract.md), frontend and backend API alignment
@@ -149,9 +157,12 @@ docs/               # architecture and API documents
 ## Runtime notes
 
 - Runtime data goes to `%USERPROFILE%\lifeOS` for installs and `./lifeOS/` for source runs. The first start copies legacy AppData data and keeps the old folder as a backup.
-- Without a bundled claude.exe the app probes PATH at runtime. The npm `.cmd` shim gets rejected by the SDK, so use a native exe.
 - The main service listens on 8765 and probes upward to 8790 when busy. Test leftovers can hold ports 8766 to 8770; end the `python -m lifeos.bridge.run` process to free them.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). It covers the dev loop, the test commands, and the commit message convention.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

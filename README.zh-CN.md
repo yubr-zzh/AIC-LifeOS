@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
   <img src="https://img.shields.io/badge/tests-985%20cases-brightgreen?style=flat-square" alt="Tests">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </div>
 
 ---
@@ -43,7 +44,7 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 | --- | --- |
 | 桌面壳 | 单实例锁，端口从 8765 向上探测到 8790，关窗时停掉 bridge 和全部子进程。 |
 | 账户 | 本地账户配 PBKDF2（600k 轮），HttpOnly 会话 Cookie 加 CSRF 闸，自定义头像，改密码，30 天记住密码用 Windows DPAPI 加密。 |
-| 本地 Agent | bridge 独立进程，信任根确认，原生目录选择对话框。claude CLI 先探测本机，再回退捆绑副本。 |
+| 本地 Agent | bridge 独立进程，信任根确认，原生目录选择对话框。 |
 | Agent 闭环 | 事件总线喂给反思引擎，产出记忆候选走两阶段写入，技能候选检测与评估，MCP 工具接入。 |
 | 今日 | 可勾选的当日安排，内置 20 组每日提醒，Inbox 汇总 Agent 完成与待确认通知。 |
 | 记录 | 每日与阶段规划、复盘用轻量 Markdown 编辑器。复盘承接计划事项。历史记录一点即达，每次保存显示 SQLite 记录编号。 |
@@ -53,9 +54,41 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 
 ## 安装
 
-运行 `LifeOS-Setup-2.2.0.exe`，装好后从开始菜单或桌面快捷方式启动。用户数据放在 `%USERPROFILE%\lifeOS`。首次启动会从旧 AppData 目录复制数据，原目录保留为备份。卸载前会先询问，确认后才删数据。
+安装步骤：
 
-免安装用法：直接运行 `dist\LifeOS\LifeOS.exe`。
+1. 运行 `LifeOS-Setup-2.2.0.exe`。
+2. 按向导操作。保留默认选项。
+3. 从开始菜单或桌面快捷方式启动 LifeOS。
+4. 首次启动时创建本地账户。
+
+数据规则：
+
+- 用户数据存放在 `%USERPROFILE%\lifeOS`。
+- 首次启动从 AppData 旧目录复制数据。原目录保留为备份。
+- 卸载先询问你。确认后才删除数据。
+
+免安装用法：直接运行 `dist\LifeOS\LifeOS.exe`，无需安装器。
+
+## 目录结构
+
+```text
+lifeos/
+  desktop/          # 桌面壳入口：单实例、端口、关停时序
+  api/              # 主服务：静态托管、登录闸、隧道网关、设备、用户
+  bridge/           # 本地 Agent 进程：适配器、仲裁、脱敏、恢复
+  agent/            # Chat Agent、Global Agent、规划、执行
+  memory/           # 两阶段记忆写入：检索、候选、生命周期
+  skills/           # 技能注册表、候选检测、效果评估
+  reflection/       # 后台反思引擎
+  event/            # 本地可靠事件队列
+  security/         # 权限审查
+  llm/              # 统一 LLM 接口
+  mcp/              # MCP Server 注册表与适配
+frontend/           # React + TypeScript + Vite 控制台（npm run build 产 dist）
+tools/              # build_exe.ps1、lifeos.spec、lifeos-setup.iss、verify_*.py
+tests/              # 后端全量测试
+docs/               # 架构与 API 文档
+```
 
 ## 从源码构建
 
@@ -64,7 +97,6 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 - Python 3.11 或更高（开发机实测 3.13）
 - Node.js，构建前端
 - Inno Setup 6，仅出安装器时需要
-- 原生 `claude.exe`，可选。SDK 拒绝 npm 的 `.cmd` 垫片，打包兜底需要原生 exe
 
 ```powershell
 # 1) 后端虚拟环境
@@ -76,13 +108,10 @@ cd frontend
 npm ci
 cd ..
 
-# 3) 指定要捆绑的原生 claude.exe（可选，未设则运行时探测 PATH）
-$env:LIFEOS_CLAUDE_SRC = "C:\path\to\claude.exe"
-
-# 4) 一键打包：npm run build → PyInstaller → 可选捆绑 claude.exe
+# 3) 一键打包：npm run build → PyInstaller
 powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 
-# 5) 编译安装器，可选
+# 4) 编译安装器，可选
 ISCC.exe tools\lifeos-setup.iss
 ```
 
@@ -116,27 +145,6 @@ npm run typecheck
 
 三个后端文件（`tests/test_codex_lc_ji_cheng.py`、`test_liu_xing_lc_ji_cheng.py`、`test_pi_lc_ji_cheng.py`）会访问真实外网端点。离线或 CI 环境请加 `--ignore` 排除。
 
-## 目录结构
-
-```text
-lifeos/
-  desktop/          # 桌面壳入口：单实例、端口、关停时序
-  api/              # 主服务：静态托管、登录闸、隧道网关、设备、用户
-  bridge/           # 本地 Agent 进程：适配器、仲裁、脱敏、恢复
-  agent/            # Chat Agent、Global Agent、规划、执行
-  memory/           # 两阶段记忆写入：检索、候选、生命周期
-  skills/           # 技能注册表、候选检测、效果评估
-  reflection/       # 后台反思引擎
-  event/            # 本地可靠事件队列
-  security/         # 权限审查
-  llm/              # 统一 LLM 接口
-  mcp/              # MCP Server 注册表与适配
-frontend/           # React + TypeScript + Vite 控制台（npm run build 产 dist）
-tools/              # build_exe.ps1、lifeos.spec、lifeos-setup.iss、verify_*.py
-tests/              # 后端全量测试
-docs/               # 架构与 API 文档
-```
-
 ## 文档索引
 
 - [docs/api-contract.md](docs/api-contract.md)，前后端 API 对齐
@@ -149,9 +157,12 @@ docs/               # 架构与 API 文档
 ## 运行注意
 
 - 运行时数据：安装版写 `%USERPROFILE%\lifeOS`，源码运行写当前目录 `./lifeOS/`。首次启动从 AppData 旧目录复制迁移，旧目录保留为备份。
-- 未捆绑 claude.exe 时，运行时从 PATH 探测。npm 安装的 `.cmd` 垫片会被 SDK 拒绝，请用原生 exe。
 - 主服务默认 8765，被占时向上探测到 8790。测试残留的 bridge 进程可能占住 8766 到 8770，结束 `python -m lifeos.bridge.run` 进程即可释放。
 
 ## 参与贡献
 
 见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。内容包括开发流程、测试命令和提交信息规范。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。
