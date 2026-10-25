@@ -227,7 +227,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           <div>
             <span className="card-kicker">连接</span>
             <h2>连接本机 Agent</h2>
-            <p className="ags-lead">选择 Agent，指定它工作的文件夹，然后开始对话。</p>
+            <p className="ags-lead">选择一个Agent并指定它的工作目录</p>
           </div>
         </div>
         <div className="ags-form">
@@ -269,9 +269,6 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
                 浏览…
               </button>
             </div>
-            <small>
-              用「浏览…」选择文件夹，或直接输入路径。不在信任范围内的目录需要先确认。
-            </small>
             {weiXin ? (
               <p className="ags-note warn">
                 该目录在信任根外，现在连接会被 Bridge 拒绝。{" "}
