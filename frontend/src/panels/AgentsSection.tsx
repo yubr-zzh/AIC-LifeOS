@@ -133,7 +133,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         <div className="ags-head">
           <div>
             <span className="card-kicker">本机 Bridge</span>
-            <h2>Agent 在你的电脑上执行</h2>
+            <h2>启动桥接</h2>
           </div>
           <span className={`pill ${info?.running ? "done" : "idle"} sm`}>
             <span className="dot" />
@@ -141,17 +141,8 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
           </span>
         </div>
         <p className="ags-desc">
-          LifeOS 负责规划，Bridge 在你选定的目录中执行。指令、审批和结果都留在当前设备，
-          浏览器拿不到 Bridge 的任何凭据。
+          LifeOS 负责规划，Bridge 在你选定的目录中执行。指令、审批和结果都留在当前设备。
         </p>
-        {geli !== undefined ? (
-          <p className="ags-note">
-            运行形态：
-            {geli
-              ? "凭据隔离（每个 LifeOS 用户独立 CLAUDE_CONFIG_DIR，不加载本机配置）"
-              : "直用本机配置（与你手动开终端一致，读得到本地 skills、settings.json、CLAUDE.md）"}
-          </p>
-        ) : null}
         <div className="ags-facts">
           <Fact k="端口" v={info?.port ? String(info.port) : "—"} />
           <Fact k="进程" v={info?.pid ? String(info.pid) : "—"} />
