@@ -146,7 +146,7 @@ export function AgentsSection({ store, api, onGoChat }: Props) {
         <div className="ags-facts">
           <Fact k="端口" v={info?.port ? String(info.port) : "—"} />
           <Fact k="进程" v={info?.pid ? String(info.pid) : "—"} />
-          <Fact k="CLI" v={info?.cliVersion ?? "—"} />
+          <Fact k="CLI" v={selectedAgent?.version ?? info?.cliVersion ?? "—"} />
           <Fact k="通道" v={tunnelLabel(info?.tunnelState)} />
         </div>
         {info?.error ? <p className="ags-note">{info.error}</p> : null}
