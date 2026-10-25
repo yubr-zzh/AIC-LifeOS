@@ -38,20 +38,34 @@ user input → chat agent (memory recall → LLM/tools) → reply
            → memory candidates → security review → persist
 ```
 
-## Features
+## User guide
 
-| Feature | What you get |
-| --- | --- |
-| Double-click and go | Install, double-click, and work in one window. Closing the window stops every background process. |
-| Your data stays local | Accounts, memories, and logs live on your PC. Remember-me lasts 30 days with system-level encryption. |
-| Put an agent to work | Pick a local agent and point it at a folder. It reads files, edits code, and runs commands there. |
-| You approve every action | The agent shows you each file edit and each command first. It acts only after you click Allow. |
-| Memory across sessions | Chats and agent results settle into memory. Your next question carries that context. |
-| Today view | Check off today's plan item by item. 20 reminders arrive on schedule. Agent results and to-dos land in the inbox. |
-| Plan and review | Write daily and phase plans in markdown. Reviews inherit plan items, and history opens in one click. |
-| Year in one graph | A contribution-style graph aggregates your plans, reviews, diary, and notes for the year. |
-| Chat workspace | Collapse the sidebars and drag to resize the panes. Copy any message, rename sessions, attach up to 3 files. |
-| Live agent status | The bottom panel tracks agent progress with up to 20 items. Draft your next message even while offline. |
+### Vision
+
+LifeOS Software Edition wants to move the assistant out of a browser tab and settle it on your own computer.
+
+A lamp on your desk, lighting only what is yours. Notes, schedules, code, and conversations sit in a local store under `%USERPROFILE%\lifeOS`, on no one else's server. Before an agent writes a file or runs a command, it shows you first — you nod, it moves.
+
+The horizon is plain: let the machine come to know you over the days. Chats settle into memory, memory feeds reflection, reflection grows skills. Today's items get checked today, phases carry plans and reviews, and one graph gathers the year. What piles up under the lamp is yours.
+
+### Daily use
+
+**Walk in.** Double-click to run, then create a local account at first launch. Tick remember-me for 30 days of password-free login, with credentials stored under system-level encryption.
+
+**Assign work.** Pick a local agent and point it at a folder. It reads files, edits code, and runs commands there, and shows you each action first. Progress appears in the bottom panel, which keeps the last 20 items and refreshes every 8 seconds.
+
+**Talk.** Earlier chats and agent results settle into memory, so your next question carries the context on its own. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
+
+**Today.** Check off today's plan item by item. 20 reminders arrive on schedule, and agent results and to-dos land in the inbox. Collapse the sidebars; drag to widen the chat pane.
+
+**Over the year.** Write daily and phase plans in markdown; reviews inherit plan items. The year view gathers your plans, reviews, diary, and notes into one contribution-style graph.
+
+### Tips
+
+- Closing the window stops every background process. Nothing lingers.
+- Draft your message even when no agent is connected.
+- Uninstall asks first; your data goes only after you confirm.
+- Accounts, memories, and logs live in `%USERPROFILE%\lifeOS`. Back up that one folder and you have it all.
 
 ## Install
 
