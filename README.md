@@ -40,17 +40,18 @@ user input → chat agent (memory recall → LLM/tools) → reply
 
 ## Features
 
-| Area | What you get |
+| Feature | What you get |
 | --- | --- |
-| Desktop shell | Single-instance lock, port auto-probe from 8765 to 8790, bridge and child processes stop when the window closes. |
-| Accounts | Local accounts with PBKDF2 (600k rounds), HttpOnly session cookie plus CSRF gate, custom avatar, password change, 30-day remember-me encrypted with Windows DPAPI. |
-| Local agents | Bridge runs as a separate process, with trust-root confirmation and a native folder picker. |
-| Agent loop | Event bus feeds the reflection engine, which proposes memory candidates through a two-phase write, then skill candidates get detected and evaluated, and MCP tools plug in. |
-| Today | A checkable plan for the day, 20 built-in daily reminders, and an inbox that collects agent completions and pending approvals. |
-| Journal | Daily and phase plans and reviews in a light markdown editor. Reviews inherit plan items. History sits one click away, and each save shows its SQLite record id. |
-| Year view | A GitHub-style contribution graph that aggregates plans, reviews, diary entries, and notes for the whole year. |
-| Chat | Collapsible navigation and recent-session sidebars, drag-to-resize split between LifeOS and agent conversations, one-click copy, rename, up to 3 attached text, code, or config files. |
-| Agent panel | Docked at the bottom with up to 20 live items, editable drafts while disconnected, and a closable memory-refine view. |
+| Double-click and go | Install, double-click, and work in one window. Closing the window stops every background process. |
+| Your data stays local | Accounts, memories, and logs live on your PC. Remember-me lasts 30 days with system-level encryption. |
+| Put an agent to work | Pick a local agent and point it at a folder. It reads files, edits code, and runs commands there. |
+| You approve every action | The agent shows you each file edit and each command first. It acts only after you click Allow. |
+| Memory across sessions | Chats and agent results settle into memory. Your next question carries that context. |
+| Today view | Check off today's plan item by item. 20 reminders arrive on schedule. Agent results and to-dos land in the inbox. |
+| Plan and review | Write daily and phase plans in markdown. Reviews inherit plan items, and history opens in one click. |
+| Year in one graph | A contribution-style graph aggregates your plans, reviews, diary, and notes for the year. |
+| Chat workspace | Collapse the sidebars and drag to resize the panes. Copy any message, rename sessions, attach up to 3 files. |
+| Live agent status | The bottom panel tracks agent progress with up to 20 items. Draft your next message even while offline. |
 
 ## Install
 
