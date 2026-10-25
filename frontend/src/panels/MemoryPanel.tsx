@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LifecycleStage, MemoryCandidate, MemoryEntry } from "../api/types";
 import { LIFECYCLE_STAGES } from "../api/types";
 import type { Store } from "../state/store";
@@ -9,8 +9,7 @@ import {
   importMemoryMarkdown,
   retractMemory,
 } from "../api/client";
-import { Panel } from "../components/Panel";
-import { IconApprove, IconReject } from "../components/Icons";
+import { IconApprove, IconReject, IconCheck } from "../components/Icons";
 
 type Tab =
   | "user"
@@ -23,11 +22,11 @@ type Tab =
   | "markdown";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "candidates", label: "候选" },
   { id: "user", label: "User" },
   { id: "project", label: "Project" },
   { id: "feedback", label: "Feedback" },
   { id: "reference", label: "Reference" },
-  { id: "candidates", label: "Candidates" },
   { id: "profile", label: "画像" },
   { id: "backups", label: "Backups" },
   { id: "markdown", label: "Markdown" },
@@ -43,61 +42,61 @@ export function MemoryPanel({ store }: Props) {
   const mem = state.memory;
 
   return (
-    <Panel
-      title="Memory"
-      subtitle="lifecycle · provenance · correction and retraction · markdown review"
-      source={state.ui.dataMode}
-      dense
-    >
-      <div className="row" style={{ gap: 4, padding: "0 6px 8px", flexWrap: "wrap" }}>
+    <section className="mem-panel">
+      <header className="mem-head">
+        <p>候选审核 · 生命周期 · 纠正 / 撤回 · 画像重建 · Markdown 镜像。</p>
+        <span className="mem-mode">{state.ui.dataMode === "backend" ? "实时后端" : "本地预览"}</span>
+      </header>
+
+      <div className="mem-tabs" role="tablist">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
             <button
               key={t.id}
+              role="tab"
+              aria-selected={active}
+              className={`mem-tab ${active ? "is-active" : ""}`}
               onClick={() => setTab(t.id)}
-              className={active ? "primary" : "ghost"}
-              style={{ borderRadius: "var(--r-pill)", padding: "3px 10px", fontSize: 11 }}
             >
               {t.label}
               {t.id === "candidates" && mem.candidates.length > 0 ? (
-                <span className="mono" style={{ marginLeft: 6, opacity: 0.8 }}>
-                  {mem.candidates.length}
-                </span>
+                <span className="mem-tab-count">{mem.candidates.length}</span>
               ) : null}
             </button>
           );
         })}
       </div>
 
-      {tab === "user" ? <EntryList entries={mem.user} empty="no user memory yet" store={store} /> : null}
-      {tab === "project" ? <EntryList entries={mem.project} empty="no project memory yet" store={store} /> : null}
-      {tab === "feedback" ? <EntryList entries={mem.feedback} empty="no feedback memory yet" store={store} /> : null}
-      {tab === "reference" ? <EntryList entries={mem.reference} empty="no reference memory yet" store={store} /> : null}
-      {tab === "markdown" ? <MarkdownTab store={store} /> : null}
-      {tab === "profile" ? <ProfileTab /> : null}
-      {tab === "candidates" ? (
-        <CandidateList candidates={mem.candidates} store={store} />
-      ) : null}
-      {tab === "backups" ? (
-        <div className="scroll" style={{ padding: "4px 6px" }}>
-          {mem.backups.length === 0 ? (
-            <div className="state-empty">no backups yet</div>
-          ) : (
-            mem.backups.map((b, i) => (
-              <div key={i} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--bd-1)" }}>
-                <span className="mono" style={{ fontSize: 11 }}>
-                  backup #{mem.backups.length - i}
-                </span>
-                <span className="mono muted" style={{ fontSize: 11 }} title={b.created_at}>
-                  {new Date(b.created_at).toLocaleString()}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      ) : null}
-    </Panel>
+      <div className="mem-body">
+        {tab === "user" ? <EntryList entries={mem.user} empty="还没有 User 记忆" store={store} /> : null}
+        {tab === "project" ? <EntryList entries={mem.project} empty="还没有 Project 记忆" store={store} /> : null}
+        {tab === "feedback" ? <EntryList entries={mem.feedback} empty="还没有 Feedback 记忆" store={store} /> : null}
+        {tab === "reference" ? <EntryList entries={mem.reference} empty="还没有 Reference 记忆" store={store} /> : null}
+        {tab === "markdown" ? <MarkdownTab store={store} /> : null}
+        {tab === "profile" ? <ProfileTab /> : null}
+        {tab === "candidates" ? <CandidateList candidates={mem.candidates} store={store} /> : null}
+        {tab === "backups" ? <BackupsTab items={mem.backups} /> : null}
+      </div>
+    </section>
+  );
+}
+
+function BackupsTab({ items }: { items: { created_at: string }[] }) {
+  if (items.length === 0) {
+    return <p className="mem-empty">还没有备份。</p>;
+  }
+  return (
+    <ol className="mem-backup-list" reversed>
+      {items.map((b, i) => (
+        <li key={i}>
+          <span className="mono mem-backup-idx">#{items.length - i}</span>
+          <time className="mono muted" dateTime={b.created_at}>
+            {new Date(b.created_at).toLocaleString()}
+          </time>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -113,31 +112,49 @@ function ProfileTab() {
   }, []);
   useEffect(load, [load]);
   const view = result?.data;
-  return <div className="col" style={{ padding: "4px 6px", gap: 8 }}>
-    <div className="row between" style={{ flexWrap: "wrap" }}>
-      <span className="mono muted" style={{ fontSize: 10 }}>由 active memory 动态重建 · {result?.source === "backend" ? "实时后端" : "预览数据"}{view?.version ? ` · ${view.version.slice(0, 12)}` : ""}</span>
-      <button className="ghost" onClick={load} disabled={loading}>{loading ? "读取中…" : "刷新画像"}</button>
+  return (
+    <div className="mem-profile">
+      <div className="mem-profile-head">
+        <span className="muted small">由 active memory 动态重建 · {result?.source === "backend" ? "实时后端" : "预览数据"}{view?.version ? ` · ${view.version.slice(0, 12)}` : ""}</span>
+        <button className="ghost sm" onClick={load} disabled={loading}>{loading ? "读取中…" : "刷新画像"}</button>
+      </div>
+      {error ? <div className="state-error" role="alert">画像读取失败：{error}</div> : null}
+      {loading && !view ? <p className="mem-empty">正在从当前记忆重建画像…</p> : null}
+      {view ? (
+        <>
+          <ProfileGroups title="全局核心画像" groups={view.core_profiles} />
+          <ProfileGroups title="场景画像" groups={view.scenario_profiles} />
+          <ProfileGroups title="项目画像" groups={view.project_profiles} />
+          {view.core_profiles.length + view.scenario_profiles.length + view.project_profiles.length === 0
+            ? <p className="mem-empty">当前没有可展示的 active 记忆。先在候选页审核并采纳。</p>
+            : null}
+        </>
+      ) : null}
     </div>
-    {error ? <div className="state-error" role="alert">画像读取失败：{error}</div> : null}
-    {loading && !view ? <div className="state-empty" role="status">正在从当前记忆重建画像…</div> : null}
-    {view ? <>
-      <ProfileGroups title="全局核心画像" groups={view.core_profiles} />
-      <ProfileGroups title="场景画像" groups={view.scenario_profiles} />
-      <ProfileGroups title="项目画像" groups={view.project_profiles} />
-      {view.core_profiles.length + view.scenario_profiles.length + view.project_profiles.length === 0 ? <div className="state-empty">当前没有可展示的 active 记忆。先在候选页审核并采纳记忆。</div> : null}
-    </> : null}
-  </div>;
+  );
 }
 
 function ProfileGroups({ title, groups }: { title: string; groups: import("../api/types").MemoryProfileGroup[] }) {
   if (!groups.length) return null;
-  return <section className="col" style={{ gap: 6 }}><h3 style={{ margin: "4px 0", fontSize: 13 }}>{title}</h3>{groups.map((group, index) => <div key={`${group.scope.kind}-${group.scope.project_id ?? group.scope.scenario_type ?? index}`} className="card-flat">
-    <div className="row between"><strong style={{ fontSize: 12 }}>{scopeLabel(group.scope)}</strong><span className="mono muted" style={{ fontSize: 10 }}>{group.memory_count} 条依据</span></div>
-    {group.memories.map((memory) => <div key={memory.id} style={{ borderTop: "1px solid var(--bd-1)", marginTop: 7, paddingTop: 7 }}>
-      <div style={{ fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{claimText(memory.content)}</div>
-      <Provenance item={memory} />
-    </div>)}
-  </div>)}</section>;
+  return (
+    <section className="mem-profile-group">
+      <h3>{title}</h3>
+      {groups.map((group, index) => (
+        <div key={`${group.scope.kind}-${group.scope.project_id ?? group.scope.scenario_type ?? index}`} className="mem-card">
+          <div className="mem-card-head">
+            <strong>{scopeLabel(group.scope)}</strong>
+            <span className="muted small mono">{group.memory_count} 条依据</span>
+          </div>
+          {group.memories.map((memory) => (
+            <div key={memory.id} className="mem-card-row">
+              <div className="mem-card-claim">{claimText(memory.content)}</div>
+              <Provenance item={memory} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
 }
 
 function scopeLabel(scope?: import("../api/types").MemoryScope) {
@@ -154,10 +171,14 @@ function claimText(content: Record<string, unknown>) {
 
 function Provenance({ item }: { item: Pick<MemoryCandidate, "source" | "source_ref" | "scope" | "confidence" | "confidence_method" | "occurred_at" | "created_at"> }) {
   const ref = item.source_ref;
-  return <div className="mono muted" style={{ fontSize: 10, marginTop: 5, lineHeight: 1.5 }}>
-    来源：{ref ? `${ref.kind} / ${ref.record_kind ?? "record"} / ${ref.record_id}` : item.source}{ref?.revision ? ` · 版本 ${ref.revision}` : ""}
-    {` · ${scopeLabel(item.scope)}`}{item.occurred_at ? ` · 发生于 ${item.occurred_at}` : ""}{item.confidence != null ? ` · 置信度 ${item.confidence}${item.confidence_method ? `（${item.confidence_method}）` : ""}` : ""}
-  </div>;
+  return (
+    <div className="mem-provenance muted small">
+      来源：{ref ? `${ref.kind} / ${ref.record_kind ?? "record"} / ${ref.record_id}` : item.source}{ref?.revision ? ` · 版本 ${ref.revision}` : ""}
+      {` · ${scopeLabel(item.scope)}`}
+      {item.occurred_at ? ` · 发生于 ${item.occurred_at}` : ""}
+      {item.confidence != null ? ` · 置信度 ${item.confidence}${item.confidence_method ? `（${item.confidence_method}）` : ""}` : ""}
+    </div>
+  );
 }
 
 function MarkdownTab({ store }: { store: Store }) {
@@ -168,14 +189,8 @@ function MarkdownTab({ store }: { store: Store }) {
   const load = useCallback(() => {
     setStatus("loading");
     getMemoryMarkdown()
-      .then((r) => {
-        setMd(r.markdown);
-        setStatus("idle");
-      })
-      .catch((e) => {
-        setStatus("error");
-        setMessage(e instanceof Error ? e.message : String(e));
-      });
+      .then((r) => { setMd(r.markdown); setStatus("idle"); })
+      .catch((e) => { setStatus("error"); setMessage(e instanceof Error ? e.message : String(e)); });
   }, []);
 
   useEffect(load, [load]);
@@ -186,41 +201,34 @@ function MarkdownTab({ store }: { store: Store }) {
         setMessage(`imported — user:${r.categories.user} project:${r.categories.project} feedback:${r.categories.feedback} reference:${r.categories.reference}`);
         void store.refreshAll();
       })
-      .catch((e) => {
-        setMessage(`import failed: ${e instanceof Error ? e.message : String(e)}`);
-      });
+      .catch((e) => { setMessage(`import failed: ${e instanceof Error ? e.message : String(e)}`); });
   };
 
   return (
-    <div className="col" style={{ padding: "4px 6px", gap: 6 }}>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <button onClick={load} disabled={status === "loading"}>Refresh</button>
-        <button className="ghost" onClick={save}>Import edited markdown</button>
-        {message ? <span className="mono muted" style={{ fontSize: 10 }}>{message}</span> : null}
+    <div className="mem-markdown">
+      <div className="mem-markdown-actions">
+        <button className="ghost sm" onClick={load} disabled={status === "loading"}>Refresh</button>
+        <button className="ghost sm" onClick={save}>Import edited markdown</button>
+        {message ? <span className="muted small mono">{message}</span> : null}
       </div>
       <textarea
-        className="mono"
+        className="mono mem-markdown-area"
         value={md}
         onChange={(e) => setMd(e.target.value)}
         placeholder={status === "error" ? `failed to load: ${message}` : "loading markdown…"}
         spellCheck={false}
-        style={{ width: "100%", minHeight: 220, fontSize: 11, lineHeight: 1.5, resize: "vertical" }}
       />
-      <div className="mono muted" style={{ fontSize: 10 }}>
-        memory.md mirror — review and import; existing memory must use explicit correction or retraction
-      </div>
+      <p className="muted small">memory.md mirror — review and import; existing memory must use explicit correction or retraction</p>
     </div>
   );
 }
 
 function EntryList({ entries, empty, store }: { entries: MemoryEntry[]; empty: string; store: Store }) {
-  if (entries.length === 0) return <div className="state-empty">{empty}</div>;
+  if (entries.length === 0) return <p className="mem-empty">{empty}</p>;
   return (
-    <div className="scroll" style={{ padding: "4px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
-      {entries.map((e) => (
-        <MemoryEntryCard key={e.id} entry={e} store={store} />
-      ))}
-    </div>
+    <ul className="mem-entry-list">
+      {entries.map((e) => <li key={e.id}><MemoryEntryCard entry={e} store={store} /></li>)}
+    </ul>
   );
 }
 
@@ -236,201 +244,141 @@ function MemoryEntryCard({ entry, store }: { entry: MemoryEntry; store: Store })
 
   const submitCorrection = async () => {
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      setMessage("内容必须是有效 JSON。");
-      return;
-    }
+    try { parsed = JSON.parse(content); } catch { setMessage("内容必须是有效 JSON。"); return; }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      setMessage("新记忆内容必须是 JSON 对象。");
-      return;
+      setMessage("新记忆内容必须是 JSON 对象。"); return;
     }
-    setBusy(true);
-    setMessage("");
+    setBusy(true); setMessage("");
     try {
       await correctMemory(entry.id, parsed as Record<string, unknown>, reason || undefined);
       await store.refreshAll();
       setEditing(false);
       setMessage("已保存为新版本；旧版本保留但不再参与召回。");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
   };
 
   const submitRetraction = async () => {
-    setBusy(true);
-    setMessage("");
+    setBusy(true); setMessage("");
     try {
       await retractMemory(entry.id, reason || undefined);
       await store.refreshAll();
       setConfirmRetract(false);
       setMessage("已撤回；这条记忆将不再用于后续召回，来源记录未删除。");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
   };
 
   return (
-    <div className="card-flat">
-      <div className="row between">
-        <span className="mono" style={{ color: "var(--accent)", fontSize: 11 }}>
-          {entry.source}
+    <article className={`mem-card ${active ? "is-active" : "is-retracted"}`}>
+      <header className="mem-card-head">
+        <span className="mem-source">{entry.source}</span>
+        <span className={`mem-pill ${active ? "is-active" : "is-retracted"}`}>
+          {active ? <IconCheck size={11} /> : <IconReject size={11} />}
+          {entry.status ?? "active"}
         </span>
-        <span className="row" style={{ gap: 8 }}>
-          <span className={`pill sm ${active ? "done" : "idle"}`}><span className="dot" />{entry.status ?? "active"}</span>
-          <span className="mono muted" style={{ fontSize: 11 }}>
-            {new Date(entry.created_at).toLocaleString()}
-          </span>
-        </span>
-      </div>
-      <pre
-        className="mono"
-        style={{
-          margin: "6px 0 0",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          fontSize: 11,
-          color: "var(--fg-2)",
-        }}
-      >
-        {JSON.stringify(entry.content, null, 2)}
-      </pre>
+        <time className="muted small mono" dateTime={entry.created_at}>
+          {new Date(entry.created_at).toLocaleString()}
+        </time>
+      </header>
+      <pre className="mem-claim">{JSON.stringify(entry.content, null, 2)}</pre>
       <Provenance item={entry} />
-      {entry.version_of ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>corrects {entry.version_of}</div> : null}
-      {entry.superseded_by ? <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>superseded by {entry.superseded_by}</div> : null}
-      {entry.trace_id ? (
-        <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>trace {entry.trace_id}</div>
-      ) : null}
+      {entry.version_of ? <p className="muted small">corrects <span className="mono">{entry.version_of}</span></p> : null}
+      {entry.superseded_by ? <p className="muted small">superseded by <span className="mono">{entry.superseded_by}</span></p> : null}
+      {entry.trace_id ? <p className="muted small">trace <span className="mono">{entry.trace_id}</span></p> : null}
       {active ? (
-        <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: "wrap" }}>
-          <button className="ghost" disabled={!backend || busy} onClick={() => { setEditing(!editing); setConfirmRetract(false); setReason(""); setMessage(""); }}>
+        <div className="mem-card-actions">
+          <button className="ghost sm" disabled={!backend || busy} onClick={() => { setEditing(!editing); setConfirmRetract(false); setReason(""); setMessage(""); }}>
             {editing ? "取消纠正" : "纠正记忆"}
           </button>
-          <button className="ghost danger" disabled={!backend || busy} onClick={() => { setConfirmRetract(!confirmRetract); setEditing(false); setReason(""); setMessage(""); }}>
+          <button className="ghost sm danger" disabled={!backend || busy} onClick={() => { setConfirmRetract(!confirmRetract); setEditing(false); setReason(""); setMessage(""); }}>
             撤回记忆
           </button>
-          {!backend ? <span className="mono muted" style={{ fontSize: 10 }}>预览模式不可修改</span> : null}
+          {!backend ? <span className="muted small mono">预览模式不可修改</span> : null}
         </div>
       ) : null}
       {editing ? (
-        <div className="col" style={{ gap: 7, marginTop: 10 }}>
-          <label className="mono muted" style={{ fontSize: 10 }}>新版本内容预览（JSON）</label>
-          <textarea className="mono" value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} style={{ width: "100%", minHeight: 100, resize: "vertical", fontSize: 11 }} />
+        <div className="mem-edit">
+          <label className="muted small mono">新版本内容预览（JSON）</label>
+          <textarea className="mono mem-edit-area" value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} />
           <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="纠正原因（可选）" />
-          <div className="row" style={{ gap: 6 }}>
+          <div className="mem-edit-actions">
             <button disabled={busy} onClick={() => void submitCorrection()}>{busy ? "保存中…" : "确认保存为新版本"}</button>
-            <span className="mono muted" style={{ fontSize: 10 }}>旧版本会保留为历史记录，但退出召回。</span>
+            <span className="muted small mono">旧版本会保留为历史记录，但退出召回。</span>
           </div>
         </div>
       ) : null}
       {confirmRetract ? (
-        <div className="col" style={{ gap: 7, marginTop: 10, padding: 10, border: "1px solid var(--bd-2)", borderRadius: "var(--r-2)" }}>
-          <strong style={{ fontSize: 12 }}>确认撤回这条记忆？</strong>
-          <span className="mono muted" style={{ fontSize: 10 }}>撤回后不再参与召回和画像；原始来源与审计记录会保留。此操作不是彻底删除。</span>
+        <div className="mem-confirm">
+          <strong>确认撤回这条记忆？</strong>
+          <span className="muted small">撤回后不再参与召回和画像；原始来源与审计记录会保留。此操作不是彻底删除。</span>
           <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="撤回原因（可选）" />
-          <div className="row" style={{ gap: 6 }}>
-            <button className="ghost danger" disabled={busy} onClick={() => void submitRetraction()}>{busy ? "处理中…" : "我确认撤回"}</button>
-            <button className="ghost" disabled={busy} onClick={() => setConfirmRetract(false)}>取消</button>
+          <div className="mem-edit-actions">
+            <button className="danger" disabled={busy} onClick={() => void submitRetraction()}>{busy ? "处理中…" : "我确认撤回"}</button>
+            <button className="ghost sm" disabled={busy} onClick={() => setConfirmRetract(false)}>取消</button>
           </div>
         </div>
       ) : null}
-      {message ? <div className="mono muted" role="status" style={{ fontSize: 10, marginTop: 7 }}>{message}</div> : null}
-    </div>
+      {message ? <div className="muted small mem-message" role="status">{message}</div> : null}
+    </article>
   );
 }
 
 function CandidateList({ candidates, store }: { candidates: MemoryCandidate[]; store: Store }) {
   if (candidates.length === 0)
-    return <div className="state-empty">no candidates — run a chat turn and <span className="mono">run BG once</span> to generate one</div>;
+    return <p className="mem-empty">还没有候选记忆 — 跑一次对话再 <span className="mono">run BG once</span>，会从这里冒出来。</p>;
   return (
-    <div className="scroll" style={{ padding: "4px 6px", display: "flex", flexDirection: "column", gap: 8 }}>
-      {candidates.map((c) => (
-        <CandidateCard key={c.id} c={c} store={store} />
-      ))}
-    </div>
+    <ul className="mem-entry-list">
+      {candidates.map((c) => <li key={c.id}><CandidateCard c={c} store={store} /></li>)}
+    </ul>
   );
 }
 
 function CandidateCard({ c, store }: { c: MemoryCandidate; store: Store }) {
-  // Synthetic lifecycle: candidate -> validated -> backed_up -> applied -> vector_upserted -> cache_invalidated.
-  // We compute "how far along" from status + presence in project memory.
   const inProject = store.state.memory.project.some((p) => p.id === c.id);
   let stages: LifecycleStage[] = ["candidate"];
   if (c.status === "rejected") {
     stages = ["candidate"];
   } else if (c.status === "committed" || inProject) {
-    stages = [
-      "candidate",
-      "validated",
-      "backed_up",
-      "applied",
-      "vector_upserted",
-      "cache_invalidated",
-    ];
+    stages = ["candidate", "validated", "backed_up", "applied", "vector_upserted", "cache_invalidated"];
   }
 
+  const tone = c.status === "committed" ? "is-committed" : c.status === "rejected" ? "is-rejected" : "is-pending";
+  const backend = store.state.ui.dataMode === "backend";
+
   return (
-    <div
-      style={{
-        border: `1px solid ${c.status === "committed" ? "rgba(78,201,138,0.4)" : c.status === "rejected" ? "rgba(255,110,110,0.4)" : "var(--bd-2)"}`,
-        background: "var(--bg-2)",
-        borderRadius: "var(--r-2)",
-        padding: "10px 12px",
-      }}
-    >
-      <div className="row between" style={{ marginBottom: 6 }}>
-        <div className="row" style={{ gap: 8 }}>
-          <span className="mono" style={{ color: "var(--accent)", fontSize: 12 }}>
-            {c.source}
-          </span>
-          <span className="mono dim" style={{ fontSize: 11 }}>{c.id.slice(0, 13)}…</span>
-        </div>
-        <span className={`pill sm ${c.status === "committed" ? "done" : c.status === "rejected" ? "failed" : "pending"}`}>
-          <span className="dot" />
-          {c.status}
-        </span>
-      </div>
-      <pre
-        className="mono"
-        style={{ margin: 0, fontSize: 11, color: "var(--fg-2)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-      >
-        {JSON.stringify(c.content, null, 2)}
-      </pre>
+    <article className={`mem-card mem-candidate ${tone}`}>
+      <header className="mem-card-head">
+        <span className="mem-source">{c.source}</span>
+        <span className={`mem-pill ${tone}`}>{c.status}</span>
+        <span className="muted small mono mem-candidate-id">{c.id.slice(0, 13)}…</span>
+      </header>
+      <pre className="mem-claim">{JSON.stringify(c.content, null, 2)}</pre>
       <Provenance item={c} />
-      <div className="row" style={{ gap: 4, marginTop: 8, flexWrap: "wrap" }}>
-        {LIFECYCLE_STAGES.map((s) => (
-          <span
-            key={s}
-            className={`pill sm ${stages.includes(s) ? "done" : "idle"}`}
-            title={s}
-          >
-            <span className="dot" />
-            {s}
+      <div className="mem-lifecycle" aria-label="lifecycle">
+        {LIFECYCLE_STAGES.map((s, i) => (
+          <span key={s} className={`mem-stage ${stages.includes(s) ? "is-done" : "is-pending"}`}>
+            <span className="mem-stage-dot" />
+            <span className="mem-stage-label">{s}</span>
+            {i < LIFECYCLE_STAGES.length - 1 ? <span className="mem-stage-bar" /> : null}
           </span>
         ))}
       </div>
       {c.status === "candidate" ? (
-        <div className="row" style={{ gap: 6, marginTop: 10 }}>
-          <button disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.approveCandidate(c.id)} title="Commit memory candidate">
+        <div className="mem-card-actions">
+          <button disabled={!backend} onClick={() => void store.approveCandidate(c.id)} title="Commit memory candidate">
             <span className="row" style={{ gap: 6 }}>
               <IconApprove size={11} /> Approve
             </span>
           </button>
-          <button className="ghost danger" disabled={store.state.ui.dataMode !== "backend"} onClick={() => void store.rejectCandidate(c.id)}>
+          <button className="ghost danger" disabled={!backend} onClick={() => void store.rejectCandidate(c.id)}>
             <span className="row" style={{ gap: 6 }}>
               <IconReject size={11} /> Reject
             </span>
           </button>
-          <span className="mono muted" style={{ fontSize: 10 }}>
-            {store.state.ui.dataMode === "backend" ? "saved by backend" : "preview data — actions unavailable"}
-          </span>
+          <span className="muted small mono">{backend ? "saved by backend" : "preview data — actions unavailable"}</span>
         </div>
       ) : null}
-    </div>
+    </article>
   );
 }

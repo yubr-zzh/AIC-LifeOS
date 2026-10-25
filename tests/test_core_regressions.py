@@ -429,6 +429,40 @@ class CoreRegressionTests(unittest.TestCase):
             run(memory.retract_memory(original["id"]))
         self.assertEqual(memory._find_memory(memory._read(), original["id"])["superseded_by"], corrected["id"])
 
+    def test_memory_correction_splits_validity_at_correction_time(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        memory = MemoryManager(self.path)
+        candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "old wording"},
+            valid_from="2026-01-01T00:00:00+00:00",
+        ))
+        original = run(memory.commit_candidate(candidate["id"]))
+        correction_time = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
+
+        class FrozenDateTime(datetime):
+            @classmethod
+            def utcnow(cls):
+                return correction_time.replace(tzinfo=None)
+
+        with patch("lifeos.memory.manager.datetime", FrozenDateTime):
+            corrected = run(memory.correct_memory(original["id"], {"preference": "new wording"}))
+
+        boundary = correction_time - timedelta(microseconds=1)
+        self.assertEqual(
+            MemoryManager._find_memory(memory._read(), original["id"])["valid_until"],
+            boundary.isoformat(),
+        )
+        self.assertEqual(corrected["valid_from"], correction_time.replace(tzinfo=None).isoformat())
+        before = run(memory.retrieve("old wording", as_of="2026-05-01T00:00:00+00:00"))
+        at_boundary = run(memory.retrieve("old wording", as_of=boundary))
+        at_correction = run(memory.retrieve("new wording", as_of=correction_time))
+        self.assertEqual([item["id"] for item in before["user"]], [original["id"]])
+        self.assertEqual([item["id"] for item in at_boundary["user"]], [original["id"]])
+        self.assertEqual([item["id"] for item in at_correction["user"]], [corrected["id"]])
+
     def test_explicit_memory_retraction_is_idempotent_and_not_recallable(self):
         memory = MemoryManager(self.path)
         candidate = run(memory.propose_update("direct", {"preference": "quiet"}))
@@ -768,6 +802,62 @@ class CoreRegressionTests(unittest.TestCase):
         }
         self.assertEqual(active_learning_ids, {learning_candidates[1]["id"], bob_candidate["id"]})
 
+    def test_memory_profile_excludes_derived_claim_when_source_is_retracted(self):
+        memory = MemoryManager(self.path)
+        source_candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "source wording"},
+            source_ref={"kind": "manual", "record_id": "source-1"},
+        ))
+        source = run(memory.commit_candidate(source_candidate["id"]))
+        store = memory._read()
+        store["user"].append({
+            "id": "derived-1",
+            "source": "reflection",
+            "category": "user",
+            "scope": source["scope"],
+            "source_ids": [source["id"]],
+            "content": {"summary": "derived wording"},
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00",
+        })
+        memory._write(store)
+        profile_ids = {
+            item["id"]
+            for profile in memory.profile_view()["core_profiles"]
+            for item in profile["memories"]
+        }
+        self.assertEqual(profile_ids, {source["id"], "derived-1"})
+
+        run(memory.retract_memory(source["id"], "source withdrawn"))
+        self.assertEqual(memory.profile_view()["core_profiles"], [])
+
+        source_candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "another source wording"},
+            source_ref={"kind": "manual", "record_id": "source-2"},
+        ))
+        source = run(memory.commit_candidate(source_candidate["id"]))
+        store = memory._read()
+        store["user"].append({
+            "id": "derived-2",
+            "source": "reflection",
+            "category": "user",
+            "scope": source["scope"],
+            "source_ids": [source["id"]],
+            "content": {"summary": "second derived wording"},
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00",
+        })
+        memory._write(store)
+        run(memory.correct_memory(source["id"], {"preference": "corrected wording"}))
+        profile_ids = {
+            item["id"]
+            for profile in memory.profile_view()["core_profiles"]
+            for item in profile["memories"]
+        }
+        self.assertNotIn("derived-2", profile_ids)
+
     def test_legacy_memory_store_is_upgraded_once_with_backup(self):
         legacy_store = {
             "user": [{"id": "old-user", "source": "direct", "content": {"preference": "short"}}],
@@ -872,6 +962,7 @@ class CoreRegressionTests(unittest.TestCase):
                 self.deletes = []
                 self.write_bindings = []
                 self.fail_next_write = False
+                self.fail_next_delete = False
 
             def scope_key_for(self, scope):
                 return scope.get("kind", "global")
@@ -884,6 +975,9 @@ class CoreRegressionTests(unittest.TestCase):
                 self.writes.append(item["id"])
 
             def delete_approved_memory(self, memory_id, *, scope=None, remote_scope_key=None):
+                if self.fail_next_delete:
+                    self.fail_next_delete = False
+                    raise RuntimeError("simulated provider delete outage")
                 self.deletes.append(memory_id)
 
         provider = FakeMemoryProvider()
@@ -963,6 +1057,17 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(
             agent.memory._find_memory(agent.memory._read(), pending["id"])["provider_sync"]["remote_scope_key"],
             "global",
+        )
+        pending_delete = run(agent.memory.propose_update("direct", {"preference": "delete retry"}))
+        fetch(f"/memory/candidates/{pending_delete['id']}/commit", "POST")
+        provider.fail_next_delete = True
+        failed_retract = fetch(f"/memory/{pending_delete['id']}/retract", "POST")
+        self.assertEqual(failed_retract["memory"]["status"], "retracted")
+        self.assertEqual(failed_retract["memory"]["provider_sync"]["status"], "pending")
+        retried_delete = fetch("/memory/providers/tencentdb/sync-pending", "POST")
+        self.assertEqual(
+            retried_delete["results"],
+            [{"memory_id": pending_delete["id"], "status": "deleted"}],
         )
         self.assertEqual(fetch("/skills/pending/skill-1/approve", "POST")["status"], "approved")
         self.assertEqual(fetch("/skills")["approved"][0]["id"], "skill-1")

@@ -3,3 +3,6 @@ dist
 .DS_Store
 .vite
 *.log
+.shots/
+.test-shot.*
+.dev-server.log*

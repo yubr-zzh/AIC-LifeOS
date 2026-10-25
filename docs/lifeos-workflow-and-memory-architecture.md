@@ -257,7 +257,7 @@ LifeOS 区分候选记忆与已采纳记忆，并区分“不再用于当前理�
 
 除候选阶段的自动整理外，实质改变已采纳认知或执行不可逆删除前，必须尊重用户确认边界。当前 MVP 先实现可逆的替代/撤回语义；硬删除级联、备份保留期限和多层存储同步暂不在本阶段实现。
 
-当前后端 MVP 通过 `POST /memory/{id}/correct` 和 `POST /memory/{id}/retract` 接收明确操作：纠正写入关联的新版本，撤回写入 tombstone 状态；两者都会使旧条目退出召回、移除对应向量项并清空缓存。Markdown 导入不能覆盖或移除既有 Memory。候选仍通过显式 commit/reject 审核。当前没有可靠的冲突检测器，因此不引入空壳 `needs_confirmation` 状态；后续检测器必须附带候选、目标 active 记忆和双方证据来源，未经用户确认不得改变 active 版本。物理删除及跨持久层级联清理是独立设计项。
+当前后端 MVP 通过 `POST /memory/{id}/correct` 和 `POST /memory/{id}/retract` 接收明确操作：纠正写入关联的新版本，并在纠正时刻切分新旧版本的有效区间；旧版退出当前召回和画像、但可用于纠正前的历史查询。撤回写入 tombstone 状态；两者都会更新向量索引并清空缓存。Markdown 导入不能覆盖或移除既有 Memory。候选仍通过显式 commit/reject 审核。当前没有可靠的冲突检测器，因此不引入空壳 `needs_confirmation` 状态；后续检测器必须附带候选、目标 active 记忆和双方证据来源，未经用户确认不得改变 active 版本。物理删除及跨持久层级联清理是独立设计项。
 
 ## 6. ai-memory 与 TencentDB 的组合方式
 

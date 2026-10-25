@@ -4,10 +4,17 @@ import { FEEDBACK_RATINGS } from "../api/types";
 import type { AgentRoutingPolicy, FeedbackRating, MemoryScope } from "../api/types";
 import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
-import { IconSend, IconCopy, IconMessage } from "../components/Icons";
+import { IconChevron, IconCopy, IconMessage, IconSend, IconTrash } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
 import { DelegationCard } from "./DelegationCard";
 import type { AgentActions } from "../hooks/useAgentStream";
+
+const HISTORY_COLLAPSED_KEY = "lifeos.chat.historyCollapsed.v1";
+
+function readHistoryCollapsed(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try { return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1"; } catch { return false; }
+}
 import type { AgentStore } from "../state/agentStore";
 
 interface Props {
@@ -85,6 +92,7 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [contextOpen, setContextOpen] = useState(false);
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
+  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(readHistoryCollapsed);
   const [activeId, setActiveId] = useState(() => newConversationId());
   const [historyReady, setHistoryReady] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -179,6 +187,24 @@ export function ChatPanel({ store, agent, api }: Props) {
     store.dispatch({ type: "REPLACE_MESSAGES", messages: conversation.messages });
   };
 
+  const deleteConversation = (id: string, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (state.loading.chat) return;
+    setHistory((previous) => {
+      const next = previous.filter((item) => item.id !== id);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* best effort */ }
+      return next;
+    });
+    if (id === activeId) {
+      const remaining = history.filter((item) => item.id !== id);
+      if (remaining[0]) {
+        openConversation(remaining[0]);
+      } else {
+        startNew();
+      }
+    }
+  };
+
   const showWelcome = state.messages.length === 0 ||
     (state.messages.length === 1 && state.messages[0].id === WELCOME_ID);
 
@@ -190,21 +216,56 @@ export function ChatPanel({ store, agent, api }: Props) {
     }
   };
 
+  const toggleHistoryCollapsed = () => {
+    setHistoryCollapsed((current) => {
+      const next = !current;
+      if (typeof localStorage !== "undefined") {
+        try { localStorage.setItem(HISTORY_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* best effort */ }
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="chat-workspace">
-      <aside className="chat-history" aria-label="对话历史">
-        <button className="chat-new" onClick={startNew} disabled={state.loading.chat}>
-          <span aria-hidden="true">＋</span> 新建对话
-        </button>
+    <div className={`chat-workspace ${historyCollapsed ? "is-history-collapsed" : ""}`}>
+      <aside className="chat-history" aria-label="对话历史" aria-hidden={historyCollapsed}>
+        <header className="chat-history-head">
+          <button className="chat-new" onClick={startNew} disabled={state.loading.chat}>
+            <span aria-hidden="true">＋</span> 新建对话
+          </button>
+          <button
+            className="chat-history-toggle"
+            onClick={toggleHistoryCollapsed}
+            title="收起历史栏"
+            aria-label="收起历史栏"
+          >
+            <IconChevron size={12} />
+          </button>
+        </header>
         <div className="chat-history-label">最近对话</div>
         <div className="chat-history-list">
           {history.map((item) => (
-            <button key={item.id} className={`chat-history-item ${item.id === activeId ? "active" : ""}`}
-              onClick={() => openConversation(item)} disabled={state.loading.chat}>
-              <IconMessage size={15} />
-              <span className="chat-history-title">{item.title || "新对话"}</span>
-              <time>{shortDate(item.updatedAt)}</time>
-            </button>
+            <div key={item.id} className={`chat-history-row ${item.id === activeId ? "active" : ""}`}>
+              <button
+                className="chat-history-item"
+                onClick={() => openConversation(item)}
+                disabled={state.loading.chat}
+                title={item.title || "新对话"}
+              >
+                <IconMessage size={15} />
+                <span className="chat-history-title">{item.title || "新对话"}</span>
+                <time>{shortDate(item.updatedAt)}</time>
+              </button>
+              <button
+                className="chat-history-delete"
+                onClick={(event) => deleteConversation(item.id, event)}
+                disabled={state.loading.chat}
+                aria-label={`删除对话 ${item.title || "新对话"}`}
+                title="删除这个对话"
+              >
+                <IconTrash size={13} />
+              </button>
+            </div>
           ))}
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
@@ -213,6 +274,16 @@ export function ChatPanel({ store, agent, api }: Props) {
 
       <section className="chat-conversation" aria-label="当前对话">
         <header className="chat-toolbar">
+          {historyCollapsed ? (
+            <button
+              className="chat-history-show"
+              onClick={toggleHistoryCollapsed}
+              title="展开历史栏"
+              aria-label="展开历史栏"
+            >
+              <IconChevron size={12} />
+            </button>
+          ) : null}
           <div className="chat-toolbar-title">
             <strong>{titleFor(state.messages)}</strong>
             <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
@@ -253,14 +324,12 @@ export function ChatPanel({ store, agent, api }: Props) {
 
         <div ref={scroller} className="chat-messages scroll" aria-live="polite">
           {showWelcome ? (
-            <div className="chat-welcome">
-              <div className="chat-welcome-mark"><IconMessage size={22} /></div>
-              <span className="chat-eyebrow">LifeOS · 你的第二大脑</span>
-              <h2>今天想从哪里开始？</h2>
-              <p>聊聊正在思考的事，或把一个想法变成可以行动的下一步。</p>
+            <div className="chat-intro">
+              <div className="chat-intro-mark"><IconMessage size={16} /></div>
+              <p className="chat-intro-line">从这里开始。把正在想的事说给我，或者从一个具体的下一步开始。</p>
               <div className="chat-prompts">
                 {["帮我梳理今天最重要的事", "基于我的项目记忆继续推进", "把一个想法拆成行动步骤"].map((prompt) => (
-                  <button key={prompt} onClick={() => { setText(prompt); }} disabled={state.loading.chat}>{prompt}<span>→</span></button>
+                  <button key={prompt} onClick={() => setText(prompt)} disabled={state.loading.chat}>{prompt}</button>
                 ))}
               </div>
             </div>
