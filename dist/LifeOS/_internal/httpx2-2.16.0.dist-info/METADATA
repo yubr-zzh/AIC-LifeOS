@@ -1,6 +1,6 @@
 Metadata-Version: 2.5
 Name: httpx2
-Version: 2.13.1
+Version: 2.16.0
 Summary: The next generation HTTP client.
 Project-URL: Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md
 Project-URL: Homepage, https://github.com/pydantic/httpx2
@@ -19,16 +19,15 @@ Classifier: License :: OSI Approved :: BSD License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Internet :: WWW/HTTP
-Requires-Python: >=3.10
+Requires-Python: >=3.11
 Requires-Dist: anyio>=4.10; sys_platform != 'emscripten'
-Requires-Dist: httpcore2==2.13.1; sys_platform != 'emscripten'
+Requires-Dist: httpcore2==2.16.0; sys_platform != 'emscripten'
 Requires-Dist: httpx2-jsfetch; sys_platform == 'emscripten' and python_version >= '3.12'
 Requires-Dist: idna>=3.18
 Requires-Dist: truststore>=0.10; sys_platform != 'emscripten'
@@ -214,14 +213,17 @@ inspiration around the lower-level networking details.
 
 ## Release Information
 
-## 2.13.1 (September 23rd, 2026)
+## 2.16.0 (October 21st, 2026)
+
+### Changed
+
+* Look up only the cookie domains that match the request host, and skip the expired cookie sweep until a cookie is due. With 1,000 cookies across 500 domains, building the `Cookie` header is about 18 times faster. Cookies from different domains are now sent from the least to the most specific domain.
+  ([#1285](https://github.com/pydantic/httpx2/pull/1285))
 
 ### Fixed
 
-* Calculate `Content-Length` from the remaining bytes when a file is passed as `content=`, respecting its current position.
-  ([#1214](https://github.com/pydantic/httpx2/pull/1214))
-* Stop the sync WebSocket keepalive thread cleanly when a ping races with connection shutdown.
-  ([#1228](https://github.com/pydantic/httpx2/pull/1228))
+* Reuse the client cookie jar instead of copying it on every request and redirect. A custom policy set with `client.cookies.jar.set_policy()` now applies to outgoing requests.
+  ([#1284](https://github.com/pydantic/httpx2/pull/1284))
 
 ---
 
