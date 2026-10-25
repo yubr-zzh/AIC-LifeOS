@@ -1,122 +1,157 @@
-# LifeOS 桌面版（软件 v2.0.8）
+<p align="center">
+  <img src="tools/assets/claude3.png" width="128" alt="LifeOS">
+</p>
 
-LifeOS 是一个本地优先的个人智能体操作系统：前台 Chat Agent 与后台 Global Agent 协作，配合可靠事件总线、两阶段记忆写入、反思引擎与技能进化。软件 v2.0 以 **Windows 桌面应用**形态交付——pywebview（WebView2）壳 + 内嵌后端 + 本地 Agent bridge，双击即用，数据全部留在本机。
+<div align="center">
+  <h1>LifeOS</h1>
+  <p><b>A local-first personal agent OS that runs on your Windows machine.</b></p>
+  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
+  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
+  <img src="https://img.shields.io/badge/tests-985%20cases-brightgreen?style=flat-square" alt="Tests">
+</div>
+
+---
+
+**LifeOS** pairs a front-stage chat agent with a background global agent. The two share a reliable event bus, a two-phase memory store, a reflection engine, and a skill evolution loop. Version 2.2.0 ships as a Windows desktop app: a pywebview (WebView2) shell, an embedded Python backend, and a local agent bridge. Double-click the exe and it runs. All data stays on your machine.
+
+## The problem it solves
+
+Cloud assistants hold your notes, your schedule, and your chat history on someone else's server. LifeOS keeps all of it in a local SQLite store under `%USERPROFILE%\lifeOS`. The planner runs inside the app. The agents run on your machine, in folders you marked as trusted. You approve every file write and every command before it happens.
+
+## How it works
 
 ```text
-LifeOS.exe（pywebview 桌面壳，单实例）
-  └─ lifeos.api.server（主服务，8765 起自动探测端口）
-       ├─ 静态托管 frontend/dist + SPA fallback（打包态同源，无 CORS）
-       ├─ 登录闸：本地账户 + PBKDF2 + HttpOnly 会话 Cookie + CSRF
-       └─ bridge 子进程（lifeos.bridge.run）
-            └─ Agent 适配器（claude_code 等，经 claude-agent-sdk 调本机 CLI）
+LifeOS.exe (pywebview desktop shell, single instance)
+  └─ lifeos.api.server (main service, port 8765 with auto-probe)
+       ├─ static hosting of frontend/dist + SPA fallback (same origin, no CORS)
+       ├─ login gate: local accounts + PBKDF2 + HttpOnly session cookie + CSRF
+       └─ bridge subprocess (lifeos.bridge.run)
+            └─ agent adapters (claude_code and more, via claude-agent-sdk)
 
-核心数据流：
-用户输入 → Chat Agent（记忆检索 → LLM/工具）→ 响应
-        → 可靠事件总线 → Global Agent → 反思 → 记忆候选 → 安全审查 → 持久化
+Core data flow:
+user input → chat agent (memory recall → LLM/tools) → reply
+           → reliable event bus → global agent → reflection
+           → memory candidates → security review → persist
 ```
 
-## 功能特性
+## Features
 
-- **桌面应用**：单实例锁、端口自动探测、关窗后自动停 bridge 与 claude 子进程。
-- **登录体系**：本地账户（PBKDF2 600k 轮），会话 Cookie + CSRF 防线；首次使用直接创建账户，支持自定义本地头像、修改密码，以及使用 Windows DPAPI 加密保存的 30 天记住密码。
-- **本地 Agent**：bridge 独立进程 + 信任根目录确认 + 目录选择对话框；claude CLI「检测本机优先、捆绑兜底」双策略。
-- **Agent 进化闭环**：事件总线 → 反思引擎 → 记忆候选（两阶段写入）→ 技能候选检测与评估 → MCP 工具接入。
-- **今日工作台**：今日安排可勾选并联动进度，内置 20 组每日提醒；右上角 Inbox 汇总本机 Agent 的完成与待确认通知。
-- **记录与复盘**：每日/阶段规划与复盘使用轻量 Markdown 编辑器，复盘自动承接对应计划事项并支持额外事项；规划与复盘页右侧展示可直接点击回看的历史记录，可新建多条并在保存后看到 SQLite 记录编号；复盘会汇总读取全部每日/阶段规划条目。
-- **工作历**：以 GitHub contribution graph 风格汇总全年规划、复盘、日记与心得记录。
-- **对话分栏**：主导航与最近对话侧栏均可收起，LifeOS 对话与 Agent 对话之间支持左右拖拽调整宽度；消息支持一键复制、对话可重命名，并可附带最多 3 个文本/代码/配置文件；两侧对话区均有独立滚动条，页面整体布局固定，仅消息内容区上下滚动。
-- **本地 Agent 协作**：Agent 活动面板固定于页面底部、最多展示 20 条并内滚；未连接时仍可编辑输入草稿，工作时显示转圈状态，记忆提炼面板可关闭，委派结束仅在整批任务完成后显示。
+| Area | What you get |
+| --- | --- |
+| Desktop shell | Single-instance lock, port auto-probe from 8765 to 8790, bridge and child processes stop when the window closes. |
+| Accounts | Local accounts with PBKDF2 (600k rounds), HttpOnly session cookie plus CSRF gate, custom avatar, password change, 30-day remember-me encrypted with Windows DPAPI. |
+| Local agents | Bridge runs as a separate process, with trust-root confirmation and a native folder picker. Claude CLI resolution checks the machine first and falls back to the bundled copy. |
+| Agent loop | Event bus feeds the reflection engine, which proposes memory candidates through a two-phase write, then skill candidates get detected and evaluated, and MCP tools plug in. |
+| Today | A checkable plan for the day, 20 built-in daily reminders, and an inbox that collects agent completions and pending approvals. |
+| Journal | Daily and phase plans and reviews in a light markdown editor. Reviews inherit plan items. History sits one click away, and each save shows its SQLite record id. |
+| Year view | A GitHub-style contribution graph that aggregates plans, reviews, diary entries, and notes for the whole year. |
+| Chat | Collapsible navigation and recent-session sidebars, drag-to-resize split between LifeOS and agent conversations, one-click copy, rename, up to 3 attached text, code, or config files. |
+| Agent panel | Docked at the bottom with up to 20 live items, editable drafts while disconnected, and a closable memory-refine view. |
 
-## 快速使用
+## Install
 
-- **安装器**：运行 `LifeOS-Setup-x.x.exe`（Inno Setup 产物），装后从开始菜单/桌面启动；用户数据在 `%USERPROFILE%\lifeOS`（首次启动会把 AppData 下的 `.lifeOS` / `LifeOS` 旧数据复制迁移，旧目录保留为备份），卸载时可选保留。
-- **免安装**：直接运行 `dist\LifeOS\LifeOS.exe`。
+Run `LifeOS-Setup-2.2.0.exe` and start LifeOS from the Start menu or the desktop shortcut. User data lives in `%USERPROFILE%\lifeOS`. The first launch copies legacy data from the old AppData folder and keeps the original as a backup. Uninstall asks before it removes any data.
 
-## 从源码构建
+Portable use: run `dist\LifeOS\LifeOS.exe` directly, with no installer.
 
-环境要求（Windows 10/11）：
+## Build from source
 
-- Python 3.11+（开发机实测 3.13）
-- Node.js（构建前端）
-- Inno Setup 6（可选，出安装器）
-- 原生 `claude.exe`（可选但推荐：SDK 拒绝 npm 的 `.cmd` 垫片，打包态需原生 exe 捆绑兜底）
+You need Windows 10 or 11 plus:
+
+- Python 3.11 or newer (tested on 3.13)
+- Node.js, for the frontend build
+- Inno Setup 6, only if you want the installer
+- A native `claude.exe`, optional. The SDK rejects the npm `.cmd` shim, so bundle a native exe for the packaged fallback.
 
 ```powershell
-# 1) 后端虚拟环境
+# 1) backend virtualenv
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 
-# 2) 前端依赖
+# 2) frontend dependencies
 cd frontend
 npm ci
 cd ..
 
-# 3) 指定要捆绑的原生 claude.exe（可选，未设则运行时走 PATH 探测）
+# 3) point at a native claude.exe to bundle (optional, PATH probing otherwise)
 $env:LIFEOS_CLAUDE_SRC = "C:\path\to\claude.exe"
 
-# 4) 一键打包：npm run build → PyInstaller → 捆绑 claude.exe
+# 4) one-shot build: npm run build → PyInstaller → optional claude.exe bundling
 powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 
-# 5)（可选）编译安装器
+# 5) installer, optional
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.8.exe`（安装器）。
+The build produces `dist\LifeOS\LifeOS.exe` (onedir) and `dist\LifeOS-Setup-2.2.0.exe`.
 
-## 开发调试
+## Development
 
 ```powershell
-# 后端（LIFEOS_HOME 指定数据根，默认 ./lifeOS/）
+# backend (LIFEOS_HOME sets the data root, default ./lifeOS/)
 .venv\Scripts\python -m lifeos.api.server
 
-# 前端热更（5173，vite 代理 /api 到后端）
+# frontend dev server on 5173, vite proxies /api to the backend
 cd frontend && npm run dev
 
-# 桌面链路冒烟：/api 归一 + 直连代理 + bridge/start
+# desktop-link smoke test: /api normalization, direct proxy, bridge/start
 .venv\Scripts\python tools\verify_desktop_link.py
 ```
 
-## 测试
+## Tests
 
 ```powershell
+# backend, about 855 cases
 .venv\Scripts\python -m pytest tests -q
 .venv\Scripts\python -m compileall lifeos
+
+# frontend, about 130 cases, plus typecheck
+cd frontend
+npm test
+npm run typecheck
 ```
 
-全量约 855 个用例。注意：`tests/test_codex_lc_ji_cheng.py`、`test_liu_xing_lc_ji_cheng.py`、`test_pi_lc_ji_cheng.py` 会访问真实外网端点，离线或 CI 环境请加 `--ignore` 排除。
+Three backend files (`tests/test_codex_lc_ji_cheng.py`, `test_liu_xing_lc_ji_cheng.py`, `test_pi_lc_ji_cheng.py`) call real external endpoints. Exclude them with `--ignore` when you work offline or in CI.
 
-## 目录结构
+## Repository layout
 
 ```text
 lifeos/
-  desktop/          # 桌面壳入口（单实例/端口/装配/关停时序）
-  api/              # 主服务：静态托管、登录闸、隧道网关、设备、用户
-  bridge/           # 本地 Agent 进程：适配器、仲裁、脱敏、恢复
-  agent/            # Chat Agent / Global Agent / 规划 / 执行
-  memory/           # 两阶段记忆写入：检索、候选、生命周期
-  skills/           # 技能注册表、候选检测、效果评估
-  reflection/       # 后台反思引擎
-  event/            # 本地可靠事件队列
-  security/         # 权限审查
-  llm/              # 统一 LLM 接口
-  mcp/              # MCP Server 注册表与适配
-frontend/           # React + TypeScript + Vite 控制台（npm run build 产 dist）
-tools/              # build_exe.ps1 / lifeos.spec / lifeos-setup.iss / verify_*.py
-tests/              # 后端全量测试
-docs/               # 架构与 API 文档
+  desktop/          # desktop shell entry: single instance, ports, shutdown order
+  api/              # main service: static hosting, login gate, tunnel gateway, devices, users
+  bridge/           # local agent process: adapters, arbitration, redaction, recovery
+  agent/            # chat agent, global agent, planning, execution
+  memory/           # two-phase memory write: recall, candidates, lifecycle
+  skills/           # skill registry, candidate detection, effect evaluation
+  reflection/       # background reflection engine
+  event/            # local reliable event queue
+  security/         # permission review
+  llm/              # unified LLM interface
+  mcp/              # MCP server registry and adapters
+frontend/           # React + TypeScript + Vite console (npm run build feeds dist)
+tools/              # build_exe.ps1, lifeos.spec, lifeos-setup.iss, verify_*.py
+tests/              # full backend test suite
+docs/               # architecture and API documents
 ```
 
-## 文档索引
+## Documentation
 
-- [docs/api-contract.md](docs/api-contract.md) — 前后端 API 对齐
-- [docs/agent-memory-integration.md](docs/agent-memory-integration.md) — Agent 执行结果进入记忆的流程
-- [docs/memory-module-handoff.md](docs/memory-module-handoff.md) — 记忆模块交接
-- [docs/memory-provider-boundaries.md](docs/memory-provider-boundaries.md) — 记忆 Provider 边界
-- [docs/lifeos-workflow-and-memory-architecture.md](docs/lifeos-workflow-and-memory-architecture.md) — 工作流与记忆架构
-- [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md) — 团队模块集成方案
+- [docs/api-contract.md](docs/api-contract.md), frontend and backend API alignment
+- [docs/agent-memory-integration.md](docs/agent-memory-integration.md), how agent results enter memory
+- [docs/memory-module-handoff.md](docs/memory-module-handoff.md), memory module handoff
+- [docs/memory-provider-boundaries.md](docs/memory-provider-boundaries.md), memory provider boundaries
+- [docs/lifeos-workflow-and-memory-architecture.md](docs/lifeos-workflow-and-memory-architecture.md), workflow and memory architecture
+- [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md), team module integration plan
 
-## 注意事项
+## Runtime notes
 
-- 运行时数据（用户信息与记忆）统一写入用户工作目录下的 `./lifeOS/`：安装版使用 `%USERPROFILE%\lifeOS`，开发态使用当前工作目录下的 `lifeOS/`；首次启动会从 AppData 旧目录复制迁移，旧目录保留为备份。
-- 打包若未捆绑 claude.exe，运行时从 PATH 探测；npm 安装的 `.cmd` 垫片会被 SDK 拒绝，务必用原生 exe。
-- 主服务默认 8765，被占时向上探测至 8790；测试残留的 bridge 进程可能占住 8766-8770，可结束 `python -m lifeos.bridge.run` 进程清理。
+- Runtime data goes to `%USERPROFILE%\lifeOS` for installs and `./lifeOS/` for source runs. The first start copies legacy AppData data and keeps the old folder as a backup.
+- Without a bundled claude.exe the app probes PATH at runtime. The npm `.cmd` shim gets rejected by the SDK, so use a native exe.
+- The main service listens on 8765 and probes upward to 8790 when busy. Test leftovers can hold ports 8766 to 8770; end the `python -m lifeos.bridge.run` process to free them.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). It covers the dev loop, the test commands, and the commit message convention.
