@@ -371,7 +371,15 @@
 @keyframes agent-spin { to { transform: rotate(360deg); } }
 
 /* ---- Memory capture panel with explicit dismissal ---- */
-.agent-memory-capture { padding: 12px; border-top: 1px solid var(--bd-1); }
+.agent-memory-capture {
+  flex: 0 1 auto;
+  max-height: min(300px, 38vh);
+  overflow-y: auto;
+  padding: 12px;
+  border-top: 1px solid var(--bd-1);
+  background: var(--bg-2);
+  scrollbar-width: thin;
+}
 .agent-memory-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .agent-memory-head > div { display: flex; align-items: center; gap: 5px; }
 .agent-memory-close {
@@ -425,4 +433,143 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   .chat-split-grid.resizable { grid-template-columns: 1fr !important; min-height: 0; }
   .chat-split-resizer { display: none; }
   .chat-split-grid.resizable > .agp { height: auto; max-height: none; }
+}
+
+/* ---- Normal conversation view for Agent chat ---- */
+.agent-exchange {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  align-items: flex-start;
+}
+.agent-exchange.user { justify-content: flex-end; }
+.agent-exchange-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 88%;
+}
+.agent-exchange.user .agent-exchange-main { align-items: flex-end; }
+.agent-exchange-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border: 1px solid var(--bd-2);
+  border-radius: 9px;
+  background: var(--bg-2);
+  color: var(--accent-dim);
+  font: 700 11px/1 var(--font-display);
+}
+.agent-exchange-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  color: var(--fg-3);
+  font-size: 11px;
+}
+.agent-exchange-meta strong { color: var(--fg-2); font-size: 12px; font-weight: 650; }
+.agent-exchange-bubble {
+  max-width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--bd-1);
+  border-radius: 13px 13px 13px 4px;
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-size: 13.5px;
+  line-height: 1.68;
+}
+.agent-exchange.user .agent-exchange-bubble {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--bd-1));
+  border-radius: 13px 13px 4px 13px;
+  background: var(--accent-soft);
+}
+.agent-exchange-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-exchange-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 6px;
+}
+.agent-exchange-footer time { color: var(--fg-4); font-size: 10px; }
+.agent-exchange-footer .copy-text-button { min-height: 22px; padding: 1px 6px; font-size: 10px; }
+.agent-streaming-bubble { min-width: 88px; color: var(--fg-2); }
+.agent-typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: agent-chat-pulse .9s ease-in-out infinite alternate;
+}
+@keyframes agent-chat-pulse { to { opacity: .35; transform: scale(.72); } }
+.agent-execution-detail {
+  width: calc(100% - 34px);
+  margin-left: 34px;
+  padding: 7px 9px;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  color: var(--fg-2);
+}
+.agent-execution-detail.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
+.agent-execution-detail summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.agent-execution-detail summary .mono { color: var(--fg-4); font-size: 9.5px; font-weight: 400; }
+.agent-execution-detail > .copy-text-button { margin-top: 7px; }
+.agent-execution-detail pre {
+  max-height: 180px;
+  margin: 7px 0 0;
+  overflow: auto;
+  color: var(--fg-3);
+  font: 11px/1.55 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-system-note {
+  padding: 8px 10px;
+  border: 1px solid var(--st-pending);
+  border-radius: var(--r-1);
+  background: var(--st-pending-bg);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.agent-system-note.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
+.agent-system-note strong { display: block; margin-bottom: 3px; font-size: 11.5px; }
+.agent-system-note p { margin: 0; line-height: 1.55; white-space: pre-wrap; }
+
+/* The input must stay readable in WebView2 while composing and after focus. */
+.agc textarea {
+  color: var(--fg-1);
+  -webkit-text-fill-color: var(--fg-1);
+  caret-color: var(--accent-dim);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.agc textarea:disabled { -webkit-text-fill-color: var(--fg-4); }
+.agc-error {
+  margin: 0;
+  color: var(--st-failed);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+
+@media (max-width: 760px) {
+  .chat-split-grid.resizable > .agp {
+    height: calc(100vh - 62px) !important;
+    max-height: calc(100vh - 62px);
+    bottom: 0;
+  }
+  .agent-memory-capture { max-height: 28vh; }
 }

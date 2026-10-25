@@ -127,7 +127,31 @@ export function useAgentStream(store: AgentStore): AgentActions {
           if (zhi.length === 0) return;
           const guo = zhi.find((t) => t.length > MAX_INSTRUCTION_CHARS);
           if (guo) throw new Error(`单条指令超过 ${MAX_INSTRUCTION_CHARS} 字符，请先拆短`);
-          await sendInstructions(a, { text: b.text, instructions: b.instructions });
+          const sent = await sendInstructions(a, { text: b.text, instructions: b.instructions });
+          // HTTP 202 只代表“已入队”。马上画一条本地用户消息，用户能立刻看到自己
+          // 发出的内容；随后 SSE 里同 seq/messageId 的权威帧会原位替换它。
+          dispatch({
+            type: "FRAME",
+            frame: {
+              type: "message",
+              sessionId: a,
+              streamSeq: 0,
+              message: {
+                messageId: sent.messageId,
+                sessionId: a,
+                seq: sent.seq,
+                role: "user",
+                kind: "text",
+                text: b.text ?? zhi.join("\n"),
+                toolUseId: null,
+                toolName: null,
+                toolInput: null,
+                isError: false,
+                isPartial: false,
+                createdAt: Date.now(),
+              },
+            },
+          });
         }),
 
       decide: (a: string, b: DecideRequest) =>

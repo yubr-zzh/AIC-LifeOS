@@ -278,6 +278,22 @@ describe("补拉的触发源是快照，不是 lastSeq（域 E 修复轮）", ()
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it("session_added 新会话即使没有新快照也会补拉 transcript", async () => {
+    const spy = vi.spyOn(agentClient, "transcript").mockResolvedValue({
+      messages: [msg({ messageId: "m-1", seq: 1, text: "已入库的对话", xuhao: 2 })],
+      nextFrom: 2, prevBefore: 2, hasMore: false,
+    });
+    const { result } = renderHook(() => useAgentStore());
+    await act(async () => {
+      result.current.dispatch({ type: "FRAME", frame: {
+        type: "session_added", sessionId: S, streamSeq: 1, session: hui,
+      } });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(spy).toHaveBeenCalledWith(S, 0, expect.objectContaining({ before: undefined }));
+    expect(result.current.state.messages[S]?.[0]?.text).toBe("已入库的对话");
+  });
+
   it("lastSnapshotSeq 只在快照分支推进，chunk/message 帧推不动它", () => {
     let s = agentReducer(initialAgentState, { type: "FRAME", frame: zha(50) });
     expect(s.lastSnapshotSeq).toBe(50);

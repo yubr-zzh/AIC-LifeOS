@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import { AgentPanel, Bubble } from "./AgentPanel";
 import { initialAgentState, type AgentStore } from "../state/agentStore";
 import type { AgentActions } from "../hooks/useAgentStream";
@@ -11,15 +11,16 @@ const xiao = (a: Partial<AgentMessage> & { kind: AgentMessage["kind"] }): AgentM
 });
 
 describe("Bubble 的两个新分支", () => {
-  it("result 显示成败——不然用户不知道这一轮到底跑完没有", () => {
+  it("result 用正常 Agent 消息样式显示，而不是裸 result 标签", () => {
     render(<Bubble m={xiao({ kind: "result", text: "算完了" })} />);
-    expect(screen.getByText(/result/)).toBeTruthy();
+    expect(screen.getByText("Agent")).toBeTruthy();
     expect(screen.getByText("算完了")).toBeTruthy();
+    expect(screen.queryByText(/^result$/)).toBeNull();
   });
 
   it("失败的 result 要看得出来是失败的", () => {
     render(<Bubble m={xiao({ kind: "result", text: "超了", isError: true })} />);
-    expect(screen.getByText(/失败/)).toBeTruthy();
+    expect(screen.getByText("执行失败")).toBeTruthy();
   });
 
   it("permission_resolved 显示是谁决定的、为什么", () => {
@@ -48,6 +49,7 @@ describe("AgentPanel 的设备离线提示", () => {
           : { deviceId: "dev-1", state: a.state, since: 1, error: a.error ?? null },
       },
       dispatch: () => undefined,
+      loadHistory: vi.fn(),
       active: null,
       streaming: null,
       todo: 0,
@@ -89,21 +91,23 @@ describe("AgentPanel 的结束态与工作指示", () => {
     ...a,
   });
 
-  const renderPanel = (current: AgentSession, todo = 0) => {
+  const renderPanel = (current: AgentSession, todo = 0, messages: AgentMessage[] = []) => {
+    const loadHistory = vi.fn();
     const store = {
       state: {
         ...initialAgentState,
         sessions: { [current.sessionId]: current },
-        messages: { [current.sessionId]: [] },
+        messages: { [current.sessionId]: messages },
         activeSessionId: current.sessionId,
       },
       dispatch: () => undefined,
+      loadHistory,
       active: current,
       streaming: null,
       todo,
     } as unknown as AgentStore;
     const api = { preview: false, busy: null, act: { interrupt: async () => undefined } } as unknown as AgentActions;
-    return render(<AgentPanel store={store} api={api} onCollapse={() => undefined} />);
+    return { ...render(<AgentPanel store={store} api={api} onCollapse={() => undefined} />), loadHistory };
   };
 
   it("批次没跑完时不显示“本次委派已结束”", () => {
@@ -119,5 +123,17 @@ describe("AgentPanel 的结束态与工作指示", () => {
   it("Agent 工作时显示转圈指示", () => {
     renderPanel(session({ state: "working", batchDone: 1, batchTotal: 3, alive: true }), 0);
     expect(screen.getByLabelText("Agent 正在工作")).toBeTruthy();
+  });
+
+  it("默认展示对话正文，记忆提炼不抢占主区域，并会补拉历史", async () => {
+    const messages = [
+      xiao({ messageId: "u-1", seq: 1, role: "user", kind: "text", text: "用户输入" }),
+      xiao({ messageId: "a-1", seq: 2, role: "assistant", kind: "text", text: "Agent 回复" }),
+    ];
+    const { loadHistory } = renderPanel(session({ state: "idle" }), 0, messages);
+    expect(screen.getByText("用户输入")).toBeTruthy();
+    expect(screen.getByText("Agent 回复")).toBeTruthy();
+    expect(screen.queryByText("从执行结果提炼记忆")).toBeNull();
+    await waitFor(() => expect(loadHistory).toHaveBeenCalledWith("s-1"));
   });
 });

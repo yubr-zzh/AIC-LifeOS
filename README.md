@@ -1,4 +1,4 @@
-# LifeOS 桌面版（软件 v2.0.8）
+# LifeOS 桌面版（软件 v2.0.9）
 
 LifeOS 是一个本地优先的个人智能体操作系统：前台 Chat Agent 与后台 Global Agent 协作，配合可靠事件总线、两阶段记忆写入、反思引擎与技能进化。软件 v2.0 以 **Windows 桌面应用**形态交付——pywebview（WebView2）壳 + 内嵌后端 + 本地 Agent bridge，双击即用，数据全部留在本机。
 
@@ -25,7 +25,7 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 - **记录与复盘**：每日/阶段规划与复盘使用轻量 Markdown 编辑器，复盘自动承接对应计划事项并支持额外事项；规划与复盘页右侧展示可直接点击回看的历史记录，可新建多条并在保存后看到 SQLite 记录编号；复盘会汇总读取全部每日/阶段规划条目。
 - **工作历**：以 GitHub contribution graph 风格汇总全年规划、复盘、日记与心得记录。
 - **对话分栏**：主导航与最近对话侧栏均可收起，LifeOS 对话与 Agent 对话之间支持左右拖拽调整宽度；消息支持一键复制、对话可重命名，并可附带最多 3 个文本/代码/配置文件；两侧对话区均有独立滚动条，页面整体布局固定，仅消息内容区上下滚动。
-- **本地 Agent 协作**：Agent 活动面板固定于页面底部、最多展示 20 条并内滚；未连接时仍可编辑输入草稿，工作时显示转圈状态，记忆提炼面板可关闭，委派结束仅在整批任务完成后显示。
+- **本地 Agent 协作**：Agent 面板以用户/Agent 对话气泡为主，输入内容即时可见，执行过程折叠为可展开详情；新会话自动补拉历史，记忆提炼按需展开并位于消息区下方；Agent 活动面板固定于页面底部、最多展示 20 条并内滚。
 
 ## 快速使用
 
@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.8.exe`（安装器）。
+产物：`dist\LifeOS\LifeOS.exe`（onedir）与 `dist\LifeOS-Setup-2.0.9.exe`（安装器）。
 
 ## 开发调试
 

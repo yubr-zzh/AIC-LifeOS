@@ -600,6 +600,23 @@ export function useAgentStore() {
     for (const sid in stateRef.current.sessions) void loadHistory(sid);
   }, [state.lastSnapshotSeq, loadHistory]);
 
+  /**
+   * 新会话的补拉触发点。
+   *
+   * `session_added` 会先把会话放进 state.order，但不会触发 snapshot——如果只在
+   * snapshot 上补 history，从当前页面新建的会话正文会一直是空的，而执行证据
+   * 接口却能返回内容，看起来就像“所有输出都跑进了提炼记忆”。这里按会话集合
+   * 识别首次出现，立即拉一次 transcript；同一 sid 后续的状态推进不重复触发。
+   */
+  const seenSessions = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const current = new Set(state.order);
+    for (const sid of current) {
+      if (!seenSessions.current.has(sid)) void loadHistory(sid);
+    }
+    seenSessions.current = current;
+  }, [state.order, loadHistory]);
+
   /** 向上翻：拿更早的一批插到前面。`hasMore=false` 时上面那层直接短路。 */
   const loadOlder = useCallback((sid: string) => loadHistory(sid, { before: true }), [loadHistory]);
 
