@@ -310,6 +310,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if jie.path.startswith("/sessions/") and jie.path.endswith("/transcript"):
                 self._shou_quan(parse_qs(jie.query))
                 return self._yuan_wen(jie.path, parse_qs(jie.query))
+            if jie.path == "/trust-check":
+                self._shou_quan(parse_qs(jie.query))
+                return self._xin_ren_jian(parse_qs(jie.query))
             raise YiWu(404, "not_found", f"没有这个端点：{jie.path}")
         except YiWu as e:
             self._cuo(e.status, e.code, e.message)
@@ -675,6 +678,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
         lu = xuan_mulu_tk(qi)
         if lu is None:
             return self._json({"path": None, "inTrustRoot": False})
+        return self._json({"path": lu, "inTrustRoot": self.server.shen.han(lu)})
+
+    def _xin_ren_jian(self, a1):
+        """查一个目录是否已在信任根内（桌面壳形态用：pywebview 弹的对话框
+        拿不到 inTrustRoot，选完到这里补一次判定）。**只查不加**——加信任
+        必须走 /trust-folder 的显式确认，唯一实现在 planner_guard。"""
+        lu = (a1.get("path") or [""])[0]
+        if not lu:
+            raise YiWu(400, "invalid_request", "path 不能为空")
         return self._json({"path": lu, "inTrustRoot": self.server.shen.han(lu)})
 
     def _xin_ren(self):

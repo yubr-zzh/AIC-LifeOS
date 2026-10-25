@@ -98,10 +98,6 @@ export interface MemoryEntry {
   confidence?: number | null;
   confidence_method?: string | null;
   occurred_at?: string | null;
-  confirmed_at?: string | null;
-  valid_from?: string | null;
-  valid_until?: string | null;
-  promotion?: MemoryPromotion | null;
   content: Record<string, unknown>;
   trace_id?: string | null;
   status?: "active" | "superseded" | "retracted";
@@ -132,14 +128,6 @@ export interface MemoryScope {
   user_id?: string | null;
 }
 
-export interface MemoryPromotion {
-  source_memory_id: string;
-  source_scope: MemoryScope;
-  target_scope: MemoryScope;
-  reason: string;
-  authorized_at: string;
-}
-
 export interface MemoryCandidate {
   id: string;
   source: string;
@@ -149,8 +137,6 @@ export interface MemoryCandidate {
   confidence?: number | null;
   confidence_method?: string | null;
   occurred_at?: string | null;
-  valid_from?: string | null;
-  valid_until?: string | null;
   content: Record<string, unknown>;
   trace_id?: string | null;
   status: MemoryCandidateStatus;

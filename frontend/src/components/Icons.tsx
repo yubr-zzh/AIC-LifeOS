@@ -25,6 +25,9 @@ const wrap = (path: React.ReactNode, viewBox = "0 0 24 24", p: IconProps) => (
   </svg>
 );
 
+export const IconPaperclip = (p: IconProps) =>
+  wrap(<path d="M20.5 11.5l-8.4 8.4a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-2.8-2.8l8.4-8.4" />, "0 0 24 24", p);
+
 export const IconSend = (p: IconProps) =>
   wrap(<path d="M3 11l18-8-8 18-2-8-8-2z" />, "0 0 24 24", p);
 
@@ -76,6 +79,12 @@ export const IconReject = (p: IconProps) =>
     p,
   );
 
+export const IconPencil = (p: IconProps) =>
+  wrap(<><path d="M4 20l4.5-1 10.8-10.8a2.1 2.1 0 0 0-3-3L5.5 16 4 20z" /><path d="M14.5 6.5l3 3" /></>, "0 0 24 24", p);
+
+export const IconPanelLeft = (p: IconProps) =>
+  wrap(<><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /><path d="M15.5 9l-3 3 3 3" /></>, "0 0 24 24", p);
+
 export const IconChevron = (p: IconProps) =>
   wrap(<path d="M9 6l6 6-6 6" />, "0 0 24 24", p);
 
@@ -114,91 +123,20 @@ export const IconSpark = (p: IconProps) =>
 export const IconSun = (p: IconProps) =>
   wrap(<><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>, "0 0 24 24", p);
 
-/** 半圆 / 主题切换图标 — 用于设置页"外观"分类。SVG 保证对齐 baseline。 */
-export const IconContrast = (p: IconProps) =>
-  wrap(
-    <>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
-export const IconSettings = (p: IconProps) =>
-  wrap(<><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.5h-.2a1.7 1.7 0 0 0-1.6 1z" /></>, "0 0 24 24", p);
-
-export const IconArrowRight = (p: IconProps) =>
-  wrap(
-    <>
-      <path d="M5 12h14" />
-      <path d="M13 5l7 7-7 7" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
-export const IconArrowUpRight = (p: IconProps) =>
-  wrap(
-    <>
-      <path d="M7 17L17 7" />
-      <path d="M8 7h9v9" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
-export const IconCheck = (p: IconProps) =>
-  wrap(<path d="M4 12l5 5L20 6" />, "0 0 24 24", p);
-
-export const IconPlus = (p: IconProps) =>
-  wrap(
-    <>
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
-export const IconTrash = (p: IconProps) =>
-  wrap(
-    <>
-      <path d="M3 6h18" />
-      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-      <path d="M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14" />
-      <path d="M10 11v6M14 11v6" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
 export const IconInbox = (p: IconProps) =>
   wrap(
     <>
-      <path d="M3 13l3-8h12l3 8" />
-      <path d="M3 13v6a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-6" />
-      <path d="M3 13h5l1.5 2.5h5L16 13h5" />
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3.5 7l8.5 6 8.5-6" />
     </>,
     "0 0 24 24",
     p,
   );
-
-export const IconLeaf = (p: IconProps) =>
+export const IconSettings = (p: IconProps) =>
   wrap(
     <>
-      <path d="M4 20c0-8 6-14 16-16-2 10-8 16-16 16z" />
-      <path d="M4 20l9-9" />
-    </>,
-    "0 0 24 24",
-    p,
-  );
-
-export const IconCircleDot = (p: IconProps) =>
-  wrap(
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
     </>,
     "0 0 24 24",
     p,

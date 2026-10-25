@@ -25,15 +25,17 @@ function yaoDian(a: PermissionRequest): string {
  * 但用户随后手动收起时，这条就是唯一入口。
  */
 export function AgentPeekBar({ store, api, onOpen }: Props) {
-  const { state, todo } = store;
-  if (state.layout !== "collapsed" || todo === 0) return null;
+  const { state, todo, active } = store;
+  const working = Boolean(active && (active.state === "thinking" || active.state === "working" || active.state === "backoff"));
+  if (state.layout !== "collapsed" || (todo === 0 && !working)) return null;
 
   const shen = Object.values(state.pending).find((p) => !state.resolved[p.requestId]);
   const wen = Object.values(state.questions).find((q) => !state.questionClosed[q.questionId]);
 
   return (
     <div className="apb" role="status">
-      <span className="apb-tag mono">需要你决定 · {todo}</span>
+      {working ? <span className="agent-spinner small" aria-hidden="true" /> : null}
+      {todo > 0 ? <span className="apb-tag mono">需要你决定 · {todo}</span> : <span className="apb-tool">Agent 正在工作</span>}
       {shen ? (
         <>
           <span className="apb-tool mono">{shen.toolName}</span>

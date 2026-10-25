@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from lifeos.bridge.models import MOSHI
+from lifeos.gen import gen_mulu
 
 
 class JuDuan(Exception):
@@ -68,8 +69,8 @@ class ShenKa:
 
     @property
     def xinren_wen(self) -> Path:
-        """用户确认过的额外信任根落在这里（`.lifeos/bridge/trust.json`）。"""
-        return self.gen / ".lifeos" / "bridge" / "trust.json"
+        """用户确认过的额外信任根落在当前 LifeOS 数据根下。"""
+        return gen_mulu() / "bridge" / "trust.json"
 
     def _xie_ding(self) -> list[str]:
         """读 trust.json 的追加根。读失败按空处理——与 cun 同一条纪律：

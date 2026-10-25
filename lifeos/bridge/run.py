@@ -31,8 +31,23 @@ from lifeos.bridge.session import HuiHua
 DK = 8766  # 起始端口
 DK_CI = 8770  # 结束端口
 
-SHI_JU = ".lifeos"
+SHI_JU = "lifeOS"
 WEN_JIA = "bridge/runtime.json"
+
+
+def shu_ju_gen(a1: Path) -> Path:
+    """Bridge 的数据根。
+
+    `LIFEOS_HOME` 本身就是根（桌面壳传用户工作目录下的 `lifeOS`）。
+    未显式指定时优先 `<root>/lifeOS`；若只有旧版 `<root>/.lifeos`，继续
+    读取旧目录以保持开发与历史数据兼容。
+    """
+    home = os.environ.get("LIFEOS_HOME")
+    if home:
+        return Path(home)
+    xin = a1 / SHI_JU
+    jiu = a1 / ".lifeos"
+    return jiu if jiu.exists() and not xin.exists() else xin
 
 
 def cun_zhen(a1: int) -> bool:
@@ -139,7 +154,7 @@ def wang_url() -> str:
 
 
 def wen_jia_ming(a1: Path) -> Path:
-    return a1 / SHI_JU / WEN_JIA
+    return shu_ju_gen(a1) / WEN_JIA
 
 
 def duan_runtime(a1: Path) -> dict[str, Any]:
@@ -222,7 +237,7 @@ def zhu_ri(a1: Path) -> logging.Logger:
     ri = logging.getLogger("bridge.access")
     ri.setLevel(logging.INFO)
     ri.propagate = False
-    p = a1 / SHI_JU / "bridge" / "bridge.log"
+    p = shu_ju_gen(a1) / "bridge" / "bridge.log"
     # 幂等判据必须精确到「指向同一个文件的、自己建的那个 handler」。
     # 只看 `ri.handlers` 是否非空是错的：任何宿主进程都可能给这个 logger
     # 挂过自己的 handler（pytest 的 LogCaptureHandler、主服务的日志框架），
@@ -368,7 +383,7 @@ def zhen_ben(a1: Path, a2: int) -> tuple[BridgeServer, dict[str, Any]]:
     # 「这个 uid 落到空凭据库、要重新登录」的唯一告警会直接进 DEVNULL，
     # 谁都看不见，用户看到的只是「怎么又要登录一次」。
     pingju.jie_shang()
-    cun = Cun(a1 / SHI_JU / "bridge", logging.getLogger("bridge.cun"))
+    cun = Cun(shu_ju_gen(a1) / "bridge", logging.getLogger("bridge.cun"))
     hua.cun = cun
     # 懒恢复。必须在 BridgeServer 起看门狗之前灌完，且 sessions 的
     # updatedAt 已被重置，否则恢复出来的会话会被闲置超时立刻关掉。
@@ -456,9 +471,17 @@ def _ban_ben(a1: str) -> str | None:
         import re
         import subprocess
 
+        # 版本探测与真正的 spawn 走同一个归口（resolve_claude_runtime）：
+        # 探出来的必须是用户会话实际会用的那个 CLI，否则版本门禁对着
+        # A 探、会话拿 B 起，门禁形同虚设。
+        from lifeos.bridge.adapters.claude_code import resolve_claude_runtime
+
+        lu, _ = resolve_claude_runtime()
         try:
             out = subprocess.run(
-                ["claude", "--version"], capture_output=True, text=True, timeout=10,
+                [lu, "--version"] if lu else ["claude", "--version"],
+                capture_output=True,
+                text=True, timeout=10,
                 # Bridge 无控制台（DETACHED_PROCESS 拉起），不补此标志就闪窗。
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             ).stdout
@@ -469,11 +492,28 @@ def _ban_ben(a1: str) -> str | None:
     return None
 
 
-def main() -> int:
+def main(a0: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lifeos.bridge.run")
-    parser.add_argument("--root", default=".", help="项目根目录，用于定位 .lifeos")
+    parser.add_argument("--root", default=".", help="项目根目录，用于定位 lifeOS")
     parser.add_argument("--port", type=int, default=DK)
-    args = parser.parse_args()
+    args = parser.parse_args(a0)
+
+    # 打包态的 Origin 注入（方案 4.2.4）：bridge.auth 的白名单是进程内
+    # 状态，主服务 `zhu_yuan` 注入的表到不了本进程——桌面壳经
+    # LIFEOS_EXTRA_ORIGINS 把同源 Origin 带过来，这里补进白名单。
+    # 前端带 Origin 的请求（POST 等）不过这一关会被 403 挡掉。
+    for yuan in (os.environ.get("LIFEOS_EXTRA_ORIGINS") or "").split(","):
+        if yuan.strip():
+            auth.zhu_yuan(yuan.strip())
+
+    # **无控制台的 Bridge 必须忽略 CTRL_C。** kimi / opencode 的 CLI 在被
+    # 探测（tanjian 的 `--version` 子进程）时会沿进程链发 CTRL_C，DETACHED
+    # 拉起的 Bridge 毫无防备：/agents 探到 kimi 就整进程静默蒸发
+    # （退出码 0xC000013A，无 traceback、无 faulthandler 转储，2026-10-11
+    # 实测二分定位）。有控制台的形态（开发态手动跑）不禁——Ctrl+C 还要
+    # 用来停服务。
+    if sys.platform == "win32" and not ctypes.windll.kernel32.GetConsoleWindow():
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
 
     root = Path(args.root).resolve()
     fu, xin = zhen_ben(root, args.port)

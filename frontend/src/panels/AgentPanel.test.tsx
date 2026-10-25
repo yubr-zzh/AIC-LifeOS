@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { AgentPanel, Bubble } from "./AgentPanel";
 import { initialAgentState, type AgentStore } from "../state/agentStore";
 import type { AgentActions } from "../hooks/useAgentStream";
-import type { AgentMessage, DeviceStatusFrame } from "../api/agentTypes";
+import type { AgentMessage, AgentSession, DeviceStatusFrame } from "../api/agentTypes";
 
 const xiao = (a: Partial<AgentMessage> & { kind: AgentMessage["kind"] }): AgentMessage => ({
   messageId: "m", sessionId: "s-1", seq: 1, role: "system", text: "", toolUseId: null,
@@ -76,5 +76,48 @@ describe("AgentPanel 的设备离线提示", () => {
     zhuang({ state: "connected" });
     expect(screen.queryByText(/设备离线/)).toBeNull();
     expect(screen.queryByText(/正在重连/)).toBeNull();
+  });
+});
+
+describe("AgentPanel 的结束态与工作指示", () => {
+  const session = (a: Partial<AgentSession> = {}): AgentSession => ({
+    sessionId: "s-1", agentId: "claude-code", agentLabel: "Claude Code", cwd: "/tmp",
+    permissionMode: "manual", effectiveMode: "manual", state: "ended", title: "任务",
+    claudeSessionId: null, ownerId: "local", deviceId: "dev-1", planId: null, traceId: null,
+    batchTotal: 3, batchDone: 3, createdAt: 1, updatedAt: 2, turnCount: 1,
+    pendingPermissions: [], pendingQuestions: [], alive: false, streamEpoch: 1,
+    ...a,
+  });
+
+  const renderPanel = (current: AgentSession, todo = 0) => {
+    const store = {
+      state: {
+        ...initialAgentState,
+        sessions: { [current.sessionId]: current },
+        messages: { [current.sessionId]: [] },
+        activeSessionId: current.sessionId,
+      },
+      dispatch: () => undefined,
+      active: current,
+      streaming: null,
+      todo,
+    } as unknown as AgentStore;
+    const api = { preview: false, busy: null, act: { interrupt: async () => undefined } } as unknown as AgentActions;
+    return render(<AgentPanel store={store} api={api} onCollapse={() => undefined} />);
+  };
+
+  it("批次没跑完时不显示“本次委派已结束”", () => {
+    renderPanel(session({ batchDone: 1, batchTotal: 3 }), 0);
+    expect(screen.queryByText("本次委派已结束")).toBeNull();
+  });
+
+  it("全部指令与待办都结束后才显示“本次委派已结束”", () => {
+    renderPanel(session({ batchDone: 3, batchTotal: 3 }), 0);
+    expect(screen.getByText("本次委派已结束")).toBeTruthy();
+  });
+
+  it("Agent 工作时显示转圈指示", () => {
+    renderPanel(session({ state: "working", batchDone: 1, batchTotal: 3, alive: true }), 0);
+    expect(screen.getByLabelText("Agent 正在工作")).toBeTruthy();
   });
 });

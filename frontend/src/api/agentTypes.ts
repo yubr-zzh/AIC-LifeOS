@@ -41,12 +41,23 @@ export const STATE_LABEL: Record<AgentState, string> = {
 export type PermissionMode = "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk";
 
 export const PERMISSION_MODES: { value: PermissionMode; label: string; hint: string }[] = [
-  { value: "manual", label: "每件事都问", hint: "任何工具调用都先给你看，默认选项" },
-  { value: "acceptEdits", label: "自动改文件", hint: "写文件直接放行，命令仍然问" },
-  { value: "plan", label: "只读不改", hint: "Agent 只能读，不能动你的文件" },
-  { value: "auto", label: "尽量自动", hint: "只在危险操作前停下来" },
-  { value: "dontAsk", label: "尽量不问", hint: "只在规则明确禁止时停下，风险最高" },
+  { value: "manual", label: "Manual (default)", hint: "每次工具调用都需要你确认" },
+  { value: "acceptEdits", label: "Accept edits", hint: "自动接受文件修改；命令仍需确认" },
+  { value: "plan", label: "Plan", hint: "只读取和分析，不修改文件" },
+  { value: "auto", label: "Auto", hint: "仅在高风险操作前停下" },
+  { value: "dontAsk", label: "dontAsk", hint: "仅在规则明确禁止时停下，风险最高" },
 ];
+
+const CODEX_MODE_LABELS: Partial<Record<PermissionMode, string>> = {
+  manual: "read-only",
+  acceptEdits: "workspace-write",
+  plan: "read-only (plan)",
+};
+
+export function permissionModeLabel(agentId: string | undefined, mode: PermissionMode): string {
+  if (agentId === "codex") return CODEX_MODE_LABELS[mode] ?? mode;
+  return PERMISSION_MODES.find((item) => item.value === mode)?.label ?? mode;
+}
 
 export interface AgentSession {
   sessionId: string;
@@ -267,7 +278,7 @@ export interface ErrorFrame extends ScopedFrame {
   recoverable: boolean;
 }
 
-/** 前端自己造的流级错误（收到无法解析的帧）。没有会话可言。 */
+/** 流级错误（可能没有会话）。传输断线由 `onState` 表示，不伪装成业务帧。 */
 export interface StreamErrorFrame extends GlobalFrame {
   type: "error";
   code: string;

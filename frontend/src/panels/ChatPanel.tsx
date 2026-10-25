@@ -1,20 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { ChatMessage, Store } from "../state/store";
-import { FEEDBACK_RATINGS } from "../api/types";
-import type { AgentRoutingPolicy, FeedbackRating, MemoryScope } from "../api/types";
+import type { ChatAttachment, ChatMessage, Store } from "../state/store";
+import type { AgentRoutingPolicy, MemoryScope } from "../api/types";
 import { proposeTraceMemoryCandidate } from "../api/client";
 import type { DelegationPlan } from "../api/agentTypes";
-import { IconChevron, IconCopy, IconMessage, IconSend, IconTrash } from "../components/Icons";
+import { IconSend, IconCopy, IconMessage, IconPaperclip, IconPencil, IconPanelLeft } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
+import { CopyTextButton } from "../components/CopyTextButton";
 import { DelegationCard } from "./DelegationCard";
 import type { AgentActions } from "../hooks/useAgentStream";
-
-const HISTORY_COLLAPSED_KEY = "lifeos.chat.historyCollapsed.v1";
-
-function readHistoryCollapsed(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  try { return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1"; } catch { return false; }
-}
 import type { AgentStore } from "../state/agentStore";
 
 interface Props {
@@ -27,6 +20,7 @@ interface Props {
 interface LocalConversation {
   id: string;
   title: string;
+  customTitle?: boolean;
   updatedAt: string;
   messages: ChatMessage[];
   projectId?: string;
@@ -34,8 +28,16 @@ interface LocalConversation {
 }
 
 const HISTORY_KEY = "lifeos.chat.history.v1";
+const HISTORY_COLLAPSED_KEY = "lifeos.chat.historyCollapsed.v1";
 const ROUTING_POLICY_KEY = "lifeos-agent-routing-policy";
 const WELCOME_ID = "system-welcome";
+const TEXT_FILE_EXTS = new Set(["txt", "md", "markdown", "json", "csv", "log", "py", "ts", "tsx", "js", "jsx", "html", "css", "xml", "yml", "yaml", "toml", "ini", "sql"]);
+const MAX_ATTACHMENT_BYTES = 200 * 1024;
+const MAX_ATTACHMENTS = 3;
+
+function readHistoryCollapsed(): boolean {
+  try { return localStorage.getItem(HISTORY_COLLAPSED_KEY) === "1"; } catch { return false; }
+}
 
 function readRoutingPolicy(): AgentRoutingPolicy {
   try {
@@ -50,9 +52,16 @@ function readHistory(): LocalConversation[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((item) =>
+    if (!Array.isArray(parsed)) return [];
+    return (parsed.filter((item) =>
       item && typeof item.id === "string" && Array.isArray(item.messages),
-    ) as LocalConversation[] : [];
+    ) as LocalConversation[]).map((item) => ({
+      ...item,
+      messages: item.messages.map((message) => message.id === WELCOME_ID
+        && message.content.startsWith("LifeOS Chat Agent online.")
+        ? { ...message, content: "LifeOS 已就绪。发来一条消息，我会结合你的记忆回答，并把值得沉淀的内容交给后台整理。" }
+        : message),
+    }));
   } catch {
     return [];
   }
@@ -63,7 +72,8 @@ function newConversationId(): string {
 }
 
 function titleFor(messages: ChatMessage[]): string {
-  const first = messages.find((message) => message.role === "user")?.content?.trim();
+  const firstMessage = messages.find((message) => message.role === "user");
+  const first = firstMessage?.content?.trim() || firstMessage?.attachments?.[0]?.name || "";
   return first ? first.slice(0, 32) + (first.length > 32 ? "…" : "") : "新对话";
 }
 
@@ -92,9 +102,12 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [contextOpen, setContextOpen] = useState(false);
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
-  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(readHistoryCollapsed);
+  const [historyCollapsed, setHistoryCollapsed] = useState(readHistoryCollapsed);
   const [activeId, setActiveId] = useState(() => newConversationId());
   const [historyReady, setHistoryReady] = useState(false);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [fileError, setFileError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -116,19 +129,21 @@ export function ChatPanel({ store, agent, api }: Props) {
 
   useEffect(() => {
     if (!historyReady) return;
-    const current: LocalConversation = {
-      id: activeId,
-      title: titleFor(state.messages),
-      updatedAt: new Date().toISOString(),
-      messages: state.messages,
-      projectId,
-      memoryScope: scopeKind === "project"
-        ? { kind: "project", project_id: projectId.trim() }
-        : scopeKind === "scenario"
-          ? { kind: "scenario", scenario_type: scenarioType }
-          : { kind: "global" },
-    };
     setHistory((previous) => {
+      const old = previous.find((item) => item.id === activeId);
+      const current: LocalConversation = {
+        id: activeId,
+        title: old?.customTitle ? old.title : titleFor(state.messages),
+        customTitle: old?.customTitle,
+        updatedAt: new Date().toISOString(),
+        messages: state.messages,
+        projectId,
+        memoryScope: scopeKind === "project"
+          ? { kind: "project", project_id: projectId.trim() }
+          : scopeKind === "scenario"
+            ? { kind: "scenario", scenario_type: scenarioType }
+            : { kind: "global" },
+      };
       const next = [current, ...previous.filter((item) => item.id !== activeId)].slice(0, 30);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* local history is best-effort */ }
       return next;
@@ -140,6 +155,10 @@ export function ChatPanel({ store, agent, api }: Props) {
   }, [routingPolicy]);
 
   useEffect(() => {
+    try { localStorage.setItem(HISTORY_COLLAPSED_KEY, historyCollapsed ? "1" : "0"); } catch { /* preference is best-effort */ }
+  }, [historyCollapsed]);
+
+  useEffect(() => {
     if (scroller.current) {
       scroller.current.scrollTop = scroller.current.scrollHeight;
     }
@@ -147,7 +166,7 @@ export function ChatPanel({ store, agent, api }: Props) {
 
   const submit = () => {
     const t = text.trim();
-    if (!t || state.loading.chat) return;
+    if ((!t && attachments.length === 0) || state.loading.chat) return;
     if (scopeKind === "project" && !projectId.trim()) {
       setScopeError("填写项目 ID 后才能发送，避免项目记忆串用。");
       setContextOpen(true);
@@ -155,12 +174,15 @@ export function ChatPanel({ store, agent, api }: Props) {
     }
     setScopeError("");
     setText("");
+    const sentAttachments = attachments;
+    setAttachments([]);
+    setFileError("");
     const memoryScope: MemoryScope = scopeKind === "project"
       ? { kind: "project", project_id: projectId.trim() }
       : scopeKind === "scenario"
         ? { kind: "scenario", scenario_type: scenarioType }
         : { kind: "global" };
-    void sendMessage(t, memoryScope, agent?.active?.sessionId, routingPolicy);
+    void sendMessage(t, memoryScope, agent?.active?.sessionId, routingPolicy, sentAttachments);
   };
 
   const startNew = () => {
@@ -172,6 +194,8 @@ export function ChatPanel({ store, agent, api }: Props) {
     setProjectId("");
     setScopeError("");
     setContextOpen(false);
+    setAttachments([]);
+    setFileError("");
     store.dispatch({ type: "REPLACE_MESSAGES", messages: [] });
   };
 
@@ -184,29 +208,75 @@ export function ChatPanel({ store, agent, api }: Props) {
     setScenarioType(scope.scenario_type ?? "learning");
     setProjectId(scope.project_id ?? conversation.projectId ?? "");
     setScopeError("");
+    setAttachments([]);
+    setFileError("");
     store.dispatch({ type: "REPLACE_MESSAGES", messages: conversation.messages });
   };
 
-  const deleteConversation = (id: string, event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
+  const removeConversation = (conversationId: string) => {
     if (state.loading.chat) return;
-    setHistory((previous) => {
-      const next = previous.filter((item) => item.id !== id);
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* best effort */ }
-      return next;
-    });
-    if (id === activeId) {
-      const remaining = history.filter((item) => item.id !== id);
-      if (remaining[0]) {
-        openConversation(remaining[0]);
-      } else {
-        startNew();
-      }
+    const target = history.find((item) => item.id === conversationId);
+    if (!window.confirm(`删除对话「${target?.title || "新对话"}」？删除后无法恢复。`)) return;
+    const next = history.filter((item) => item.id !== conversationId);
+    setHistory(next);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* local history is best-effort */ }
+    if (conversationId === activeId) {
+      if (next[0]) openConversation(next[0]);
+      else startNew();
     }
   };
 
+  const renameConversation = (conversation: LocalConversation) => {
+    const title = window.prompt("给这段对话起个名字", conversation.title || "新对话")?.trim();
+    if (!title) return;
+    const next = history.map((item) => item.id === conversation.id
+      ? { ...item, title, customTitle: true, updatedAt: new Date().toISOString() }
+      : item);
+    setHistory(next);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* local history is best-effort */ }
+  };
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setFileError("");
+    const incoming = Array.from(files);
+    const accepted: ChatAttachment[] = [];
+    for (const file of incoming) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!TEXT_FILE_EXTS.has(ext)) {
+        setFileError(`暂不支持 ${file.name}，请上传文本、代码或配置文件。`);
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setFileError(`${file.name} 超过 200 KB，请先精简后再上传。`);
+        continue;
+      }
+      try {
+        accepted.push({ id: `file-${Date.now()}-${accepted.length}`, name: file.name, size: file.size, content: await file.text() });
+      } catch {
+        setFileError(`${file.name} 读取失败，请重试。`);
+      }
+    }
+    if (accepted.length) {
+      setAttachments((current) => {
+        const merged = [...current, ...accepted].slice(0, MAX_ATTACHMENTS);
+        if (current.length + accepted.length > MAX_ATTACHMENTS) setFileError(`最多同时上传 ${MAX_ATTACHMENTS} 个文件。`);
+        return merged;
+      });
+    }
+    if (fileInput.current) fileInput.current.value = "";
+  };
+
+  const discardCurrent = () => {
+    if (state.loading.chat) return;
+    const current = history.find((item) => item.id === activeId);
+    if (!current) { startNew(); return; }
+    removeConversation(activeId);
+  };
   const showWelcome = state.messages.length === 0 ||
     (state.messages.length === 1 && state.messages[0].id === WELCOME_ID);
+  const activeConversation = history.find((item) => item.id === activeId);
+  const currentTitle = activeConversation?.customTitle ? activeConversation.title : titleFor(state.messages);
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 中文输入法选词按 Enter 会误发送。isComposing 期间不当作提交。
@@ -216,82 +286,56 @@ export function ChatPanel({ store, agent, api }: Props) {
     }
   };
 
-  const toggleHistoryCollapsed = () => {
-    setHistoryCollapsed((current) => {
-      const next = !current;
-      if (typeof localStorage !== "undefined") {
-        try { localStorage.setItem(HISTORY_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* best effort */ }
-      }
-      return next;
-    });
-  };
-
   return (
-    <div className={`chat-workspace ${historyCollapsed ? "is-history-collapsed" : ""}`}>
-      <aside className="chat-history" aria-label="对话历史" aria-hidden={historyCollapsed}>
-        <header className="chat-history-head">
+    <div className={`chat-workspace ${historyCollapsed ? "history-collapsed" : ""}`}>
+      {!historyCollapsed ? <aside id="chat-history-panel" className="chat-history" aria-label="对话历史">
+        <div className="chat-history-top">
           <button className="chat-new" onClick={startNew} disabled={state.loading.chat}>
             <span aria-hidden="true">＋</span> 新建对话
           </button>
-          <button
-            className="chat-history-toggle"
-            onClick={toggleHistoryCollapsed}
-            title="收起历史栏"
-            aria-label="收起历史栏"
-          >
-            <IconChevron size={12} />
-          </button>
-        </header>
+          <button type="button" className="chat-history-collapse" onClick={() => setHistoryCollapsed(true)}
+            title="隐藏对话历史" aria-label="隐藏对话历史"><IconPanelLeft size={16} /></button>
+        </div>
         <div className="chat-history-label">最近对话</div>
         <div className="chat-history-list">
           {history.map((item) => (
-            <div key={item.id} className={`chat-history-row ${item.id === activeId ? "active" : ""}`}>
-              <button
-                className="chat-history-item"
-                onClick={() => openConversation(item)}
-                disabled={state.loading.chat}
-                title={item.title || "新对话"}
-              >
+            <div key={item.id} className={`chat-history-item ${item.id === activeId ? "active" : ""}`}>
+              <button type="button" className="chat-history-open" onClick={() => openConversation(item)} disabled={state.loading.chat}>
                 <IconMessage size={15} />
                 <span className="chat-history-title">{item.title || "新对话"}</span>
                 <time>{shortDate(item.updatedAt)}</time>
               </button>
-              <button
-                className="chat-history-delete"
-                onClick={(event) => deleteConversation(item.id, event)}
-                disabled={state.loading.chat}
-                aria-label={`删除对话 ${item.title || "新对话"}`}
-                title="删除这个对话"
-              >
-                <IconTrash size={13} />
-              </button>
+              <div className="chat-history-item-actions">
+                <button type="button" className="chat-history-rename" title="重命名对话" aria-label={`重命名对话：${item.title || "新对话"}`}
+                  onClick={() => renameConversation(item)} disabled={state.loading.chat}><IconPencil size={13} /></button>
+                <button type="button" className="chat-history-delete" title="删除对话" aria-label={`删除对话：${item.title || "新对话"}`}
+                  onClick={() => removeConversation(item.id)} disabled={state.loading.chat}>×</button>
+              </div>
             </div>
           ))}
           {history.length === 0 ? <p className="chat-history-empty">你的对话会出现在这里</p> : null}
         </div>
-        <div className="chat-history-foot">历史仅保存在此浏览器</div>
-      </aside>
+      </aside> : null}
 
       <section className="chat-conversation" aria-label="当前对话">
         <header className="chat-toolbar">
-          {historyCollapsed ? (
-            <button
-              className="chat-history-show"
-              onClick={toggleHistoryCollapsed}
-              title="展开历史栏"
-              aria-label="展开历史栏"
-            >
-              <IconChevron size={12} />
-            </button>
-          ) : null}
-          <div className="chat-toolbar-title">
-            <strong>{titleFor(state.messages)}</strong>
-            <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
+          <div className="chat-toolbar-left">
+            {historyCollapsed ? (
+              <button type="button" className="chat-history-toggle" onClick={() => setHistoryCollapsed(false)}
+                title="显示对话历史" aria-label="显示对话历史" aria-expanded={false} aria-controls="chat-history-panel">
+                <IconPanelLeft size={16} className="chat-history-restore-icon" />
+              </button>
+            ) : null}
+            <div className="chat-toolbar-title">
+              <strong>{currentTitle}</strong>
+              <span>{agent?.active ? `正在与 ${agent.active.agentLabel} 协作` : "LifeOS 会结合你的记忆理解上下文"}</span>
+            </div>
           </div>
-          <div className="chat-context-wrap">
+          <div className="chat-toolbar-right">
+            <button type="button" className="chat-delete-current" title="删除当前对话" aria-label="删除当前对话" onClick={discardCurrent} disabled={state.loading.chat}>删除</button>
+            <div className="chat-context-wrap">
             <button className={`chat-context ${scopeKind !== "global" ? "selected" : ""}`}
               onClick={() => setContextOpen((open) => !open)} aria-expanded={contextOpen}>
-              <span className="context-dot" />
               {scopeKind === "project" ? (projectId.trim() || "选择项目") : scopeKind === "scenario" ? ({ learning: "学习型", project: "项目型", document: "文档型", information_execution: "信息型执行", external_operation: "外部操作型" }[scenarioType] ?? scenarioType) : "全局记忆"}
               <span aria-hidden="true">⌄</span>
             </button>
@@ -319,17 +363,20 @@ export function ChatPanel({ store, agent, api }: Props) {
                 <button onClick={() => setContextOpen(false)}>完成</button>
               </div>
             ) : null}
+            </div>
           </div>
         </header>
 
         <div ref={scroller} className="chat-messages scroll" aria-live="polite">
           {showWelcome ? (
-            <div className="chat-intro">
-              <div className="chat-intro-mark"><IconMessage size={16} /></div>
-              <p className="chat-intro-line">从这里开始。把正在想的事说给我，或者从一个具体的下一步开始。</p>
+            <div className="chat-welcome">
+              <div className="chat-welcome-mark"><IconMessage size={22} /></div>
+              <span className="chat-eyebrow">LifeOS · 你的第二大脑</span>
+              <h2>今天想从哪里开始？</h2>
+              <p>聊聊正在思考的事，或把一个想法变成可以行动的下一步。</p>
               <div className="chat-prompts">
                 {["帮我梳理今天最重要的事", "基于我的项目记忆继续推进", "把一个想法拆成行动步骤"].map((prompt) => (
-                  <button key={prompt} onClick={() => setText(prompt)} disabled={state.loading.chat}>{prompt}</button>
+                  <button key={prompt} onClick={() => { setText(prompt); }} disabled={state.loading.chat}>{prompt}<span>→</span></button>
                 ))}
               </div>
             </div>
@@ -345,15 +392,11 @@ export function ChatPanel({ store, agent, api }: Props) {
         <div className="chat-compose-wrap">
           <Composer value={text} onChange={setText} onSubmit={submit} onKey={onKey}
             routingPolicy={routingPolicy} onRoutingPolicyChange={setRoutingPolicy}
-            disabled={state.loading.chat} />
-          <div className="chat-compose-hint">
-            {routingPolicy === "auto"
-              ? "自动判断 · 含糊请求可能增加一次模型判断 · 工具调用仍需权限审查"
-              : routingPolicy === "force_agent"
-                ? "本轮进入执行型 Agent 路径 · 工具调用仍需权限审查"
-                : "本轮只生成文本，不进入执行型 Agent"}
-            <span> · Enter 发送 · Shift + Enter 换行</span>
-          </div>
+            disabled={state.loading.chat} attachments={attachments} fileError={fileError}
+            onPickFile={() => fileInput.current?.click()}
+            onRemoveFile={(id) => setAttachments((current) => current.filter((file) => file.id !== id))} />
+          <input ref={fileInput} type="file" multiple hidden accept=".txt,.md,.markdown,.json,.csv,.log,.py,.ts,.tsx,.js,.jsx,.html,.css,.xml,.yml,.yaml,.toml,.ini,.sql"
+            onChange={(event) => void addFiles(event.target.files)} />
         </div>
       </section>
     </div>
@@ -364,8 +407,14 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
   if (msg.role === "user") {
     return (
       <div className="arrival chat-message user-message">
-        <div className="chat-message-content">{msg.content}</div>
-        <div className="chat-message-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+        {msg.content ? <div className="chat-message-content">{msg.content}</div> : null}
+        {msg.attachments?.length ? <div className="chat-message-files">
+          {msg.attachments.map((file) => <span key={file.id}><IconPaperclip size={11} /> {file.name} <small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>)}
+        </div> : null}
+        <div className="chat-message-foot">
+          <span className="chat-message-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+          <CopyTextButton text={[msg.content, ...(msg.attachments ?? []).map((file) => `[附件] ${file.name}\n${file.content}`)].filter(Boolean).join("\n\n")} />
+        </div>
       </div>
     );
   }
@@ -379,23 +428,7 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           <strong>LifeOS</strong>
           {pending ? <span className="chat-thinking"><span className="dot" />正在思考</span> : null}
           {errored ? <span className="chat-error">暂时遇到问题</span> : null}
-          {!pending && msg.decision ? (
-            <span className={`chat-route-badge ${msg.agent_enabled ? "agent" : "self"}`}>
-              {msg.agent_enabled ? "执行型 Agent 路径" : "文本回答"}
-            </span>
-          ) : null}
         </div>
-        {msg.decision_reason ? (
-          <details className="chat-route-details">
-            <summary>路由说明{typeof msg.decision_confidence === "number" ? ` · ${Math.round(msg.decision_confidence * 100)}%` : ""}</summary>
-            <p>{msg.decision_reason}</p>
-          </details>
-        ) : null}
-        {msg.plan_steps?.length ? (
-          <ol className="chat-plan-steps">
-            {msg.plan_steps.map((step) => <li key={step.id}><strong>{step.title}</strong>{step.detail ? <span>{step.detail}</span> : null}</li>)}
-          </ol>
-        ) : null}
         <div className={`assistant-content ${errored ? "has-error" : ""}`}>
           {pending ? <span className="muted">正在整理思路…</span> : msg.content || <span className="muted">没有生成文字回复</span>}
         </div>
@@ -422,10 +455,12 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           <DelegationCardBox msg={msg} plan={msg.delegation} agent={agent} api={api} store={store} />
         ) : null}
         {msg.trace_id && msg.execution === "succeeded" ? (
-          <>
-            <FeedbackRow msg={msg} store={store} />
-            <ConversationMemoryCapture msg={msg} store={store} />
-          </>
+          <ConversationMemoryCapture msg={msg} store={store} />
+        ) : null}
+        {!pending && msg.content ? (
+          <div className="assistant-message-foot">
+            <CopyTextButton text={msg.content} />
+          </div>
         ) : null}
       </div>
     </div>
@@ -546,44 +581,6 @@ function DelegationCardBox({
   );
 }
 
-function FeedbackRow({ msg, store }: { msg: ChatMessage; store: Store }) {
-  const { submitRating } = store;
-  const sending = msg.feedbackSending;
-  return (
-    <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
-      <span className="mono dim" style={{ fontSize: 10, marginRight: 2 }}>
-        feedback
-      </span>
-      {FEEDBACK_RATINGS.map((r) => {
-        const active = msg.feedback === r.value;
-        return (
-          <button
-            key={r.value}
-            onClick={() => void submitRating(msg.id, r.value)}
-            disabled={sending || msg.execution === "pending"}
-            title={r.hint}
-            className={active ? "primary" : "ghost"}
-            style={{
-              borderRadius: "var(--r-pill)",
-              padding: "2px 10px",
-              fontSize: 11,
-              opacity: sending ? 0.5 : 1,
-            }}
-          >
-            {active ? "✓ " : ""}
-            {r.label}
-          </button>
-        );
-      })}
-      {msg.feedback ? (
-        <span className="mono dim" style={{ fontSize: 10 }}>
-          rated
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 interface ComposerProps {
   value: string;
   onChange: (v: string) => void;
@@ -592,11 +589,26 @@ interface ComposerProps {
   routingPolicy: AgentRoutingPolicy;
   onRoutingPolicyChange: (value: AgentRoutingPolicy) => void;
   disabled?: boolean;
+  attachments: ChatAttachment[];
+  fileError: string;
+  onPickFile: () => void;
+  onRemoveFile: (id: string) => void;
 }
 
-function Composer({ value, onChange, onSubmit, onKey, routingPolicy, onRoutingPolicyChange, disabled }: ComposerProps) {
+function Composer({ value, onChange, onSubmit, onKey, routingPolicy, onRoutingPolicyChange, disabled, attachments, fileError, onPickFile, onRemoveFile }: ComposerProps) {
   return (
     <div className="chat-composer">
+      {attachments.length || fileError ? (
+        <div className="chat-attachment-tray">
+          {attachments.map((file) => (
+            <span className="chat-attachment-chip" key={file.id}>
+              <span>{file.name}</span>
+              <button type="button" onClick={() => onRemoveFile(file.id)} aria-label={`移除附件：${file.name}`}>×</button>
+            </span>
+          ))}
+          {fileError ? <small role="alert">{fileError}</small> : null}
+        </div>
+      ) : null}
       <textarea
         rows={3}
         aria-label="发送消息给 LifeOS"
@@ -606,18 +618,21 @@ function Composer({ value, onChange, onSubmit, onKey, routingPolicy, onRoutingPo
         onKeyDown={onKey}
         disabled={disabled}
       />
-      <div className="chat-composer-side">
-        <label className="chat-route-control">
-          <span>处理方式</span>
-          <select value={routingPolicy} onChange={(event) => onRoutingPolicyChange(event.target.value as AgentRoutingPolicy)} disabled={disabled}>
+      <div className="chat-composer-bottom">
+        <button type="button" className="chat-attach-button" onClick={onPickFile} disabled={disabled}
+          title="添加文本文件" aria-label="添加文本文件">
+          <IconPaperclip size={15} />
+        </button>
+        <div className="chat-composer-side">
+          <select aria-label="处理方式" value={routingPolicy} onChange={(event) => onRoutingPolicyChange(event.target.value as AgentRoutingPolicy)} disabled={disabled}>
             <option value="auto">自动判断</option>
             <option value="force_self_plan">只给文本建议</option>
             <option value="force_agent">使用执行型 Agent</option>
           </select>
-        </label>
-        <button className="chat-send" onClick={onSubmit} disabled={disabled || !value.trim()} title="发送消息" aria-label="发送消息">
-          <IconSend size={17} />
-        </button>
+          <button className="chat-send" onClick={onSubmit} disabled={disabled || (!value.trim() && attachments.length === 0)} title="发送消息" aria-label="发送消息">
+            <IconSend size={15} />
+          </button>
+        </div>
       </div>
     </div>
   );

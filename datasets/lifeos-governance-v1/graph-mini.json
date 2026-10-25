@@ -1,0 +1,37 @@
+{
+  "dataset": "lifeos-graph-mini-synthetic-v1",
+  "cases": [
+    {
+      "case_id": "graph-001",
+      "question": "Where does LifeOS store global cognition?",
+      "request_scope": {"kind": "global"},
+      "as_of": "2026-10-19T00:00:00Z",
+      "sources": [
+        {"id": "src-1", "scope": {"kind": "global"}, "status": "active"},
+        {"id": "src-2", "scope": {"kind": "global"}, "status": "active"},
+        {"id": "src-secret", "scope": {"kind": "project", "project_id": "private"}, "status": "active"}
+      ],
+      "facts": [
+        {"id": "edge-1", "subject": "LifeOS", "predicate": "stores_in", "object": "TencentDB", "scope": {"kind": "global"}, "status": "active", "source_ids": ["src-1"]},
+        {"id": "edge-2", "subject": "TencentDB", "predicate": "stores", "object": "global cognition", "scope": {"kind": "global"}, "status": "active", "source_ids": ["src-2"]},
+        {"id": "edge-secret", "subject": "LifeOS", "predicate": "stores_in", "object": "private vault", "scope": {"kind": "project", "project_id": "private"}, "status": "active", "source_ids": ["src-secret"]}
+      ],
+      "expected_evidence_ids": ["edge-1", "edge-2"],
+      "must_not_return_ids": ["edge-secret"]
+    },
+    {
+      "case_id": "graph-002",
+      "question": "Does LifeOS still use LegacyDB?",
+      "request_scope": {"kind": "global"},
+      "as_of": "2026-10-19T00:00:00Z",
+      "sources": [
+        {"id": "src-retracted", "scope": {"kind": "global"}, "status": "retracted"}
+      ],
+      "facts": [
+        {"id": "edge-old", "subject": "LifeOS", "predicate": "uses", "object": "LegacyDB", "scope": {"kind": "global"}, "status": "active", "source_ids": ["src-retracted"]}
+      ],
+      "expected_evidence_ids": [],
+      "must_not_return_ids": ["edge-old"]
+    }
+  ]
+}

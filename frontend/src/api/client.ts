@@ -69,7 +69,11 @@ export class ApiError extends Error {
   }
 }
 
-async function readError(res: Response): Promise<ApiError> {
+export async function readError(res: Response): Promise<ApiError> {
+  // 401 拦截（方案 6.4）：任何接口回 401 就广播，AuthGate 收到后切登录页。
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("lifeos:unauthorized"));
+  }
   const text = await res.text().catch(() => "");
   return new ApiError(
     `HTTP ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 160)}` : ""}`,
@@ -166,6 +170,10 @@ export async function safeGet<T>(
     }
     if (res.status !== 404 && res.status < 500) {
       // 4xx other than 404 is unexpected; still fall back but warn via console.
+      // 401 不走 readError（这条路径直接回退），在这里补上广播（方案 6.4）。
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("lifeos:unauthorized"));
+      }
       console.warn(`[lifeos] GET ${path} -> ${res.status}, using preview data`);
     }
     return { data: fallback(), source: "preview" };

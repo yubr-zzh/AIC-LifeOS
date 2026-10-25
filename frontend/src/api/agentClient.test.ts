@@ -26,29 +26,32 @@ const kai: {
   close: () => void;
   fire: (a: string, b: unknown) => void;
   raw: (a: string, b: string) => void;
-  onerror?: () => void;
+  event: (a: string, b: Event) => void;
+  onerror?: (ev?: Event) => void;
 }[] = [];
 
 class FakeEventSource {
   close = vi.fn();
   onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  private listeners = new Map<string, ((e: MessageEvent<string>) => void)[]>();
+  onerror: ((ev?: Event) => void) | null = null;
+  private listeners = new Map<string, ((e: Event) => void)[]>();
 
   constructor(public url: string) {
-    const raw = (lei: string, data: string) => {
-      for (const fn of this.listeners.get(lei) ?? []) fn({ data } as MessageEvent<string>);
+    const event = (lei: string, ev: Event) => {
+      for (const fn of this.listeners.get(lei) ?? []) fn(ev);
     };
+    const raw = (lei: string, data: string) => event(lei, { data } as MessageEvent<string>);
     kai.push({
       url,
       close: () => this.close(),
       raw,
+      event,
       fire: (lei, data) => raw(lei, JSON.stringify(data)),
-      onerror: () => this.onerror?.(),
+      onerror: (ev) => this.onerror?.(ev),
     });
   }
 
-  addEventListener(lei: string, fn: (e: MessageEvent<string>) => void) {
+  addEventListener(lei: string, fn: (e: Event) => void) {
     this.listeners.set(lei, [...(this.listeners.get(lei) ?? []), fn]);
   }
 }
@@ -123,15 +126,62 @@ describe("openAgentStream", () => {
     h.close();
   });
 
-  it("坏 JSON 变成一条可恢复的 error 帧，不抛", () => {
+  it("坏 JSON 直接丢弃，不制造用户可见的 error 通知", () => {
     kaiFake();
     const frames: DownFrame[] = [];
     const h = openAgentStream({ onFrame: (f) => frames.push(f), onState: () => undefined, lastSeq: () => 0 });
     // 直接把坏数据塞进监听器，绕开序列化
     kai[0].raw("state", "{不是 JSON");
+    expect(frames).toHaveLength(0);
+    h.close();
+  });
+
+  it("业务回调自身抛错不会被伪装成 JSON 解析失败", () => {
+    kaiFake();
+    const onFrame = vi.fn(() => { throw new Error("reducer boom"); });
+    const h = openAgentStream({ onFrame, onState: () => undefined, lastSeq: () => 0 });
+    expect(() => kai[0].fire("state", {
+      type: "state", sessionId: "s", streamSeq: 1, state: "working",
+    })).toThrow("reducer boom");
+    // 只调用一次：旧实现会在这个 catch 里再塞一条「收到无法解析的帧」。
+    expect(onFrame).toHaveBeenCalledTimes(1);
+    h.close();
+  });
+
+  it("传输层 error 事件没有 data，不能当成协议帧解析", () => {
+    kaiFake();
+    const frames: DownFrame[] = [];
+    const h = openAgentStream({ onFrame: (f) => frames.push(f), onState: () => undefined, lastSeq: () => 0 });
+    // EventSource 的传输层失败也派发 "error"；它与后端 event: error 同名，
+    // 但没有 data。这里必须静默跳过，否则界面会出现「收到无法解析的帧」。
+    kai[0].event("error", { type: "error" } as Event);
+    expect(frames).toHaveLength(0);
+    h.close();
+  });
+
+  it("后端 event: error 的正常消息帧仍会派发", () => {
+    kaiFake();
+    const frames: DownFrame[] = [];
+    const h = openAgentStream({ onFrame: (f) => frames.push(f), onState: () => undefined, lastSeq: () => 0 });
+    kai[0].fire("error", {
+      type: "error", sessionId: null, streamSeq: 3,
+      code: "internal", message: "真实错误", recoverable: true,
+    });
     expect(frames).toHaveLength(1);
-    expect(frames[0].type).toBe("error");
-    expect(frames[0]).toMatchObject({ code: "internal", recoverable: true });
+    expect(frames[0]).toMatchObject({ type: "error", message: "真实错误" });
+    h.close();
+  });
+
+  it("后端 error 消息帧不会触发传输层重连", async () => {
+    kaiFake();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    vi.useFakeTimers();
+    const h = openAgentStream({ onFrame: () => undefined, onState: () => undefined, lastSeq: () => 0 });
+    // onerror 也会收到服务端 `event: error` 的 MessageEvent；带 data 表示这是
+    // 业务帧，应交给类型监听器，而不是走断线重连。
+    kai[0].onerror?.({ data: JSON.stringify({ type: "error" }) } as MessageEvent);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(kai).toHaveLength(1);
     h.close();
   });
 });

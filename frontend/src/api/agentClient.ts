@@ -12,7 +12,6 @@ import {
   CreateSessionRequest,
   DecideRequest,
   DownFrame,
-  ErrorFrame,
   PermissionMode,
   ResultFrame,
 } from "./agentTypes";
@@ -21,6 +20,10 @@ const BASE = "/agent-api";
 const STREAM = `${BASE}/stream`;
 
 async function duError(res: Response): Promise<BridgeError> {
+  // 401 拦截（方案 6.4）：会话失效时广播，AuthGate 收到后切登录页。
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("lifeos:unauthorized"));
+  }
   let code = "internal";
   let message = `HTTP ${res.status}`;
   let payload: Record<string, unknown> = {};
@@ -165,9 +168,26 @@ export interface PickFolderResult {
   inTrustRoot: boolean;
 }
 
-/** 弹本机原生「选择文件夹」对话框。Bridge 侧弹，请求会挂到对话框关闭才返回。 */
-export const pickFolder = (startIn?: string) =>
-  post<PickFolderResult>("/pick-folder", { startIn: startIn || undefined });
+/** 弹本机原生「选择文件夹」对话框（方案 7.1 双形态）。
+ *
+ * 桌面壳（pywebview）在 → 走 `pywebview.api.select_folder()`（对话框模态于
+ * 应用窗口）；浏览器 → 走 bridge 的 `/pick-folder`。两条通道同一契约
+ * `{path: string|null}`；桌面壳选完路径后补一次 `/trust-check` 拿
+ * inTrustRoot——信任根判定唯一实现在 planner_guard，桌面壳不复制。
+ * 之后的信任确认流程（黄字提示 → /trust-folder）两种形态完全一致。
+ */
+export const pickFolder = async (startIn?: string): Promise<PickFolderResult> => {
+  const api = (window as unknown as { pywebview?: { api?: { select_folder?: () => Promise<string | null> } } })
+    .pywebview?.api;
+  if (api?.select_folder) {
+    const lu = await api.select_folder();
+    if (lu === null || lu === undefined) return { path: null, inTrustRoot: false };
+    const zhi = await get<{ path: string; inTrustRoot: boolean }>(
+      `/trust-check?path=${encodeURIComponent(lu)}`);
+    return { path: zhi.path, inTrustRoot: zhi.inTrustRoot };
+  }
+  return post<PickFolderResult>("/pick-folder", { startIn: startIn || undefined });
+};
 
 /** 用户确认后，把信任根外的目录追加进 Bridge 的信任根（闸门 3 的白名单）。 */
 export const trustFolder = (path: string) =>
@@ -175,6 +195,18 @@ export const trustFolder = (path: string) =>
 
 export const health = () =>
   get<{ ok: boolean; pid: number; uptimeSec: number; version: string; instanceId: string }>("/health");
+
+/** 桌面壳形态判定（方案 4.4/7.1）：pywebview 存在即 exe 壳。 */
+export const zaiZhuoMian = (): boolean =>
+  typeof window !== "undefined" &&
+  Boolean((window as unknown as { pywebview?: unknown }).pywebview);
+
+/** 打开数据/日志目录（方案 4.4）。仅桌面壳有实现；浏览器形态不显示入口。 */
+export function daKaiRiZhi(): void {
+  const api = (window as unknown as { pywebview?: { api?: { open_logs?: () => void } } })
+    .pywebview?.api;
+  void api?.open_logs?.();
+}
 
 export const createSession = (a: CreateSessionRequest) =>
   post<{ session: AgentSession }>("/sessions", a).then((r) => r.session);
@@ -325,20 +357,37 @@ export function openAgentStream(a: StreamOptions): StreamHandle {
     for (const lei of MING) {
       src.addEventListener(lei, (ev) => {
         if (dai !== zhao) return;
-        const zhen = ev as MessageEvent<string>;
+        // EventSource 把**传输层错误**也派发成 "error" 事件，它与后端
+        // `event: error` 的正常消息帧同名。传输错误没有 data 字段，先挡掉；
+        // 否则 JSON.parse(undefined) 会被误报成「收到无法解析的帧」。
+        const data = (ev as MessageEvent<unknown>).data;
+        if (typeof data !== "string" || data.length === 0) return;
+
+        let zhen: DownFrame;
         try {
-          a.onFrame(JSON.parse(zhen.data) as DownFrame);
+          zhen = JSON.parse(data) as DownFrame;
         } catch {
-          a.onFrame({
-            type: "error", sessionId: null, streamSeq: 0,
-            code: "internal", message: "收到无法解析的帧", recoverable: true,
-          });
+          // 坏帧不进入业务状态，也不弹不可行动的用户提示；主动走一次重连，
+          // 让新连接的 snapshot 把状态补齐。持续坏帧由指数退避兜住。
+          src?.close();
+          src = null;
+          chonglian(dai);
+          return;
         }
+        if (zhen === null || typeof zhen !== "object" || typeof zhen.type !== "string") return;
+
+        // **不要把这个调用放进上面的 try。** reducer 抛错时若被同一层 catch
+        // 接住，会再次被伪装成 JSON 解析失败，掩盖真正的页面异常。
+        a.onFrame(zhen);
       });
     }
 
-    src.onerror = () => {
+    src.onerror = (ev) => {
       if (shut || dai !== zhao) return;
+      // 后端也可以发 `event: error` 的**业务错误帧**，浏览器会用同一个事件名
+      // 派发 MessageEvent。它由上面的类型监听器处理，不是传输层断开——这里
+      // 若再走重连路径，会把一条可恢复的业务错误升级成一次无谓的重连风暴。
+      if (typeof (ev as MessageEvent<unknown> | undefined)?.data === "string") return;
       src?.close();
       src = null;
       // EventSource 不区分 401 与网络抖动，readyState 也分不出来。

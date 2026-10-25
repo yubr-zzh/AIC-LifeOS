@@ -23,12 +23,15 @@
 }
 /* 必须覆盖父级的 600px，否则左格被撑破。组件结构一字未改，只压这一处。 */
 .chat-split-grid > .chat-page-grid { min-height: 0; }
+/* Agent 卡与对话卡同高：不钉住的话，行高随 Agent 消息涨，长会话把整页往下顶，
+   .agp-body 的内滚永远轮不到生效。 */
+.chat-split-grid > .agp { max-height: min(760px, calc(100dvh - 210px)); }
 
 /* ---- 折叠态审批条（11.7）---- */
 .apb {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 12px; padding: 8px 12px;
-  border: 1px solid var(--st-confirm); border-left-width: 3px;
+  border: 1px solid var(--st-confirm);
   border-radius: var(--r-1);
   background: var(--st-confirm-bg);
 }
@@ -66,7 +69,11 @@
   padding: 5px 10px; border-bottom: 1px solid var(--bd-1);
   background: var(--bg-1); font-size: 11px; color: var(--fg-2);
 }
-.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent; scrollbar-gutter: stable; }
+.agp-body::-webkit-scrollbar { width: 10px; }
+.agp-body::-webkit-scrollbar-track { background: transparent; }
+.agp-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--bd-3); background-clip: padding-box; }
+.agp-body::-webkit-scrollbar-thumb:hover { background: var(--bd-4); background-clip: padding-box; }
 .agp-hint { margin: 0; color: var(--fg-3); font-size: 12px; line-height: 1.7; }
 .agp-off {
   border: 1px dashed var(--bd-3); border-radius: var(--r-1);
@@ -92,11 +99,13 @@
 .agp-notice button { background: none; border: 0; cursor: pointer; color: var(--fg-3); }
 
 /* ---- 消息气泡 ---- */
-.agb { border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
+.agb { position: relative; border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
 .agb-role {
   font-size: 10px; letter-spacing: .04em; color: var(--fg-3);
-  padding: 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+  padding: 3px 68px 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
 }
+.agb-copy { position: absolute; z-index: 2; top: 2px; right: 4px; min-height: 19px; padding: 1px 5px; font-size: 9px; }
+.agb-copy span { display: none; }
 .agb-text { padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
 .agb-user { background: var(--bg-2); }
 .agb-user .agb-role { background: var(--bg-3); }
@@ -251,7 +260,7 @@
 /* ---- 「本地 Agent」页 ---- */
 .ags {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px; align-items: start;
+  gap: 16px; align-items: stretch;
 }
 /* 凭据目录建不出来时的通栏告警（spec 11.2）。走 `.agp-notice` 的配色惯例
    （琥珀底 = 待办，红底 = 已坏），但跨整屏宽度且不通栏收缩——`.ags` 是
@@ -275,6 +284,9 @@
 /* 「Agent 活动」面板是 .ags 里唯一的 Panel，让它整行通栏。
    不写这一条的话它只占一格（minmax(340px, 1fr)），事件表和详情挤在 340px 里没法看。 */
 .ags > .panel { grid-column: 1 / -1; }
+/* 活动表行数上限 40：不给 panel-body 封顶的话，面板随事件无限长高，
+   整页被往下顶——封顶后表在卡内滚。 */
+.ags > .panel .panel-body { max-height: 320px; }
 .ags-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ags-head h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
 .ags-desc { margin: 0; font-size: 12px; line-height: 1.7; color: var(--fg-2); }
@@ -284,6 +296,7 @@
 }
 .ags-fact { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; background: var(--bg-1); }
 .ags-fact .mono { font-size: 10px; }
+.ags-fact > span.mono { white-space: nowrap; }
 .ags-fact strong { font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; }
 .ags-note { margin: 0; font-size: 11px; line-height: 1.6; color: var(--fg-3); }
 .ags-note.err { color: var(--st-failed); }
@@ -291,6 +304,23 @@
 .ags-cwd-row { display: flex; gap: 6px; align-items: stretch; }
 .ags-cwd-row input { flex: 1; min-width: 0; }
 .ags-cwd-row .btn-ghost { white-space: nowrap; }
+.ags-browse-button,
+.ags-browse-button.btn-ghost {
+  min-height: 34px;
+  border-color: #141413;
+  background: #141413;
+  color: #fff;
+  font-weight: 650;
+  opacity: 1;
+}
+.ags-browse-button:hover,
+.ags-browse-button.btn-ghost:hover {
+  border-color: #2b2a27;
+  background: #2b2a27;
+  color: #fff;
+}
+.ags-browse-button:active { transform: translateY(1px); }
+.ags-browse-button:focus-visible { box-shadow: 0 0 0 2px #fdfcf8, 0 0 0 4px #141413; }
 .ags-btns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ags-btns select {
   font: 11.5px var(--font-ui); padding: 4px 6px;
@@ -313,7 +343,9 @@
   background: var(--bg-2); color: var(--fg-1);
 }
 .ags-field small { font-size: 10.5px; line-height: 1.5; color: var(--fg-3); }
-.ags-toggle { display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px; line-height: 1.5; color: var(--fg-2); }
+.ags-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--fg-2); }
+.ags-toggle input { flex: 0 0 auto; margin: 0; }
+.ags-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- 移动端：Agent 面板全屏覆盖 ----
    overlay 是 CSS 在窄屏下的呈现，不是 JS 状态（11.3 规则 2）——
@@ -327,4 +359,70 @@
   .agp-body { -webkit-overflow-scrolling: touch; }
   .apr-rail { width: 4px; }
   .nav-badge { margin-left: 6px; }
+}
+
+/* ---- Working indicator ---- */
+.agent-spinner {
+  display: inline-block; width: 12px; height: 12px; flex: 0 0 auto;
+  border: 2px solid var(--bd-2); border-top-color: var(--accent);
+  border-radius: 50%; animation: agent-spin .75s linear infinite;
+}
+.agent-spinner.small { width: 9px; height: 9px; border-width: 1.5px; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+
+/* ---- Memory capture panel with explicit dismissal ---- */
+.agent-memory-capture { padding: 12px; border-top: 1px solid var(--bd-1); }
+.agent-memory-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agent-memory-head > div { display: flex; align-items: center; gap: 5px; }
+.agent-memory-close {
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--fg-3); font-size: 17px; cursor: pointer;
+}
+.agent-memory-close:hover { background: var(--st-failed-bg); color: var(--st-failed); }
+
+/* ---- Activity panel at the bottom: at most 20 rows, internal scroll ---- */
+.ags > .panel.agent-activity-panel { grid-column: 1 / -1; }
+.agent-activity-panel .panel-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
+.agent-activity-panel .panel-body::-webkit-scrollbar { width: 8px; }
+.agent-activity-panel .panel-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--bd-3); }
+/* ---- 对话 / Agent 可拖拽分栏 ---- */
+.chat-split-grid.resizable { gap: 0; align-items: stretch; min-height: 620px; }
+.chat-split-grid.resizable > .chat-page-grid,
+.chat-split-grid.resizable > .agp { min-width: 0; }
+.chat-split-grid.resizable > .agp { height: 100%; max-height: min(760px, calc(100dvh - 128px)); }
+.chat-split-resizer {
+  position: relative; z-index: 5; width: 10px; min-width: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: col-resize; touch-action: none; outline: none;
+}
+.chat-split-resizer::before {
+  content: ""; width: 1px; height: calc(100% - 18px);
+  border-radius: 999px; background: var(--bd-2);
+  transition: width .15s ease, background-color .15s ease;
+}
+.chat-split-resizer:hover::before,
+.chat-split-resizer:focus-visible::before,
+.chat-split-grid.dragging .chat-split-resizer::before { width: 3px; background: var(--accent); }
+.chat-split-grip {
+  position: absolute; width: 4px; height: 38px; border-radius: 999px;
+  background: var(--bd-3); opacity: 0; transition: opacity .15s ease;
+}
+.chat-split-resizer:hover .chat-split-grip,
+.chat-split-resizer:focus-visible .chat-split-grip,
+.chat-split-grid.dragging .chat-split-grip { opacity: 1; background: var(--accent); }
+.chat-split-grid.dragging > .chat-page-grid,
+.chat-split-grid.dragging > .agp { pointer-events: none; }
+body.chat-split-resizing { cursor: col-resize; user-select: none; }
+body.chat-split-resizing * { cursor: col-resize !important; }
+
+/* Agent 输入区：即使尚未连接也允许编辑草稿，只限制发送。 */
+.agc { flex: 0 0 auto; position: relative; z-index: 2; }
+.agc textarea { pointer-events: auto; cursor: text; }
+.agc textarea:disabled { cursor: not-allowed; opacity: .65; }
+.agc-hint { margin-right: auto; color: var(--fg-3); font-size: 10.5px; }
+
+@media (max-width: 760px) {
+  .chat-split-grid.resizable { grid-template-columns: 1fr !important; min-height: 0; }
+  .chat-split-resizer { display: none; }
+  .chat-split-grid.resizable > .agp { height: auto; max-height: none; }
 }

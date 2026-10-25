@@ -108,7 +108,7 @@ export function DelegationCard({ plan, canSend, onChange, onSend, onOpenPanel }:
         <span className="mono dim">已选 {xuan.length}/{plan.items.length} 条 · {Math.round(zong / 1024)} KB</span>
         <div className="dlg-btns">
           {!canSend ? (
-            <button className="btn-ghost" onClick={onOpenPanel} title="先到「本地 Agent」页连接一个 Agent">
+            <button className="btn-ghost" onClick={onOpenPanel} title="先到「Agent」页连接一个 Agent">
               先连接 Agent
             </button>
           ) : null}

@@ -61,6 +61,16 @@ describe("AgentActivityPanel", () => {
     expect(await screen.findByText(/连不上/)).toBeTruthy();
   });
 
+  it("最多展示最近 20 条，更早的记录不铺满页面", async () => {
+    zhuang(Array.from({ length: 25 }, (_, index) => shi({
+      id: `e-${index}`,
+      type: "session.created",
+      payload: { marker: `m-${index}` },
+    })));
+    expect(await screen.findByText("m-24")).toBeTruthy();
+    expect(screen.queryByText("m-0")).toBeNull();
+    expect(screen.getByText("m-5")).toBeTruthy();
+  });
   it("每隔一段时间自己刷新一次，不用进后台页面", async () => {
     const du = vi.spyOn(client, "getEvents")
       .mockResolvedValue({ events: [], source: "backend" });

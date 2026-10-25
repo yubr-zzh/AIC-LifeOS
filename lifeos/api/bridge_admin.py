@@ -25,9 +25,15 @@ from typing import Any
 
 from lifeos.api.dangqian import dang_qian_yong_hu
 from lifeos.api.devices import PeiMa, SheBiao
+from lifeos.gen import gen_mulu
 
 XIANG = Path(__file__).resolve().parent.parent.parent
-WEN_JIA = XIANG / ".lifeos" / "bridge" / "runtime.json"
+
+
+def yun_wen() -> Path:
+    """runtime.json 的位置。经 `gen_mulu()` 解析（方案 4.2.3）——打包态
+    CWD 不可控，写死 `<仓库>/.lifeos` 会指向安装目录。"""
+    return gen_mulu() / "bridge" / "runtime.json"
 
 # 设备表与隧道网关由主服务在 run() 时注入。没有网关（本地直连形态）时
 # 隧道相关端点仍可用，只是 unpair 断不开任何东西。
@@ -132,7 +138,7 @@ def du_she() -> dict[str, Any] | None:
 def du_yunxing() -> dict[str, Any]:
     """读 runtime.json。读不到就是「没注册」，一律按离线处理。"""
     try:
-        return json.loads(WEN_JIA.read_text(encoding="utf-8"))
+        return json.loads(yun_wen().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 
@@ -184,8 +190,13 @@ def xinxi() -> dict[str, Any]:
     return out
 
 
-def qidong(a4: float = 8.0) -> dict[str, Any]:
-    """拉起 Bridge 子进程。**仅本地开发形态**：公网下云端拉不起用户机器上的进程。"""
+def qidong(a4: float = 30.0) -> dict[str, Any]:
+    """拉起 Bridge 子进程。**仅本地开发形态**：公网下云端拉不起用户机器上的进程。
+
+    默认等待 30 秒：Bridge 监听前要先跑完 `claude --version` 版本探测
+    （10 秒上限）与 SDK 导入，8 秒的旧窗在冷机上会误报「启动超时」——
+    实际 bridge 随后就绪，看护线程还会再拉一次，白杀一遍。
+    """
     yun = du_yunxing()
     if yun:
         try:
@@ -200,9 +211,20 @@ def qidong(a4: float = 8.0) -> dict[str, Any]:
         kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
     else:
         kw["start_new_session"] = True
+    if getattr(sys, "frozen", False):
+        # 打包态：sys.executable 是 LifeOS.exe，`-m lifeos.bridge.run` 的
+        # 语义在打包里不存在——那样拉起的是第二个桌面壳进程，会被单实例
+        # 锁当场弹掉，Bridge 永远起不来（dist_debug 实测：/api/bridge/start
+        # 返回 200，/agent-api/* 全线 502）。改带 `--lifeos-bridge` 再入，
+        # 桌面壳看到这个标志就把进程转交 bridge.run.main()。
+        ming = [sys.executable, "--lifeos-bridge"]
+        cwd = str(Path(sys.executable).parent)
+    else:
+        ming = [sys.executable, "-m", "lifeos.bridge.run", "--root", str(XIANG)]
+        cwd = str(XIANG)
     subprocess.Popen(
-        [sys.executable, "-m", "lifeos.bridge.run"],
-        cwd=str(XIANG),
+        ming,
+        cwd=cwd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         **kw,

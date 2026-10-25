@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./state/store";
 import { useAgentStore } from "./state/agentStore";
 import { useAgentStream } from "./hooks/useAgentStream";
@@ -8,34 +8,18 @@ import { ChatPanel } from "./panels/ChatPanel";
 import { AgentPanel } from "./panels/AgentPanel";
 import { AgentsSection } from "./panels/AgentsSection";
 import { AgentPeekBar } from "./panels/AgentPeekBar";
-import { RuntimeRail } from "./panels/RuntimeRail";
-import { EventsPanel } from "./panels/EventsPanel";
-import { MemoryPanel } from "./panels/MemoryPanel";
-import { TracePanel } from "./panels/TracePanel";
-import { SkillsPanel } from "./panels/SkillsPanel";
-import { PermissionsPanel } from "./panels/PermissionsPanel";
-import { DataFlowView } from "./panels/DataFlowView";
 import { SettingsPage } from "./panels/SettingsPage";
 import { WorkCalendar } from "./components/WorkCalendar";
-import { RichEditor } from "./components/RichEditor";
-import { AvatarButton } from "./components/AvatarButton";
-import {
-  IconArrowRight,
-  IconBook,
-  IconBolt,
-  IconCalendar,
-  IconCheck,
-  IconChevron,
-  IconCircleDot,
-  IconHome,
-  IconInbox,
-  IconMessage,
-  IconPlus,
-  IconSettings,
-  IconSpark,
-  IconSun,
-  IconTrash,
-} from "./components/Icons";
+import { TodayOverviewCards } from "./components/TodayOverviewCards";
+import { DailyReminderCard } from "./components/DailyReminderCard";
+import { EntryHistory } from "./components/EntryHistory";
+import { InboxButton } from "./components/InboxButton";
+import { MarkdownEditor } from "./components/MarkdownEditor";
+import { ResizableChatSplit } from "./components/ResizableChatSplit";
+import { extractPlanItems, localDateKey } from "./utils/planItems";
+import { AccountMenu, AuthGate } from "./components/AuthGate";
+import brandMark from "./assets/lifeos-mark.png";
+import { IconBook, IconBolt, IconCalendar, IconHome, IconMessage, IconSettings, IconSpark, IconSun } from "./components/Icons";
 
 type SectionId =
   | "home"
@@ -49,7 +33,6 @@ type SectionId =
   | "feedback"
   | "diary"
   | "insight"
-  | "memory"
   | "settings";
 
 type NavIcon = "home" | "message" | "calendar" | "book" | "spark" | "bolt";
@@ -59,7 +42,7 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     items: [
       { id: "home", label: "今日概览", icon: "home" },
       { id: "chat", label: "对话", icon: "message", hint: "与 LifeOS 对话" },
-      { id: "agents", label: "本地 Agent", icon: "bolt", hint: "发现、连接、运行本机 Agent" },
+      { id: "agents", label: "Agent", icon: "bolt", hint: "发现、连接、运行本机 Agent" },
     ],
   },
   {
@@ -84,19 +67,18 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
 ];
 
 const sectionMeta = {
-  calendar: { crumb: "记录", title: "工作历", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
-  home: { crumb: "工作台", title: "今日概览", description: "把计划变成行动，把行动留下痕迹。" },
-  "daily-plan": { crumb: "计划", title: "每日规划", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
-  "daily-review": { crumb: "复盘", title: "每日复盘", description: "记录发生过什么，也看见自己做得好的地方。" },
-  "phase-plan": { crumb: "计划", title: "阶段性规划", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
-  "phase-review": { crumb: "复盘", title: "阶段性复盘", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
-  chat: { crumb: "工作台", title: "对话", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
-  agents: { crumb: "工作台", title: "本地 Agent", description: "LifeOS 负责规划与拆解，本机 Agent 负责动手。审批始终由你点。" },
-  feedback: { crumb: "反馈", title: "反馈", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
-  diary: { crumb: "记录", title: "日记", description: "不必写得完整，想到什么就从哪里开始。" },
-  insight: { crumb: "记录", title: "心得 / 体验", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
-  memory: { crumb: "开发", title: "记忆候选", description: "候选、生命周期、纠正 / 撤回、画像重建、Markdown 镜像。" },
-} as Record<SectionId, { crumb: string; title: string; description: string }>;
+  calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
+  home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
+  "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
+  "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
+  "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
+  "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
+  chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
+  agents: { eyebrow: "协作 · 本机 Agent", title: "让本机 Agent 帮你完成工作", description: "LifeOS 负责规划，Agent 负责执行，关键操作始终由你确认。" },
+  feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
+  diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
+  insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
+} as Record<SectionId, { eyebrow: string; title: string; description: string }>;
 
 function NavIconGlyph({ name }: { name: NavIcon }) {
   if (name === "home") return <IconHome size={17} />;
@@ -107,21 +89,27 @@ function NavIconGlyph({ name }: { name: NavIcon }) {
   return <IconSpark size={17} />;
 }
 
-sectionMeta.settings = { crumb: "系统", title: "设置", description: "管理模型 Provider、API 连接和工作区外观。" };
+sectionMeta.settings = { eyebrow: "系统 · 设置", title: "让 LifeOS 按你的方式工作", description: "管理模型 Provider、API 连接和工作区外观。" };
+
+const NAV_COLLAPSED_KEY = "lifeos.nav.collapsed.v1";
 
 export default function App() {
   const store = useStore();
   const agent = useAgentStore();
   const api = useAgentStream(agent);
-  const initialSection: SectionId = (() => {
-    if (typeof window === "undefined") return "home";
-    const hash = window.location.hash.replace(/^#\/?/, "");
-    return (hash as SectionId) || "home";
-  })();
-  const [active, setActive] = useState<SectionId>(initialSection);
+  const [active, setActive] = useState<SectionId>("home");
   const [dark, setDark] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem(NAV_COLLAPSED_KEY) === "1"; } catch { return false; }
+  });
   const meta = sectionMeta[active];
+  const crumb = active === "settings"
+    ? "设置"
+    : navigation.flatMap((group) => group.items).find((item) => item.id === active)?.label ?? "工作台";
+  const dateParts = new Intl.DateTimeFormat("zh-CN", { day: "numeric", month: "long" }).formatToParts(new Date());
+  const todayDay = dateParts.find((part) => part.type === "day")?.value ?? "";
+  const todayMonth = dateParts.find((part) => part.type === "month")?.value ?? "";
 
   // 7.7.1 决策回路的前端落点：Agent 每条指令的结果以独立一条消息回到左栏。
   // agentStore 不能反向 import 主 store，所以由同时持有两者的这一层搭桥。
@@ -135,25 +123,35 @@ export default function App() {
     store.dispatch({ type: "APPEND_AGENT_SUMMARY", text: bao.title, traceId: bao.traceId });
   }, [bao, store]);
 
+  useEffect(() => {
+    try { localStorage.setItem(NAV_COLLAPSED_KEY, navCollapsed ? "1" : "0"); } catch { /* preference is best-effort */ }
+  }, [navCollapsed]);
+
   const select = (id: SectionId) => {
     setActive(id);
     setSettingsOpen(false);
-    if (typeof window !== "undefined") window.location.hash = `#/${id}`;
   };
 
+  // 登录闸（方案 6.4）：未登录渲染登录页/首启向导，任何 401 都会被切回来。
   return (
-    <div className={`lifeos-shell ${dark ? "theme-night" : ""}`}>
+    <AuthGate>
+    <div className={`lifeos-shell ${dark ? "theme-night" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${active === "chat" ? "chat-view" : ""}`}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
-      <aside className="side-nav">
+      <aside className={`side-nav ${navCollapsed ? "collapsed" : ""}`} aria-label="主导航侧栏">
         <div className="brand-block">
-          <div className="brand-mark"><IconBolt size={17} /></div>
-          <div>
+          <div className="brand-mark"><img src={brandMark} alt="" /></div>
+          <div className="brand-copy">
             <div className="brand-name">LifeOS</div>
-            <div className="brand-caption">你的个人操作系统</div>
+            <div className="brand-caption">规划、复盘与执行</div>
           </div>
+          <button type="button" className="side-collapse-toggle" onClick={() => setNavCollapsed((value) => !value)}
+            title={navCollapsed ? "展开主导航" : "收起主导航"} aria-label={navCollapsed ? "展开主导航" : "收起主导航"}
+            aria-expanded={!navCollapsed} aria-controls="main-navigation">
+            {navCollapsed ? "»" : "«"}
+          </button>
         </div>
 
-        <nav className="main-nav" aria-label="主导航">
+        <nav id="main-navigation" className="main-nav" aria-label="主导航">
           {navigation.map((group) => (
             <div className="nav-group" key={group.group}>
               <div className="nav-group-title">{group.group}</div>
@@ -163,7 +161,8 @@ export default function App() {
                   className={`nav-item ${active === item.id ? "active" : ""}`}
                   onClick={() => select(item.id)}
                   aria-current={active === item.id ? "page" : undefined}
-                  title={item.hint}
+                  aria-label={item.label}
+                  title={item.hint ?? item.label}
                 >
                   <span className="nav-icon" aria-hidden="true"><NavIconGlyph name={item.icon} /></span>
                   <span className="nav-label">{item.label}</span>
@@ -179,23 +178,19 @@ export default function App() {
 
         <div className="side-footer">
           <div className="side-footer-line"><span className="status-orb" />系统运行良好</div>
-          <div className="side-footer-sub">本地工作区 · 数据已同步</div>
-        </div>
-        <div className="dev-footer">
-          <button className="dev-footer-link" onClick={() => select("memory")} title="Memory 候选 / 生命周期 / 撤回 / 画像">
-            <IconSpark size={11} /> Memory
-          </button>
+          <div className="side-footer-sub">工作区 · 数据已同步</div>
         </div>
       </aside>
 
       <div className="content-shell">
         <header className="workspace-header">
-          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{meta.crumb}</strong></div>
+          <div className="breadcrumb"><span>LifeOS</span><i>/</i><strong>{crumb}</strong></div>
           <div className="header-actions">
             <span className="sync-label"><span className="status-orb" />刚刚同步</span>
+            <InboxButton agent={agent} onOpenAgent={() => { agent.setLayout("split"); select("chat"); }} />
             <button className="header-icon-button" onClick={() => setDark(!dark)} title="切换主题" aria-label={`切换到${dark ? "浅色" : "夜间"}主题`} aria-pressed={dark}>{dark ? <IconSun size={16} /> : <IconSpark size={16} />}</button>
             <button className="header-icon-button" onClick={() => { setSettingsOpen(false); select("settings"); }} title="设置" aria-label="设置" aria-expanded={active === "settings"}><IconSettings size={16} /></button>
-            <AvatarButton />
+            <AccountMenu />
           </div>
           {settingsOpen ? (
             <div className="settings-popover">
@@ -206,15 +201,20 @@ export default function App() {
           ) : null}
         </header>
 
-        <main id="main-content" className="workspace-main">
+        <main id="main-content" className={`workspace-main ${active === "chat" ? "workspace-main-chat" : ""}`}>
           <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
-            <h1>{meta.title}</h1>
-            <p>{meta.description}</p>
+            <div>
+              <div className="page-eyebrow">{meta.eyebrow}</div>
+              <h1>{meta.title}</h1>
+              <p>{meta.description}</p>
+            </div>
+            <div className="intro-date"><span>今天</span><strong>{todayDay}</strong><small>{todayMonth}</small></div>
           </div>
           <SectionContent active={active} store={store} agent={agent} api={api} onNavigate={select} dark={dark} onDarkChange={setDark} />
         </main>
       </div>
     </div>
+    </AuthGate>
   );
 }
 
@@ -236,21 +236,28 @@ function SectionContent({
   onDarkChange: (dark: boolean) => void;
 }) {
   if (active === "chat") {
-    // 对话整页：直接占满主区，不再套 content-card（Impeccable 黑名单：卡片当容器）。
-    // Agent 侧栏按需展开，只有用户主动打开时才出现，不参与默认布局。
+    // 对话保持内容优先；Agent 执行面板按需展开。
     const zuo = (
-      <div className="chat-host">
-        <ChatPanel store={store} agent={agent} api={api} />
+      <div className="chat-page-grid">
+        <section className="content-card chat-card">
+          <ChatPanel store={store} agent={agent} api={api} />
+        </section>
       </div>
     );
-    if (agent.state.layout !== "split") return zuo;
     return (
-      <div className="chat-split-grid">
-        {zuo}
-        <AgentPanel store={agent} api={api}
-          onCandidateCreated={() => void store.refreshAll()}
-          onCollapse={() => agent.setLayout("collapsed")} />
-      </div>
+      <>
+        <AgentPeekBar store={agent} api={api} onOpen={() => agent.setLayout("split")} />
+        {agent.state.layout === "split" ? (
+          <ResizableChatSplit
+            chat={zuo}
+            agent={<AgentPanel store={agent} api={api}
+              onCandidateCreated={() => void store.refreshAll()}
+              onCollapse={() => agent.setLayout("collapsed")} />}
+          />
+        ) : (
+          zuo
+        )}
+      </>
     );
   }
   if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
@@ -258,17 +265,13 @@ function SectionContent({
   if (active === "diary") return <DiaryPage />;
   if (active === "calendar") return <WorkCalendar onNavigate={onNavigate} />;
   if (active === "insight") return <InsightPage />;
-  if (active === "memory") return <MemoryPage store={store} />;
   if (active === "settings") return <SettingsPage dark={dark} onDarkChange={onDarkChange} />;
   if (active === "daily-review" || active === "phase-review") return <ReviewPage phase={active === "phase-review"} store={store} />;
   if (active === "daily-plan" || active === "phase-plan") return <PlanningPage phase={active === "phase-plan"} store={store} />;
-  return <HomePage store={store} onNavigate={onNavigate} />;
+  return <HomePage onNavigate={onNavigate} />;
 }
 
-function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; onNavigate: (id: SectionId) => void }) {
-  const completed = 2;
-  const total = 4;
-  const progress = useMemo(() => `${Math.round((completed / total) * 100)}%`, []);
+function HomePage({ onNavigate }: { onNavigate: (id: SectionId) => void }) {
   const today = new Intl.DateTimeFormat("zh-CN", { weekday: "short", month: "long", day: "numeric" }).format(new Date());
   return <div className="home-grid">
     <section className="focus-card content-card">
@@ -278,440 +281,254 @@ function HomePage({ store, onNavigate }: { store: ReturnType<typeof useStore>; o
       <button className="green-button" onClick={() => onNavigate("daily-plan")}>开始今日规划 <span>→</span></button>
       <div className="leaf-decoration" aria-hidden="true">✳</div>
     </section>
-    <section className="content-card progress-card"><div className="card-heading"><div><span className="card-kicker">今日进度</span><h2>{progress}</h2></div><span className="progress-ring">{completed}/{total}</span></div><div className="progress-track"><span style={{ width: progress }} /></div><p>已完成 {completed} 项，还有 2 项等待你的注意。</p><button className="text-button" onClick={() => onNavigate("daily-plan")}>查看今日清单 →</button></section>
-    <section className="content-card today-card"><div className="card-heading"><div><span className="card-kicker">接下来</span><h2>今日安排</h2></div><span className="soft-count">4 件</span></div><Task label="写下本周的阶段目标" done /><Task label="完成课程阅读 · 45 分钟" done /><Task label="整理项目反馈" /><Task label="晚间复盘" /></section>
+    <TodayOverviewCards onViewPlan={() => onNavigate("daily-plan")} />
     <section className="content-card rhythm-card"><div className="card-heading"><div><span className="card-kicker">生活节奏</span><h2>给自己留一点余地</h2></div><span className="soft-count">本周 · 4 / 7 天</span></div><p className="pulse-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p><div className="week-dots"><span className="filled" /><span className="filled" /><span className="filled" /><span className="filled" /><span /><span /><span /></div><div className="rhythm-footer"><span>本周已经记录了 4 个值得记住的瞬间</span><button className="text-button" onClick={() => onNavigate("diary")}>写一篇日记 →</button></div></section>
-    <section className="content-card quote-card"><span className="quote-mark">“</span><p>真正重要的不是把每件事都做好，而是知道此刻什么值得被做好。</p><span className="quote-source">— 今日提醒</span></section>
+    <DailyReminderCard />
     <section className="content-card recent-card"><div className="card-heading"><div><span className="card-kicker">最近记录</span><h2>工作台动态</h2></div><button className="text-button" onClick={() => onNavigate("feedback")}>查看全部</button></div><div className="recent-row"><span className="recent-icon">↗</span><div><strong>完成了一次对话</strong><small>刚刚 · 已写入事件队列</small></div><span className="recent-status">已记录</span></div><div className="recent-row"><span className="recent-icon">✦</span><div><strong>收到一个新的反馈</strong><small>昨天 · 关于复盘流程</small></div><span className="recent-status">待处理</span></div></section>
   </div>;
 }
 
-/**
- * 结构化记录草稿：一类 kind 下可以有**多条**（每天一条规划、一篇日记…），
- * 所以这里不再是"打开第一条"，而是"持有一份列表 + 当前选中项"。
- *
- * - 加载时按 entry_date 分组，日期倒序（最新在前）
- * - 选中项优先落在今天；今天没有就落到最新一条
- * - save() 有 id 就 PUT 更新，没 id 就 POST 新建（"同一天再存一次"是覆盖，
- *   "换一天再存"是新增）
- */
-function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; content?: string }) {
+export function useEntryDraft(kind: StructuredEntryKind, initial: { title?: string; content?: string }) {
+  const initialRef = useRef(initial);
   const [entries, setEntries] = useState<StructuredEntry[]>([]);
-  const [activeId, setActiveId] = useState<string | undefined>(undefined);
+  const [id, setId] = useState<string>();
+  const [entryDate, setEntryDate] = useState(localDateKey);
   const [title, setTitle] = useState(initial.title ?? "");
   const [content, setContent] = useState(initial.content ?? "");
   const [mood, setMood] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
-  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const seedTitle = initial.title ?? "";
-  const seedContent = initial.content ?? "";
-
-  /** 载入一条记录；传 undefined 就开空白草稿（id 空 → save 时 POST 新建）。 */
-  const applyEntry = useCallback((entry: StructuredEntry | undefined) => {
-    if (!entry) {
-      setActiveId(undefined);
-      setTitle(seedTitle);
-      setContent(seedContent);
+  useEffect(() => {
+    let alive = true;
+    const reset = () => {
+      setId(undefined);
+      setEntryDate(localDateKey());
+      setTitle(initialRef.current.title ?? "");
+      setContent(initialRef.current.content ?? "");
       setMood(null);
       setMetadata({});
-      setSavedAt(null);
-      return;
-    }
-    setActiveId(entry.id);
+      setSaveFeedback(null);
+    };
+    listEntries(kind).then((rows) => {
+      if (!alive) return;
+      setEntries(rows);
+      const today = localDateKey();
+      const daily = kind === "daily_plan" || kind === "daily_review" || kind === "diary";
+      const entry = daily ? rows.find((row) => row.entry_date.slice(0, 10) === today) : rows[0];
+      if (entry) {
+        setId(entry.id);
+        setEntryDate(entry.entry_date.slice(0, 10));
+        setTitle(entry.title);
+        setContent(entry.content);
+        setMood(entry.mood ?? null);
+        setMetadata(entry.metadata ?? {});
+      } else {
+        reset();
+      }
+      setLoaded(true);
+    }).catch(() => {
+      if (alive) {
+        reset();
+        setLoaded(true);
+      }
+    });
+    return () => { alive = false; };
+  }, [kind]);
+
+  const openEntry = (entry: StructuredEntry) => {
+    setId(entry.id);
+    setEntryDate(entry.entry_date.slice(0, 10));
     setTitle(entry.title);
     setContent(entry.content);
     setMood(entry.mood ?? null);
     setMetadata(entry.metadata ?? {});
-    setSavedAt(new Date(entry.updated_at).getTime());
-  }, [seedTitle, seedContent]);
+    setSaveFeedback({ tone: "success", text: `已打开 ${entry.entry_date.slice(0, 10)} 的历史记录` });
+  };
 
-  /** 按日期分组 + 倒序，给日期 chips 用。 */
-  const days = useMemo(() => {
-    const groups = new Map<string, StructuredEntry[]>();
-    for (const entry of entries) {
-      const key = entry.entry_date.slice(0, 10);
-      const bucket = groups.get(key) ?? [];
-      bucket.push(entry);
-      groups.set(key, bucket);
-    }
-    return [...groups.entries()]
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, items]) => ({ date, entries: items }));
-  }, [entries]);
+  const startNew = () => {
+    setId(undefined);
+    setEntryDate(localDateKey());
+    setTitle(initialRef.current.title ?? "");
+    setContent(initialRef.current.content ?? "");
+    setMood(null);
+    setMetadata({});
+    setSaveFeedback(null);
+  };
 
-  const activeDate = useMemo(
-    () => entries.find((it) => it.id === activeId)?.entry_date.slice(0, 10) ?? todayKey,
-    [entries, activeId, todayKey],
-  );
-
-  useEffect(() => {
-    let alive = true;
-    setError(null);
-    listEntries(kind)
-      .then((items) => {
-        if (!alive) return;
-        setEntries(items);
-        const todayEntry = items.find((it) => it.entry_date.slice(0, 10) === todayKey);
-        applyEntry(todayEntry ?? items[0]);
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setLoaded(true);
-      });
-    return () => { alive = false; };
-  }, [kind, todayKey, applyEntry]);
-
-  /** 切到某一天。有记录就载入，没有就开空白草稿。 */
-  const selectDate = useCallback((date: string) => {
-    setError(null);
-    applyEntry(entries.find((it) => it.entry_date.slice(0, 10) === date));
-  }, [entries, applyEntry]);
-
-  /** 开一条全新的空白记录。 */
-  const startBlank = useCallback(() => {
-    setError(null);
-    applyEntry(undefined);
-  }, [applyEntry]);
-
-  const save = async (
-    overrides: Partial<{
-      title: string; content: string; mood: string | null;
-      metadata: Record<string, unknown>; entry_date: string;
-    }> = {},
-  ) => {
+  const save = async (overrides: Partial<{ title: string; content: string; mood: string | null; metadata: Record<string, unknown> }> = {}) => {
     setSaving(true);
-    setError(null);
+    setSaveFeedback(null);
     try {
       const entry = await saveEntry({
-        id: activeId,
+        id,
         kind,
-        entry_date: overrides.entry_date ?? activeDate,
+        entry_date: entryDate,
         title: overrides.title ?? title,
         content: overrides.content ?? content,
         mood: overrides.mood ?? mood,
         metadata: overrides.metadata ?? metadata,
       });
-      setActiveId(entry.id);
+      setId(entry.id);
+      setEntryDate(entry.entry_date.slice(0, 10));
       setTitle(entry.title);
       setContent(entry.content);
       setMood(entry.mood ?? null);
       setMetadata(entry.metadata ?? {});
-      setSavedAt(Date.now());
-      setEntries(await listEntries(kind));
+      setEntries((previous) => [entry, ...previous.filter((row) => row.id !== entry.id)]
+        .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.updated_at.localeCompare(a.updated_at)));
+      setSaveFeedback({
+        tone: "success",
+        text: `已保存到本地 SQLite · ${entry.entry_date.slice(0, 10)} · 记录 #${entry.id.slice(0, 8)}`,
+      });
       return entry;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      throw e;
+    } catch (error) {
+      setSaveFeedback({
+        tone: "error",
+        text: `保存失败：${error instanceof Error ? error.message : String(error)}`,
+      });
+      return undefined;
     } finally {
       setSaving(false);
     }
   };
 
-  return {
-    id: activeId, activeDate,
-    title, setTitle,
-    content, setContent,
-    mood, setMood,
-    metadata, setMetadata,
-    saving, savedAt, error, loaded,
-    save,
-    entries, days, selectDate, startBlank,
-  };
-}
-
-/** 日期 chips：横向滚动的"每天一条"选择器 + 新建按钮。 */
-function DateChips({
-  days,
-  activeDate,
-  todayKey,
-  onSelect,
-  onNew,
-  emptyHint,
-}: {
-  days: { date: string; entries: StructuredEntry[] }[];
-  activeDate: string;
-  todayKey: string;
-  onSelect: (date: string) => void;
-  onNew: () => void;
-  emptyHint: string;
-}) {
-  const withToday = days.some((d) => d.date === todayKey)
-    ? days
-    : [{ date: todayKey, entries: [] }, ...days];
-  return (
-    <div className="date-chips" role="tablist" aria-label="按日期切换记录">
-      <div className="date-chips-scroll">
-        {withToday.map((day) => {
-          const active = day.date === activeDate;
-          const isToday = day.date === todayKey;
-          const count = day.entries.length;
-          return (
-            <button
-              key={day.date}
-              role="tab"
-              aria-selected={active}
-              className={`date-chip ${active ? "is-active" : ""} ${isToday ? "is-today" : ""}`}
-              onClick={() => onSelect(day.date)}
-              title={`${day.date}${count ? ` · ${count} 条` : " · 还没有记录"}`}
-            >
-              <span className="date-chip-main">{day.date.slice(5).replace("-", "/")}</span>
-              <span className="date-chip-sub">
-                {isToday ? "今天" : count ? `${count} 条` : "空"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <button className="date-chips-new" onClick={onNew} title={emptyHint}>
-        <IconPlus size={13} />
-        新建
-      </button>
-    </div>
-  );
-}
-
-/** 保存反馈条：保存位置 + 时间 + 错误。 */
-function SaveStatus({
-  savedAt,
-  error,
-  saving,
-  kindLabel,
-  entryDate,
-}: {
-  savedAt: number | null;
-  error: string | null;
-  saving: boolean;
-  kindLabel: string;
-  entryDate: string;
-}) {
-  if (error) {
-    return (
-      <div className="save-status is-error" role="alert">
-        <span className="save-status-dot" />
-        保存失败：{error}
-      </div>
-    );
-  }
-  if (saving) {
-    return (
-      <div className="save-status is-saving" role="status">
-        <span className="save-status-dot" />
-        正在写入本地 SQLite…
-      </div>
-    );
-  }
-  if (savedAt) {
-    const time = new Date(savedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-    return (
-      <div className="save-status is-saved" role="status">
-        <IconCheck size={12} />
-        已保存到本地 SQLite · {kindLabel} · {entryDate} · {time}
-      </div>
-    );
-  }
-  return (
-    <div className="save-status is-idle">
-      <span className="save-status-dot" />
-      尚未保存 · 内容在 {kindLabel} · {entryDate}
-    </div>
-  );
+  return { id, entries, entryDate, title, setTitle, content, setContent, mood, setMood, metadata, setMetadata, saving, loaded, saveFeedback, save, openEntry, startNew };
 }
 
 function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
-  const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", { content: phase ? "建立一个更稳定的学习与创作节奏。" : "" });
-  const todayKey = new Date().toISOString().slice(0, 10);
-  return (
-    <div className="planning-layout">
-      <section className="content-card editor-card">
-        <div className="block-head">
-          <h2 className="editor-card-title">{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的三件事"}</h2>
-          <span className="block-meta">{draft.loaded ? (draft.id ? `已保存 ${draft.entries.length} 条` : "新记录") : "读取中"}</span>
-        </div>
-        <DateChips
-          days={draft.days}
-          activeDate={draft.activeDate}
-          todayKey={todayKey}
-          onSelect={draft.selectDate}
-          onNew={draft.startBlank}
-          emptyHint={phase ? "新建一条阶段规划" : "新建一条今日规划"}
-        />
-        <RichEditor
-          value={draft.content}
-          onChange={draft.setContent}
-          placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "从最重要的事情开始，不必一次写完…"}
-          ariaLabel={phase ? "阶段性规划" : "今日规划"}
-        />
-        <div className="editor-footer">
-          <SaveStatus savedAt={draft.savedAt} error={draft.error} saving={draft.saving} kindLabel={phase ? "阶段规划" : "每日规划"} entryDate={draft.activeDate} />
-          <button className="green-button" onClick={() => void draft.save().catch(() => undefined)} disabled={draft.saving}>
-            {draft.saving ? "保存中…" : draft.savedAt ? "再次保存" : "保存规划"}
-            <IconArrowRight size={14} />
-          </button>
-        </div>
-        {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
-      </section>
-      <aside className="content-card side-tip">
-        <h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3>
-        <p>{phase ? "试着写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？先把这一件事放在最前面。"}</p>
-      </aside>
+  const draft = useEntryDraft(phase ? "phase_plan" : "daily_plan", {});
+  const kindLabel = phase ? "阶段规划" : "每日规划";
+  return <div className="planning-layout">
+    <section className="content-card editor-card">
+      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的事项"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div>
+      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300}
+        ariaLabel={phase ? "阶段规划编辑器" : "每日规划编辑器"}
+        placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "用列表写下今天要做的事，每行一条；每日复盘会自动读取这些事项。"} />
+      <div className="editor-footer actions-only"><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
+      {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
+      {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
+    </section>
+    <div className="entry-side-rail">
+      <aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？把它放在第一行，复盘时会自动成为检查项。"}</p></aside>
+      <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
+        kicker="历史规划 · SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
+        newLabel={phase ? "＋ 新建阶段规划" : "＋ 新建每日规划"} />
     </div>
+  </div>;
+}
+
+export function collectPlanItems(
+  entries: StructuredEntry[],
+  savedChecks: { text: string; done?: boolean }[] = [],
+): { id: string; text: string; done: boolean }[] {
+  return entries.flatMap((entry) =>
+    extractPlanItems(entry.content).map((text, index) => ({
+      id: `${entry.id}-${index}`,
+      text,
+      done: Boolean(savedChecks.find((item) => item.text === text)?.done),
+    })),
   );
 }
 
 function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof useStore> }) {
   const draft = useEntryDraft(phase ? "phase_review" : "daily_review", {});
-  const [checks, setChecks] = useState<{ id: string; label: string; done: boolean }[]>([]);
-  const [newCheck, setNewCheck] = useState("");
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const [planEntries, setPlanEntries] = useState<StructuredEntry[]>([]);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [planItems, setPlanItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
+  const [extras, setExtras] = useState<{ id: string; text: string; done: boolean }[]>([]);
+  const [extraText, setExtraText] = useState("");
+  const applied = useRef("");
 
-  // 每日复盘时拉取"今日规划"作为勾选清单来源；阶段性复盘不做这个。
   useEffect(() => {
-    if (phase) return;
     let alive = true;
-    listEntries("daily_plan").then((items) => {
+    setPlanLoading(true);
+    listEntries(phase ? "phase_plan" : "daily_plan").then((rows) => {
       if (!alive) return;
-      const todayEntry = items.find((it) => it.entry_date.slice(0, 10) === todayKey) ?? items[0];
-      if (!todayEntry) { setChecks([]); return; }
-      const lines = todayEntry.content
-        .replace(/<[^>]+>/g, "\n")
-        .split(/\r?\n/)
-        .map((line) => line.replace(/^[-*•·\s]+/, "").trim())
-        .filter((line) => line.length > 0 && line.length < 200);
-      const saved = (Array.isArray(draft.metadata.checks) ? draft.metadata.checks : []) as { id: string; label: string; done: boolean }[];
-      setChecks(
-        lines.length > 0
-          ? lines.map((label, i) => ({
-              id: `plan-${i}`,
-              label,
-              done: saved.find((s) => s.label === label)?.done ?? false,
-            }))
-          : saved,
-      );
-    }).catch(() => setChecks([]));
+      setPlanEntries(rows);
+      setPlanLoading(false);
+    }).catch(() => { if (alive) { setPlanEntries([]); setPlanLoading(false); } });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, draft.id, todayKey]);
+  }, [phase]);
 
-  const toggleCheck = (id: string) => {
-    setChecks((current) => current.map((c) => (c.id === id ? { ...c, done: !c.done } : c)));
+  useEffect(() => {
+    if (!draft.loaded) return;
+    const key = `${planEntries.map((entry) => entry.id).join(",") || "none"}:${draft.id ?? "new"}:${draft.entryDate}`;
+    if (applied.current === key) return;
+    const savedChecks = Array.isArray(draft.metadata.checks)
+      ? draft.metadata.checks.filter((item): item is { text: string; done?: boolean } => Boolean(item) && typeof (item as { text?: unknown }).text === "string")
+      : [];
+    setPlanItems(collectPlanItems(planEntries, savedChecks));
+    const savedExtras = Array.isArray(draft.metadata.extras)
+      ? draft.metadata.extras.filter((item): item is { id?: string; text: string; done?: boolean } => Boolean(item) && typeof (item as { text?: unknown }).text === "string")
+      : [];
+    setExtras(savedExtras.map((item, index) => ({
+      id: item.id || `extra-${index}`,
+      text: item.text,
+      done: Boolean(item.done),
+    })));
+    applied.current = key;
+  }, [draft.entryDate, draft.id, draft.loaded, draft.metadata, planEntries]);
+
+  const togglePlan = (id: string) => setPlanItems((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
+  const toggleExtra = (id: string) => setExtras((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
+  const addExtra = () => {
+    const text = extraText.trim();
+    if (!text) return;
+    setExtras((current) => [...current, { id: `extra-${Date.now()}-${current.length}`, text, done: false }]);
+    setExtraText("");
   };
-  const addCheck = () => {
-    const label = newCheck.trim();
-    if (!label) return;
-    setChecks((current) => [...current, { id: `adhoc-${Date.now()}`, label, done: false }]);
-    setNewCheck("");
-  };
+  const save = () => void draft.save({
+    metadata: {
+      planEntryIds: planEntries.map((entry) => entry.id),
+      checks: planItems.map(({ text, done }) => ({ text, done })),
+      extras: extras.map(({ id: extraId, text, done }) => ({ id: extraId, text, done })),
+    },
+  });
+  const checkedCount = planItems.filter((item) => item.done).length + extras.filter((item) => item.done).length;
+  const totalCount = planItems.length + extras.length;
 
-  const save = () =>
-    void draft.save({ content: draft.content, metadata: { checks } }).catch(() => undefined);
-
-  return (
-    <div className="review-layout">
-      <section className="content-card review-prompts">
-        <div className="block-head">
-          <h2 className="editor-card-title">{phase ? "回看这段路，你发现了什么？" : "今天发生了什么？"}</h2>
-          <span className="block-meta">{draft.loaded ? (draft.id ? `已保存 ${draft.entries.length} 条` : "新记录") : "读取中"}</span>
+  const kindLabel = phase ? "阶段性复盘" : "每日复盘";
+  return <div className="review-layout">
+    <section className="content-card review-prompts">
+      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "回看这段路，哪些目标真正完成了？" : "对照今天的计划，收好这一天。"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
+      <div className="review-plan-panel">
+        <div className="review-plan-heading"><div><span className="card-kicker">{phase ? "阶段计划承接" : "每日计划承接"}</span><strong>{planLoading ? "正在读取计划…" : planEntries.length ? `已读取 ${planEntries.length} 份计划 · ${checkedCount}/${totalCount} 条已完成` : "还没有可读取的计划"}</strong></div>{planEntries.length ? <span className="review-plan-source">{planEntries.length} 份</span> : null}</div>
+        {planLoading ? <p className="state-empty">正在读取计划事项…</p> : planItems.length === 0 ? <p className="review-empty">还没有可读取的计划条目。可以先在规划页写下计划，也可以直接在下面补充。</p> : (
+          <div className="review-check-list">
+            {planItems.map((item) => <label key={item.id} className={`review-check ${item.done ? "done" : ""}`}>
+              <input type="checkbox" checked={item.done} onChange={() => togglePlan(item.id)} />
+              <span className="review-check-box" aria-hidden="true">{item.done ? "✓" : ""}</span>
+              <span>{item.text}</span>
+            </label>)}
+          </div>
+        )}
+        <div className="review-add-row">
+          <input value={extraText} onChange={(event) => setExtraText(event.target.value)} placeholder="补充一件计划外的事…" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addExtra(); } }} />
+          <button type="button" className="subtle-button" onClick={addExtra}>＋ 添加</button>
         </div>
-
-        <DateChips
-          days={draft.days}
-          activeDate={draft.activeDate}
-          todayKey={todayKey}
-          onSelect={draft.selectDate}
-          onNew={draft.startBlank}
-          emptyHint={phase ? "新建一条阶段复盘" : "新建一条每日复盘"}
-        />
-
-        {!phase ? (
-          <>
-            <span className="review-section-title">从今日规划里勾选完成度</span>
-            {checks.length > 0 ? (
-              <ul className="review-checks" role="list">
-                {checks.map((c) => (
-                  <li key={c.id} className={c.done ? "is-done" : ""}>
-                    <button
-                      className="check-box"
-                      role="checkbox"
-                      aria-checked={c.done}
-                      aria-label={c.label}
-                      onClick={() => toggleCheck(c.id)}
-                    >
-                      {c.done ? <IconCheck size={12} /> : null}
-                    </button>
-                    <span className="review-check-label">{c.label}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="review-checks-empty">今天还没有写过规划。</p>
-            )}
-            <div className="review-check-add">
-              <input
-                type="text"
-                placeholder="额外做了 / 没做的事…"
-                value={newCheck}
-                onChange={(event) => setNewCheck(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCheck(); } }}
-                aria-label="添加复盘条目"
-              />
-              <button type="button" className="ghost" onClick={addCheck} disabled={!newCheck.trim()}>
-                <IconPlus size={12} /> 添加
-              </button>
-            </div>
-          </>
-        ) : null}
-
-        <span className="review-section-title">{phase ? "阶段心得" : "写下今天真正发生了什么"}</span>
-        <RichEditor
-          value={draft.content}
-          onChange={draft.setContent}
-          placeholder={phase ? "回看这段路，你发现了什么…" : "诚实，但不要苛刻。"}
-          minHeight={220}
-          ariaLabel={phase ? "阶段性复盘正文" : "每日复盘正文"}
-        />
-        <div className="editor-footer">
-          <SaveStatus savedAt={draft.savedAt} error={draft.error} saving={draft.saving} kindLabel={phase ? "阶段复盘" : "每日复盘"} entryDate={draft.activeDate} />
-          <button className="green-button" onClick={save} disabled={draft.saving}>
-            {draft.saving ? "保存中…" : draft.savedAt ? "再次保存" : "完成复盘"}
-            <IconArrowRight size={14} />
-          </button>
-        </div>
-        {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
-      </section>
-      <EntryHistoryList entries={draft.entries} kind={phase ? "phase_review" : "daily_review"} />
+        {extras.length > 0 ? <div className="review-check-list extras">
+          {extras.map((item) => <div key={item.id} className={`review-check extra ${item.done ? "done" : ""}`}>
+            <label><input type="checkbox" checked={item.done} onChange={() => toggleExtra(item.id)} /><span className="review-check-box" aria-hidden="true">{item.done ? "✓" : ""}</span><span>{item.text}</span></label>
+            <button type="button" aria-label={`删除 ${item.text}`} onClick={() => setExtras((current) => current.filter((row) => row.id !== item.id))}>×</button>
+          </div>)}
+        </div> : null}
+      </div>
+      <div className="review-editor-section"><span className="card-kicker">自由复盘</span><MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={240} ariaLabel={phase ? "阶段复盘编辑器" : "每日复盘编辑器"} placeholder="写下今天发生了什么、有什么发现，以及明天想怎样继续…" /></div>
+      <div className="review-actions actions-only"><button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></div>
+      {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
+      {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
+    </section>
+    <div className="entry-side-rail">
+      <aside className="content-card side-tip"><span className="card-kicker">复盘不是审判</span><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside>
+      <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
+        kicker="历史复盘 · SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
+        newLabel={phase ? "＋ 新建阶段复盘" : "＋ 新建每日复盘"} />
     </div>
-  );
+  </div>;
 }
-
-function EntryHistoryList({ entries, kind }: { entries: StructuredEntry[]; kind: StructuredEntryKind }) {
-  const title = kind === "diary" ? "往日日记" : kind === "insight" ? "往日心得" : "历史复盘";
-  const prior = entries.slice(1).slice(0, 12);
-  return (
-    <aside className="content-card side-tip">
-      <h3>{title}</h3>
-      {prior.length > 0 ? (
-        <ul className="entry-history-list" role="list">
-          {prior.map((entry) => (
-            <li key={entry.id}>
-              <time>{entry.entry_date.slice(0, 10)}</time>
-              <span>{entry.title || (kind === "diary" ? "无题日记" : kind === "insight" ? "无题心得" : "未命名")}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>还没有更早的记录。</p>
-      )}
-    </aside>
-  );
-}
-
 function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: boolean; store: ReturnType<typeof useStore> }) {
   const [open, setOpen] = useState(false);
   const [claim, setClaim] = useState("");
@@ -728,7 +545,7 @@ function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: 
     try {
       const result = await proposeEntryMemoryCandidate(entryId, { claim, scope, category: scopeKind === "project" ? "project" : "user" });
       await store.refreshAll();
-      setMessage(result.status === "candidate" ? "已提交为待审核候选。请到「系统后台 → Memory → Candidates」确认采纳或拒绝。" : "这条来源修订已处理过，未重复创建候选。");
+      setMessage(result.status === "candidate" ? "已提交为待审核候选，后续审核入口接入后会通知你。" : "这条来源修订已处理过，未重复创建候选。");
       setClaim("");
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
@@ -748,167 +565,31 @@ function MemoryCaptureForm({ entryId, phase, store }: { entryId: string; phase: 
   </div>;
 }
 
-function FeedbackPage() {
-  const draft = useEntryDraft("feedback", {});
-  const [category, setCategory] = useState("使用感受");
-  const todayKey = new Date().toISOString().slice(0, 10);
-  return (
-    <div className="feedback-layout">
-      <section className="content-card feedback-main">
-        <h2 className="editor-card-title">哪里让你觉得顺手？哪里还不够像你？</h2>
-        <DateChips
-          days={draft.days}
-          activeDate={draft.activeDate}
-          todayKey={todayKey}
-          onSelect={draft.selectDate}
-          onNew={draft.startBlank}
-          emptyHint="新建一条反馈"
-        />
-        <RichEditor
-          value={draft.content}
-          onChange={draft.setContent}
-          placeholder="可以是一句话，也可以是一段具体的经历…"
-          minHeight={160}
-          ariaLabel="反馈正文"
-        />
-        <div className="feedback-tags">
-          {["功能建议", "使用感受", "发现问题", "其他"].map((tag) => (
-            <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>
-          ))}
-        </div>
-        <div className="editor-footer">
-          <SaveStatus savedAt={draft.savedAt} error={draft.error} saving={draft.saving} kindLabel="反馈" entryDate={draft.activeDate} />
-          <button className="green-button" onClick={() => void draft.save({ metadata: { category } }).catch(() => undefined)} disabled={draft.saving}>
-            {draft.saving ? "提交中…" : draft.savedAt ? "再次提交" : "提交反馈"}
-            <IconArrowRight size={14} />
-          </button>
-        </div>
-      </section>
-      <section className="content-card feedback-history">
-        <div className="block-head">
-          <h2 className="editor-card-title">你的声音</h2>
-          <span className="block-meta">来自 SQLite</span>
-        </div>
-        {draft.entries.length > 0 ? (
-          <ul className="feedback-note-list" role="list">
-            {draft.entries.slice(0, 8).map((entry) => (
-              <li key={entry.id} className="feedback-note">
-                <IconCheck size={12} />
-                <div>
-                  <strong>{entry.content.replace(/<[^>]+>/g, " ").slice(0, 24).trim()}{entry.content.length > 24 ? "…" : ""}</strong>
-                  <small>{entry.entry_date.slice(0, 10)} · 已保存</small>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="state-empty">还没有新的反馈</div>
-        )}
-      </section>
-    </div>
-  );
-}
+function FeedbackPage() { const draft = useEntryDraft("feedback", {}); const [category, setCategory] = useState("使用感受"); return <div className="feedback-layout"><section className="content-card feedback-main"><span className="card-kicker">写给 LifeOS</span><h2>哪里让你觉得顺手？哪里还不够像你？</h2><textarea className="feedback-editor" placeholder="可以是一句话，也可以是一段具体的经历…" value={draft.content} onChange={(event) => draft.setContent(event.target.value)} /><div className="feedback-tags">{["功能建议", "使用感受", "发现问题", "其他"].map((tag) => <button className={category === tag ? "selected" : ""} key={tag} onClick={() => setCategory(tag)}>{tag}</button>)}</div><button className="green-button" onClick={() => void draft.save({ metadata: { category } })} disabled={draft.saving}>{draft.saving ? "提交中…" : "提交反馈"} <span>→</span></button></section><section className="content-card feedback-history"><div className="card-heading"><div><span className="card-kicker">你的声音</span><h2>最近反馈</h2></div><span className="soft-count">来自 SQLite</span></div>{draft.content ? <div className="feedback-note"><span>✓</span><div><strong>{draft.content.slice(0, 24)}{draft.content.length > 24 ? "…" : ""}</strong><small>刚刚 · 已保存</small></div></div> : <div className="state-empty">还没有新的反馈</div>}</section></div>; }
 
 function DiaryPage() {
   const draft = useEntryDraft("diary", {});
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const moods: { id: string; label: string }[] = [
-    { id: "calm", label: "平静" },
-    { id: "tired", label: "有点累" },
-    { id: "energized", label: "充满能量" },
-    { id: "unsure", label: "说不清" },
-  ];
-  return (
-    <div className="diary-layout">
-      <section className="content-card diary-editor">
-        <div className="block-head">
-          <h2 className="editor-card-title">今天的日记</h2>
-          <span className="block-meta">{draft.loaded ? (draft.id ? `已保存 ${draft.entries.length} 篇` : "新记录") : "读取中"}</span>
-        </div>
-        <DateChips
-          days={draft.days}
-          activeDate={draft.activeDate}
-          todayKey={todayKey}
-          onSelect={draft.selectDate}
-          onNew={draft.startBlank}
-          emptyHint="新建一篇日记"
-        />
-        <RichEditor
-          value={draft.content}
-          onChange={draft.setContent}
-          placeholder="今天有什么值得被写下来？"
-          minHeight={280}
-          ariaLabel="今日日记"
-        />
-        <div className="diary-mood">
-          <span>今天的心情</span>
-          {moods.map((mood) => (
-            <button className={draft.mood === mood.id ? "selected" : ""} key={mood.id} onClick={() => draft.setMood(mood.id)}>
-              <IconCircleDot size={13} />
-              <span>{mood.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="editor-footer">
-          <SaveStatus savedAt={draft.savedAt} error={draft.error} saving={draft.saving} kindLabel="日记" entryDate={draft.activeDate} />
-          <button className="green-button" onClick={() => void draft.save().catch(() => undefined)} disabled={draft.saving}>
-            {draft.saving ? "保存中…" : draft.savedAt ? "再次保存" : "保存日记"}
-            <IconArrowRight size={14} />
-          </button>
-        </div>
-      </section>
-      <EntryHistoryList entries={draft.entries} kind="diary" />
-    </div>
-  );
+  const moods = ["☀ 平静", "☁ 有点累", "✦ 充满能量", "♡ 说不清"];
+  return <div className="diary-layout">
+    <section className="content-card diary-editor">
+      <div className="card-heading"><div><span className="card-kicker">{draft.id ? "编辑日记" : "今天 · 私人记录"}</span><h2>{draft.id ? "正在回看一篇旧日记" : "今天的日记"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div>
+      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={340} ariaLabel="日记编辑器" placeholder="今天有什么值得被写下来？支持 Markdown 标题、列表、引用和代码块。" />
+      <div className="diary-mood"><span>今天的心情</span>{moods.map((mood) => <button className={draft.mood === mood ? "selected" : ""} key={mood} onClick={() => draft.setMood(mood)}>{mood}</button>)}</div>
+      <div className="editor-footer"><span>内容与心情会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存日记"} <span>→</span></button></div>
+    </section>
+    <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew} kicker="历史日记" heading="往日的记录" />
+  </div>;
 }
 
 function InsightPage() {
   const draft = useEntryDraft("insight", {});
-  const todayKey = new Date().toISOString().slice(0, 10);
-  return (
-    <div className="insight-layout">
-      <section className="content-card insight-editor">
-        <div className="block-head">
-          <h2 className="editor-card-title">记录一个正在发酵的想法</h2>
-          <span className="block-meta">{draft.loaded ? (draft.id ? `已保存 ${draft.entries.length} 篇` : "新记录") : "读取中"}</span>
-        </div>
-        <DateChips
-          days={draft.days}
-          activeDate={draft.activeDate}
-          todayKey={todayKey}
-          onSelect={draft.selectDate}
-          onNew={draft.startBlank}
-          emptyHint="新建一条心得"
-        />
-        <input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} />
-        <RichEditor
-          value={draft.content}
-          onChange={draft.setContent}
-          placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…"
-          minHeight={280}
-          ariaLabel="心得正文"
-        />
-        <div className="editor-footer">
-          <SaveStatus savedAt={draft.savedAt} error={draft.error} saving={draft.saving} kindLabel="心得" entryDate={draft.activeDate} />
-          <button className="green-button" onClick={() => void draft.save().catch(() => undefined)} disabled={draft.saving}>
-            {draft.saving ? "保存中…" : draft.savedAt ? "再次保存" : "保存心得"}
-            <IconArrowRight size={14} />
-          </button>
-        </div>
-      </section>
-      <EntryHistoryList entries={draft.entries} kind="insight" />
-    </div>
-  );
+  return <div className="insight-layout">
+    <section className="content-card insight-editor">
+      <div className="card-heading"><div><span className="card-kicker">心得 / 体验</span><h2>{draft.id ? "继续整理这份心得" : "记录一个正在发酵的想法"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div>
+      <input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} />
+      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300} ariaLabel="心得体验编辑器" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" />
+      <div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存心得"} <span>→</span></button></div>
+    </section>
+    <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew} kicker="历史心得" heading="知识花园" />
+  </div>;
 }
-
-function AdminPage({ store }: { store: ReturnType<typeof useStore> }) { return <div className="admin-page"><div className="admin-banner"><div><span className="card-kicker">系统后台</span><h2>工程信息集中在这里</h2><p>普通使用页面保持安静。只有进入后台，才会看到 Agent、事件、记忆和 Trace 等运行细节。</p></div><span className="admin-badge">开发者视图</span></div><div className="admin-flow"><DataFlowView store={store} /></div><div className="admin-grid"><RuntimeRail store={store} /><EventsPanel store={store} /><MemoryPanel store={store} /><SkillsPanel store={store} /><PermissionsPanel store={store} /><TracePanel store={store} /></div></div>; }
-
-function MemoryPage({ store }: { store: ReturnType<typeof useStore> }) {
-  return (
-    <div className="memory-page">
-      <MemoryPanel store={store} />
-    </div>
-  );
-}
-
-function Task({ label, done = false }: { label: string; done?: boolean }) { return <div className={`task-row ${done ? "task-done" : ""}`}><span className="task-check">{done ? "✓" : ""}</span><span>{label}</span>{done ? <small>完成</small> : null}</div>; }
