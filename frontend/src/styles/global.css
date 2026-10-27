@@ -1936,3 +1936,150 @@ button.activity-day { cursor: pointer; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-top: 14px;
 }
+
+/* ==========================================================================
+   Markdown 正文（Agent 输出 / LifeOS 回答）
+   只作用于 .md：工具产出仍走 <pre class="agb-io">，不经过这里。
+   ========================================================================== */
+.md {
+  white-space: normal;      /* 父级 .assistant-content/.agb-text 是 pre-wrap */
+  overflow-wrap: anywhere;
+  line-height: 1.72;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+
+.md p { margin: 0 0 .62em; }
+.md p:last-child { margin-bottom: 0; }
+
+.md h1, .md h2, .md h3, .md h4 {
+  margin: 1.1em 0 .45em;
+  color: var(--fg-1);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -.01em;
+}
+.md h1 { font-size: 1.28em; }
+.md h2 { font-size: 1.14em; }
+.md h3 { font-size: 1.02em; }
+.md h4 { font-size: .96em; color: var(--fg-2); }
+
+.md ul, .md ol { margin: 0 0 .62em; padding-left: 1.35em; }
+.md li { margin: .18em 0; }
+.md li > p { margin: 0; }
+.md li::marker { color: var(--fg-4); }
+
+.md a {
+  color: var(--accent-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent-dim) 40%, transparent);
+}
+.md a:hover { text-decoration-color: currentColor; }
+
+.md strong { font-weight: 650; color: var(--fg-1); }
+.md em { font-style: italic; }
+.md del { color: var(--fg-4); }
+
+.md code {
+  padding: .1em .34em;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-0);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font: .88em/1.5 var(--font-mono);
+}
+
+.md pre {
+  margin: 0 0 .7em;
+  padding: 10px 12px;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.md pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-1);
+  font: 12px/1.65 var(--font-mono);
+  white-space: pre;
+}
+
+.md blockquote {
+  margin: 0 0 .7em;
+  padding: 2px 0 2px 11px;
+  border-left: 2px solid var(--bd-3);
+  color: var(--fg-2);
+}
+.md blockquote > :last-child { margin-bottom: 0; }
+
+.md hr {
+  height: 0;
+  margin: 1.1em 0;
+  border: 0;
+  border-top: 1px solid var(--bd-1);
+}
+
+/* 表格包一层横向滚动，窄侧栏里不把整列撑破 */
+.md-table {
+  margin: 0 0 .7em;
+  overflow-x: auto;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-1);
+}
+.md table { border-collapse: collapse; width: 100%; font-size: .94em; }
+.md th, .md td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--bd-1);
+  border-right: 1px solid var(--bd-1);
+  text-align: left;
+  vertical-align: top;
+}
+.md th { background: var(--bg-2); color: var(--fg-2); font-weight: 600; white-space: nowrap; }
+.md tr:last-child td { border-bottom: 0; }
+.md th:last-child, .md td:last-child { border-right: 0; }
+
+.md input[type="checkbox"] { margin: 0 .4em 0 0; accent-color: var(--accent); }
+
+/* 公式：行内跟随行高，块级自己横滚（长公式不撑破侧栏） */
+.md .katex { font-size: 1.02em; }
+.md .katex-display {
+  margin: .6em 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 代码高亮：颜色走令牌，暗色主题自动跟随 */
+.md .hljs-comment,
+.md .hljs-quote { color: var(--fg-4); font-style: italic; }
+.md .hljs-keyword,
+.md .hljs-selector-tag,
+.md .hljs-literal,
+.md .hljs-doctag,
+.md .hljs-meta { color: var(--st-confirm); font-weight: 600; }
+.md .hljs-string,
+.md .hljs-regexp,
+.md .hljs-addition,
+.md .hljs-attribute { color: var(--st-done); }
+.md .hljs-number,
+.md .hljs-symbol,
+.md .hljs-bullet,
+.md .hljs-link { color: var(--st-pending); }
+.md .hljs-title,
+.md .hljs-section,
+.md .hljs-name,
+.md .hljs-selector-id,
+.md .hljs-selector-class { color: var(--accent-dim); font-weight: 600; }
+.md .hljs-built_in,
+.md .hljs-type,
+.md .hljs-variable,
+.md .hljs-template-variable,
+.md .hljs-params { color: var(--st-processing); }
+.md .hljs-deletion { color: var(--st-failed); }
+.md .hljs-emphasis { font-style: italic; }
+.md .hljs-strong { font-weight: 700; }

@@ -7,6 +7,7 @@ import type { DelegationPlan } from "../api/agentTypes";
 import { IconChevron, IconCopy, IconMessage, IconSend, IconTrash } from "../components/Icons";
 import { CopyId } from "../components/CopyId";
 import { DelegationCard } from "./DelegationCard";
+import { Markdown } from "../components/Markdown";
 import type { AgentActions } from "../hooks/useAgentStream";
 
 const HISTORY_COLLAPSED_KEY = "lifeos.chat.historyCollapsed.v1";
@@ -397,7 +398,13 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           </ol>
         ) : null}
         <div className={`assistant-content ${errored ? "has-error" : ""}`}>
-          {pending ? <span className="muted">正在整理思路…</span> : msg.content || <span className="muted">没有生成文字回复</span>}
+          {pending ? (
+            <span className="muted">正在整理思路…</span>
+          ) : msg.content ? (
+            <Markdown text={msg.content} />
+          ) : (
+            <span className="muted">没有生成文字回复</span>
+          )}
         </div>
         {msg.tool_calls && msg.tool_calls.length > 0 ? (
           <details className="chat-execution-details">

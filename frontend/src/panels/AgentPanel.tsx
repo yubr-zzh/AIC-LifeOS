@@ -15,6 +15,7 @@ import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { ToolGroup, ToolStep } from "./ToolStep";
 import { buildTurns, contextItems, type FlowItem, type Turn } from "./agentFlow";
+import { Markdown } from "../components/Markdown";
 import { groupLabel } from "./toolSummary";
 
 interface Props {
@@ -279,6 +280,10 @@ function TurnBlock({
                 <span className="agts-text">生成工具参数中…</span>
               </div>
             </div>
+          ) : streaming.kind === "text" ? (
+            <div className="agb agb-text-stream">
+              <Markdown text={streaming.text} />
+            </div>
           ) : (
             <div className={`agb agb-${streaming.kind}`}>
               <div className="agb-text">{streaming.text}</div>
@@ -470,7 +475,11 @@ export function Bubble({ m }: { m: AgentMessage }) {
   const cls = m.kind === "tool_cancelled" ? "agb-sys" : `agb-${m.role}`;
   return (
     <div className={`agb ${cls}`}>
-      <div className="agb-text">{m.text}</div>
+      {m.role === "assistant" ? (
+        <Markdown text={m.text} />
+      ) : (
+        <div className="agb-text">{m.text}</div>
+      )}
     </div>
   );
 }
