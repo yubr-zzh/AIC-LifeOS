@@ -89,6 +89,8 @@ const approval: PermissionRequest = {
   requestId: "r-mock01",
   sessionId: session.sessionId,
   toolName: "Bash",
+  // 指向快照里那条 tool_use，预览模式才能看到审批卡与 ToolStep 互链
+  toolUseId: "t-mock1",
   toolInput: { command: "pytest -q tests/", description: "跑一遍测试" },
   title: "运行测试",
   displayName: "Bash",
@@ -115,7 +117,8 @@ const script: DownFrame[] = [
       msg({ role: "user", kind: "text", text: "指令 1/3：跑一遍测试并修掉失败项" }),
       msg({ role: "assistant", kind: "thinking", text: "先看测试目录的结构，再决定跑哪一条。" }),
       msg({ role: "assistant", kind: "text", text: "我先跑一遍完整测试。" }),
-      msg({ role: "assistant", kind: "tool_use", toolName: "Bash", toolUseId: "t-mock1", toolInput: { command: "pytest -q tests/" } }),
+      msg({ role: "assistant", kind: "tool_use", toolName: "Bash", toolUseId: "t-mock1",
+            toolInput: { command: "pytest -q tests/" }, state: "executing" }),
     ],
     pending: [],
     questions: [],
@@ -133,7 +136,8 @@ const script: DownFrame[] = [
   frame({ type: "state", state: "working", lastEvent: "permission_resolved" } as never),
   frame({
     type: "message",
-    message: msg({ role: "user", kind: "tool_result", toolName: "Bash", toolUseId: "t-mock1", text: "132 passed in 38.21s" }),
+    message: msg({ role: "user", kind: "tool_result", toolName: "Bash", toolUseId: "t-mock1",
+                   text: "132 passed in 38.21s", state: "completed" }),
   } as never),
   frame({
     type: "question",

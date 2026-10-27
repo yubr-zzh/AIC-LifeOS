@@ -8,6 +8,7 @@ import {
   BridgeError,
   type AgentMessage,
   type AgentSession,
+  type AgentToolCall,
   type AgentsResponse,
   type ConnectionState,
   type DelegationPlan,
@@ -17,8 +18,10 @@ import {
   type PermissionRequest,
   type PermissionResolution,
   type ResultFrame,
+  type ToolCallState,
 } from "../api/agentTypes";
 import { transcript } from "../api/agentClient";
+import { zhaiYao } from "../panels/toolSummary";
 
 export interface Notice {
   id: string;
@@ -59,6 +62,16 @@ export interface AgentStoreState {
   sessions: Record<string, AgentSession>;
   order: string[];
   messages: Record<string, AgentMessage[]>;
+  /**
+   * 工具调用表。toolUseId → 调用。
+   *
+   * 为什么单独一张表而不是塞进 messages：一次调用的状态会被三种帧推进
+   * （tool_use / permission / tool_result），塞进 messages 的话每次推进
+   * 都要全表扫描 + 重建数组，一个 turn 20 次调用就是 O(n²)。
+   *
+   * **messages 仍是权威日志**，这张表是渲染索引；重连后可以从 messages 重建。
+   */
+  toolCalls: Record<string, AgentToolCall>;
   partial: Record<string, Partial1>;
   pending: Record<string, PermissionRequest>;
   resolved: Record<string, PermissionResolution>;
@@ -99,6 +112,7 @@ export const initialAgentState: AgentStoreState = {
   sessions: {},
   order: [],
   messages: {},
+  toolCalls: {},
   partial: {},
   pending: {},
   resolved: {},
@@ -159,6 +173,122 @@ function chong(a: AgentStoreState, sid: string, done: number): boolean {
   return done >= 1 && done > (a.reported[sid] ?? 0);
 }
 
+// ── 工具调用表（P0-A）────────────────────────────────────────────
+//
+// 设计原则：tool 相关帧只更新 toolCalls；messages 仍照常写（它是补拉
+// 历史的唯一载体）。渲染层跳过「已被 toolCalls 吸收」的消息，避免重复。
+
+/**
+ * Bridge 的字符串状态 → 前端判别联合。未知/缺失都降级为 completed。
+ *
+ * `startedAt` 优先取消息自带的 `createdAt`（Bridge 时钟）：耗时最终要和
+ * `tool_result.createdAt` 相减，两个时钟混用会出负数。只有实时帧
+ * （permission_resolved）没有 Bridge 时间戳时才退回 `Date.now()`。
+ */
+export function guiState(s?: string, startedAt?: number): ToolCallState {
+  switch (s) {
+    case "streaming":
+      return { type: "streaming", partialInput: "" };
+    case "awaiting_confirmation":
+      return { type: "awaiting_confirmation", requestId: null };
+    case "executing":
+      return { type: "executing", startedAt: startedAt ?? Date.now() };
+    case "awaiting_post_approval":
+      return { type: "awaiting_post_approval", requestId: null };
+    case "cancelled":
+      return { type: "cancelled", reason: "interrupted" };
+    default:
+      // 老 Bridge / 历史消息：没有 state 字段。补拉回来的历史一定是
+      // 已经结束的，标成 executing 会让界面永远转圈。
+      return { type: "completed", isError: false, durationMs: null };
+  }
+}
+
+/** cancelled 消息的文本 → reason。Bridge 用中文短语，这里做一次归一。 */
+function cancelledReason(text: string): "denied" | "skipped" | "interrupted" | "expired" {
+  if (/拒绝|denied|deny/i.test(text)) return "denied";
+  if (/跳过|skip/i.test(text)) return "skipped";
+  if (/超时|expired|timeout/i.test(text)) return "expired";
+  return "interrupted";
+}
+
+/**
+ * 把一条 tool_use 消息登记进表。幂等：已存在就不覆盖——
+ * 补拉历史时同一条会再来一次，覆盖会让「已执行完」退回 streaming。
+ */
+function upsertToolUse(
+  calls: Record<string, AgentToolCall>,
+  m: AgentMessage,
+  partialInput?: string,
+): Record<string, AgentToolCall> {
+  const tid = m.toolUseId;
+  if (!tid || m.kind !== "tool_use" || calls[tid]) return calls;
+  const init = guiState(m.state, m.createdAt);
+  return {
+    ...calls,
+    [tid]: {
+      toolUseId: tid,
+      sessionId: m.sessionId,
+      seq: m.seq,
+      name: m.toolName ?? "",
+      input: m.toolInput,
+      // 参数还在流时把已收到的片段带上，UI 可以显示「生成参数中」。
+      state: init.type === "streaming" && partialInput
+        ? { type: "streaming", partialInput }
+        : init,
+      resultText: "",
+      summary: zhaiYao(m.toolName ?? "", m.toolInput),
+    },
+  };
+}
+
+/** tool_result 推进到 completed。找不到对应调用时不动（降级由渲染层处理）。 */
+function applyToolResult(
+  calls: Record<string, AgentToolCall>,
+  m: AgentMessage,
+): Record<string, AgentToolCall> {
+  const tid = m.toolUseId;
+  if (!tid) return calls;
+  const jiu = calls[tid];
+  if (!jiu) return calls;
+  const started = jiu.state.type === "executing" ? jiu.state.startedAt : null;
+  // 两个时钟混用（前端 Date.now() vs Bridge createdAt）可能出负数，clamp 掉。
+  const duration = started === null ? null : Math.max(0, m.createdAt - started);
+  return {
+    ...calls,
+    [tid]: {
+      ...jiu,
+      resultText: m.text,
+      state: { type: "completed", isError: m.isError, durationMs: duration },
+    },
+  };
+}
+
+/** 中断 / 拒绝 / 跳过：不伪造 tool_result，用独立消息表达。 */
+function applyToolCancelled(
+  calls: Record<string, AgentToolCall>,
+  m: AgentMessage,
+): Record<string, AgentToolCall> {
+  const tid = m.toolUseId;
+  if (!tid) return calls;
+  const jiu = calls[tid];
+  if (!jiu) return calls;
+  return {
+    ...calls,
+    [tid]: { ...jiu, state: { type: "cancelled", reason: cancelledReason(m.text) } },
+  };
+}
+
+/** 撤销一个会话的全部调用（session_removed）。 */
+function dropSessionCalls(
+  calls: Record<string, AgentToolCall>,
+  sid: string,
+): Record<string, AgentToolCall> {
+  const next: Record<string, AgentToolCall> = {};
+  for (const k in calls) if (calls[k].sessionId !== sid) next[k] = calls[k];
+  return next;
+}
+
 function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
   // **合成帧（streamSeq === 0）短路。** 它是网关造的传输层状态，不在 Bridge 的
   // 序号空间里（spec 9.4：`ZongXian.fa()` 先自增，首帧是 1，0 是空号）。走下面的
@@ -217,12 +347,55 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
           title: `委派完成 · 第 ${s.batchDone}/${s.batchTotal || "?"} 条`,
         };
       }
+      // 工具调用表：**不能整表清空**。快照已经不带 messages 了
+      // （events.py：阶段 7 域 E），清空后要等 transcript 拉回来才恢复，
+      // 中途界面会把所有调用当成不存在。
+      //
+      // 正确做法：丢掉 session 已不存在的调用；用 pending 把对应调用
+      // 修正回 awaiting_confirmation；再用会话状态推断「仍在执行」。
+      let toolCalls: Record<string, AgentToolCall> = {};
+      for (const tid in base.toolCalls) {
+        const c = base.toolCalls[tid];
+        if (sessions[c.sessionId]) toolCalls[tid] = c;
+      }
+      // 部分来源的快照**仍然带 messages**（预览的假帧源、以及未来可能的
+      // 全量快照）。这些消息是权威日志，必须据此建表/补结果。
+      for (const k in messages) {
+        for (const m of messages[k]) {
+          if (m.kind === "tool_use") toolCalls = upsertToolUse(toolCalls, m);
+          else if (m.kind === "tool_result") toolCalls = applyToolResult(toolCalls, m);
+          else if (m.kind === "tool_cancelled") toolCalls = applyToolCancelled(toolCalls, m);
+        }
+      }
+      for (const p of f.pending) {
+        const tid = p.toolUseId;
+        if (tid && toolCalls[tid]) {
+          toolCalls[tid] = {
+            ...toolCalls[tid],
+            state: { type: "awaiting_confirmation", requestId: p.requestId },
+          };
+        }
+      }
+      for (const tid in toolCalls) {
+        const c = toolCalls[tid];
+        const s = sessions[c.sessionId];
+        if (
+          c.state.type === "completed" &&
+          c.state.durationMs === null &&
+          c.resultText === "" &&
+          s &&
+          (s.state === "thinking" || s.state === "working" || s.state === "attention")
+        ) {
+          toolCalls[tid] = { ...c, state: { type: "executing", startedAt: Date.now() } };
+        }
+      }
       return {
         ...base,
         instanceId: f.instanceId,
         sessions,
         order: f.sessions.map((s) => s.sessionId),
         messages,
+        toolCalls,
         partial: {},
         pending,
         questions,
@@ -266,11 +439,26 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
       // 单调分配，一条记录一个，重连补发时也保持原值。
       const yi = lie.some((x) => x.seq === m.seq && x.messageId === m.messageId);
       const partial = { ...base.partial };
+
+      // tool 帧同时推进工具调用表。文本/思考帧照旧只清 partial。
+      let toolCalls = base.toolCalls;
+      if (m.kind === "tool_use") {
+        // chunk 阶段按 messageId 缓冲的 partial_json 在这里消费掉：
+        // 完整 tool_use 到达后它就没有用了，留着会让下一条同名消息继承旧片段。
+        const duan = partial[m.messageId]?.text;
+        toolCalls = upsertToolUse(toolCalls, m, duan);
+      } else if (m.kind === "tool_result") {
+        toolCalls = applyToolResult(toolCalls, m);
+      } else if (m.kind === "tool_cancelled") {
+        toolCalls = applyToolCancelled(toolCalls, m);
+      }
       delete partial[m.messageId];
+
       const hui = base.sessions[m.sessionId];
       return {
         ...base,
         partial,
+        toolCalls,
         messages: {
           ...base.messages,
           [m.sessionId]: yi
@@ -311,26 +499,64 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
         ...base,
         sessions,
         messages,
+        toolCalls: dropSessionCalls(base.toolCalls, f.sessionId),
         order: base.order.filter((x) => x !== f.sessionId),
         activeSessionId: base.activeSessionId === f.sessionId ? null : base.activeSessionId,
       };
     }
 
-    case "permission":
+    case "permission": {
       // 审批会阻塞 Agent。折叠态下把它藏起来等于把「同意」变成「可遗忘」，
       // 所以这一帧强制把面板推到双栏（11.7）。
+      //
+      // 同时把对应工具调用推到 awaiting_confirmation：审批卡与 ToolStep
+      // 是同一件事的两个视觉位置，靠 requestId / toolUseId 互链。
+      const p = f.request;
+      const tid = p.toolUseId;
+      const toolCalls = tid && base.toolCalls[tid]
+        ? {
+            ...base.toolCalls,
+            [tid]: {
+              ...base.toolCalls[tid],
+              state: { type: "awaiting_confirmation" as const, requestId: p.requestId },
+            },
+          }
+        : base.toolCalls;
       return {
         ...base,
         layout: "split",
-        pending: { ...base.pending, [f.request.requestId]: f.request },
+        toolCalls,
+        pending: { ...base.pending, [p.requestId]: p },
         sessions: base.sessions[f.sessionId]
           ? { ...base.sessions, [f.sessionId]: { ...base.sessions[f.sessionId], state: "attention" } }
           : base.sessions,
       };
+    }
 
-    case "permission_resolved":
+    case "permission_resolved": {
+      // 拒绝 → cancelled(denied)；允许 → executing。
+      // 旧 Bridge 没有 toolUseId 时靠 pending 里那条 request 兜底
+      // （requestId 在 Claude 路径下本就等于 toolUseId）。
+      const p = base.pending[f.requestId];
+      const tid = p?.toolUseId || f.requestId;
+      const jiu = base.toolCalls[tid];
+      // Bridge 的取值是 `user_allow` / `user_deny` / `auto_deny`（见 arbiter.JUE_ZHU），
+      // **不是** `allow` / `deny`。只判 `=== "allow"` 会把所有批准都当成拒绝。
+      const tongYi = /allow/.test(f.decision);
+      const toolCalls = jiu
+        ? {
+            ...base.toolCalls,
+            [tid]: {
+              ...jiu,
+              state: tongYi
+                ? ({ type: "executing", startedAt: Date.now() } as const)
+                : ({ type: "cancelled", reason: "denied" } as const),
+            },
+          }
+        : base.toolCalls;
       return {
         ...base,
+        toolCalls,
         resolved: {
           ...base.resolved,
           [f.requestId]: {
@@ -343,16 +569,31 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
           },
         },
       };
+    }
 
-    case "question":
+    case "question": {
+      // AskUserQuestion 同样是一次工具调用：它带 toolUseId，必须先回答
+      // 才能继续。不推进的话这类调用会永远显示「已完成」。
+      const q = f.question;
+      const toolCalls = q.toolUseId && base.toolCalls[q.toolUseId]
+        ? {
+            ...base.toolCalls,
+            [q.toolUseId]: {
+              ...base.toolCalls[q.toolUseId],
+              state: { type: "awaiting_confirmation" as const, requestId: q.questionId },
+            },
+          }
+        : base.toolCalls;
       return {
         ...base,
         layout: "split",
-        questions: { ...base.questions, [f.question.questionId]: f.question },
+        toolCalls,
+        questions: { ...base.questions, [q.questionId]: q },
         sessions: base.sessions[f.sessionId]
           ? { ...base.sessions, [f.sessionId]: { ...base.sessions[f.sessionId], state: "waiting_input" } }
           : base.sessions,
       };
+    }
 
     case "question_resolved":
       return { ...base, questionClosed: { ...base.questionClosed, [f.questionId]: { state: f.state, at: Date.now() } } };
@@ -438,7 +679,14 @@ export function agentReducer(a: AgentStoreState, action: AgentAction): AgentStor
       for (const m of lie) biao.set(`${m.seq}:${m.messageId}`, m);
       for (const m of action.messages) biao.set(`${m.seq}:${m.messageId}`, m);
       const he = [...biao.values()].sort((x, y) => x.seq - y.seq || (x.messageId < y.messageId ? -1 : 1));
-      return { ...a, messages: { ...a.messages, [action.sid]: he } };
+      // 只对**新并入的**那批建表/补结果，已有项不覆盖（幂等）。
+      let toolCalls = a.toolCalls;
+      for (const m of he) {
+        if (m.kind === "tool_use") toolCalls = upsertToolUse(toolCalls, m);
+        else if (m.kind === "tool_result") toolCalls = applyToolResult(toolCalls, m);
+        else if (m.kind === "tool_cancelled") toolCalls = applyToolCancelled(toolCalls, m);
+      }
+      return { ...a, toolCalls, messages: { ...a.messages, [action.sid]: he } };
     }
     case "HISTORY_RESET": {
       // Bridge 重启过，旧游标作废。**清空等重拉，不能静默吞掉 409。**
@@ -446,7 +694,7 @@ export function agentReducer(a: AgentStoreState, action: AgentAction): AgentStor
       // 还在继续跑——用户看到的对话与实际状态对不上。
       const messages = { ...a.messages };
       delete messages[action.sid];
-      return { ...a, messages };
+      return { ...a, messages, toolCalls: dropSessionCalls(a.toolCalls, action.sid) };
     }
     default:
       return a;

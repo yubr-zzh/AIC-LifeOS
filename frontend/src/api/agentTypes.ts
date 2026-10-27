@@ -89,6 +89,9 @@ export type MessageKind =
   | "thinking"
   | "tool_use"
   | "tool_result"
+  /** 用户中断 / 拒绝 / 超时导致调用没有结果。与 tool_result 区分开：
+   *  result 是「真的跑完了」，cancelled 是「没跑」。 */
+  | "tool_cancelled"
   | "rate_limit"
   | "context_reset"
   | "error"
@@ -110,12 +113,58 @@ export interface AgentMessage {
   createdAt: number;
   /** Bridge 级全局 streamSeq。可选：旧消息与测试夹具里没有这个字段。 */
   xuhao?: number;
+  /** 仅 tool_use / tool_cancelled 有意义。前端不直接渲染它，
+   *  只用它初始化 AgentToolCall.state，之后由帧推进。 */
+  state?: string;
+}
+
+/**
+ * 一次工具调用的生命周期。
+ *
+ * 用判别联合而不是 `state: string` + 一堆可选字段：后者会让
+ * 「executing 但 completedAt 有值」这种非法组合变成可表达状态。
+ *
+ * 与 VSCode 的 IChatToolInvocation.StateKind 对齐，砍掉
+ * WaitingForAuthentication（本项目没有 MCP OAuth 路径）。
+ */
+export type ToolCallState =
+  | { type: "streaming"; partialInput: string }
+  | { type: "awaiting_confirmation"; requestId: string | null }
+  | { type: "executing"; startedAt: number }
+  | { type: "awaiting_post_approval"; requestId: string | null }
+  | { type: "completed"; isError: boolean; durationMs: number | null }
+  | { type: "cancelled"; reason: "denied" | "skipped" | "interrupted" | "expired" };
+
+/**
+ * 一次工具调用。**键是 toolUseId，不是 messageId。**
+ *
+ * 一次调用可以产生多条消息（tool_use 一条、tool_result 一条），
+ * 所以 messageId 不能当身份。
+ */
+export interface AgentToolCall {
+  toolUseId: string;
+  sessionId: string;
+  /** 首次出现的消息 seq，用于在消息流里定位插入位置。 */
+  seq: number;
+  name: string;
+  input: unknown;
+  state: ToolCallState;
+  /** tool_result 的文本。只在 completed / cancelled 时有意义。 */
+  resultText: string;
+  /** 渲染用的一行摘要，由前端从 name + input 推导。 */
+  summary: string;
 }
 
 export interface PermissionRequest {
   requestId: string;
   sessionId: string;
   toolName: string;
+  /** SDK 的 tool_use_id。**可选**：老 Bridge 的帧里根本没有这个键，
+   *  此时降级为「独立卡片」，不能按空串强行关联。
+   *
+   *  Claude 路径下 `requestId` 目前恒等于它，但不要依赖这个隐式关系：
+   *  其他 adapter 不保证，且缺 id 时后端会用 `t-unknown` 兜底。 */
+  toolUseId?: string;
   /** 8.8 的可信字段：原样展示，不加工。 */
   toolInput: Record<string, unknown>;
   /** 8.8 的不可信字段：Agent 自撰，必须折叠并标注来源。 */

@@ -50,7 +50,7 @@ HUO_TAI = {"thinking", "working", "attention", "waiting_input"}
 
 # 4.4 消息落盘白名单。thinking/chunk 明文永不落盘（10.7）；
 # error/rate_limit/context_reset 不在 5.5 的四类之内，恢复后由新的 error 帧补充。
-LUO_PAN = {"tool_use", "tool_result", "result", "permission_resolved", "text"}
+LUO_PAN = {"tool_use", "tool_result", "tool_cancelled", "result", "permission_resolved", "text"}
 
 
 class InvalidTransition(Exception):
@@ -369,9 +369,36 @@ class HuiHua:
         return {"ok": True, "batchDone": s.batchDone, "batchTotal": s.batchTotal}
 
     def zhong_duan(self, a1: str) -> bool:
-        """标记会话被中断。下一条指令前会停下。"""
+        """标记会话被中断。下一条指令前会停下。
+
+        同时给「正在执行 / 等待审批」的工具调用补一条 `tool_cancelled`。
+        不用伪造 `tool_result(isError=True)`：结果从未发生，标成「执行失败」
+        会让用户以为命令真的跑过并失败了。独立 kind 才能表达「没跑」。
+        """
         with self.suo:
             self._zhong.add(a1)
+            lie = self._xiang.get(a1, [])
+            # 已经有结局的调用不再补 cancelled：tool_result / tool_cancelled
+            # 是独立消息，tool_use 自己的 state 不会跟着变。
+            closed = {
+                m.toolUseId for m in lie
+                if m.kind in ("tool_result", "tool_cancelled") and m.toolUseId
+            }
+            gua = [
+                m for m in lie
+                if m.kind == "tool_use"
+                and m.toolUseId
+                and m.toolUseId not in closed
+                and m.state in ("executing", "awaiting_confirmation")
+            ]
+            for m in gua:
+                self.tian_jia(
+                    a1, "system", "tool_cancelled",
+                    toolUseId=m.toolUseId,
+                    toolName=m.toolName,
+                    text="用户已中断",
+                    state="cancelled",
+                )
         return True
 
     # ---- 8.7 第二、三层：停滞与闲置 ----

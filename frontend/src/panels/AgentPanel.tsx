@@ -1,10 +1,11 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CONNECTION_LABEL,
   STATE_LABEL,
   STATE_TONE,
   type AgentMessage,
   type AgentSession,
+  type AgentToolCall,
 } from "../api/agentTypes";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
@@ -13,6 +14,8 @@ import { AgentComposer } from "./AgentComposer";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { CopyTextButton } from "../components/CopyTextButton";
+import { ToolGroup, ToolStep } from "./ToolStep";
+import { groupLabel } from "./toolSummary";
 
 interface Props {
   store: AgentStore;
@@ -31,6 +34,66 @@ function toolInputText(a: unknown): string {
   return JSON.stringify(a, null, 2);
 }
 
+type LiuItem =
+  | { t: "msg"; m: AgentMessage }
+  | { t: "tool"; call: AgentToolCall }
+  | { t: "group"; calls: AgentToolCall[] };
+
+/**
+ * 把「消息流」与「工具调用表」合并成一条时间线。
+ *
+ * - 已被 toolCalls 吸收的 tool_use / tool_result / tool_cancelled 不再单独渲染
+ *   （没有对应调用的保留，作为老 Bridge / 老历史的兜底）
+ * - 按 seq 排序
+ * - 相邻的、全部成功完成的调用合并成一组；等待审批 / 失败 / 执行中不合并
+ */
+function heBing(
+  lie: AgentMessage[],
+  calls: Record<string, AgentToolCall>,
+  sid: string,
+): LiuItem[] {
+  const items: { seq: number; item: LiuItem }[] = [];
+
+  for (const m of lie) {
+    const chongfu =
+      (m.kind === "tool_use" || m.kind === "tool_result" || m.kind === "tool_cancelled") &&
+      Boolean(m.toolUseId && calls[m.toolUseId]);
+    if (chongfu) continue;
+    items.push({ seq: m.seq, item: { t: "msg", m } });
+  }
+
+  for (const tid in calls) {
+    const c = calls[tid];
+    if (c.sessionId !== sid) continue;
+    items.push({ seq: c.seq, item: { t: "tool", call: c } });
+  }
+
+  items.sort((a, b) => a.seq - b.seq);
+
+  const out: LiuItem[] = [];
+  let buf: AgentToolCall[] = [];
+  const flush = () => {
+    if (buf.length >= 2) out.push({ t: "group", calls: buf });
+    else for (const c of buf) out.push({ t: "tool", call: c });
+    buf = [];
+  };
+
+  for (const { item } of items) {
+    if (item.t === "tool") {
+      const st = item.call.state;
+      const heBingDe = st.type === "completed" && !st.isError;
+      if (heBingDe) {
+        buf.push(item.call);
+        continue;
+      }
+    }
+    flush();
+    out.push(item);
+  }
+  flush();
+  return out;
+}
+
 export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props) {
   const { state, dispatch, active, streaming, todo } = store;
   const box = useRef<HTMLDivElement>(null);
@@ -40,6 +103,10 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   useEffect(() => { setMemoryOpen(true); }, [active?.sessionId]);
 
   const lie = active ? state.messages[active.sessionId] ?? [] : [];
+  const liu = useMemo(
+    () => (active ? heBing(lie, state.toolCalls, active.sessionId) : []),
+    [lie, state.toolCalls, active],
+  );
 
   // 自动滚动。依赖是「正在流式输出的那条消息 + 它的长度」，
   // 不能用 messages.length —— chunk 帧不新增消息，照抄 ChatPanel 的依赖会永不触发。
@@ -111,27 +178,60 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           <p className="agp-hint">还没有内容。从左侧的委派计划里勾选指令发过来，或直接在下面输入。</p>
         ) : null}
 
-        {lie.map((m) => (
+        {liu.map((item) => {
+          if (item.t === "group") {
+            return (
+              <ToolGroup
+                key={`g-${item.calls[0].toolUseId}`}
+                calls={item.calls}
+                label={groupLabel(item.calls.map((c) => c.name), item.calls.length)}
+              />
+            );
+          }
+          if (item.t === "tool") {
+            return (
+              <ToolStep
+                key={item.call.toolUseId}
+                call={item.call}
+                onLocateApproval={(rid) => {
+                  const el = document.getElementById(`apr-${rid}`);
+                  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                  el?.focus?.();
+                }}
+              />
+            );
+          }
           // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
           // 的多个内容块共用它，拿它当 key React 会报 duplicate key，
           // 并且重渲染时会错认组件身份。
-          <Bubble key={`${m.sessionId}:${m.seq}`} m={m} />
-        ))}
+          return <Bubble key={`${item.m.sessionId}:${item.m.seq}`} m={item.m} />;
+        })}
 
         {streaming && streaming.sessionId === active?.sessionId ? (
-          <div className={`agb agb-${streaming.kind}`}>
-            <div className="agb-role mono">{streaming.kind === "thinking" ? "thinking" : "assistant"}</div>
-            {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
-            <div className="agb-text">{streaming.text}</div>
-          </div>
+          streaming.kind === "tool_use" ? (
+            // 工具参数还在流：不把 partial_json 当正文渲染（它是不可信片段）。
+            <div className="agts agts-busy">
+              <div className="agts-row" aria-hidden="true">
+                <span className="agts-chevron" />
+                <span className="agts-icon" />
+                <span className="agts-text">生成工具参数中…</span>
+              </div>
+            </div>
+          ) : (
+            <div className={`agb agb-${streaming.kind}`}>
+              <div className="agb-role mono">{streaming.kind === "thinking" ? "thinking" : "assistant"}</div>
+              {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
+              <div className="agb-text">{streaming.text}</div>
+            </div>
+          )
         ) : null}
 
         {dai.length > 0 || wen.length > 0 ? (
           <div className="agp-decide">
             <div className="agp-decide-head">需要你决定 · {dai.length + wen.length}</div>
             {dai.map((p) => (
+              <div key={p.requestId} id={`apr-${p.requestId}`} tabIndex={-1}>
               <AgentApprovalCard
-                key={p.requestId}
                 req={p}
                 resolution={state.resolved[p.requestId]}
                 onDecide={(fen, opts) => {
@@ -149,6 +249,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
                     .catch(() => undefined);
                 }}
               />
+              </div>
             ))}
             {wen.map((q) => (
               <AgentQuestionCard
