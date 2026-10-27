@@ -448,7 +448,7 @@ export function Bubble({ m }: { m: AgentMessage }) {
     return (
       <div className={`agb agb-sys ${m.isError ? "bad" : ""}`}>
         <div className="agb-role mono">result{m.isError ? " · 失败" : ""}</div>
-        <div className="agb-text">{m.text}</div>
+        {m.text ? <Markdown text={m.text} /> : null}
       </div>
     );
   }

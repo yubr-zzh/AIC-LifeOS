@@ -98,6 +98,29 @@ function absorbed(m: AgentMessage, calls: Record<string, AgentToolCall>): boolea
 }
 
 /**
+ * 去掉「result 回声」。
+ *
+ * Bridge 会把 `result` 帧也落成一条消息（`http.py` 的 3.2 分支，为了重连后
+ * 历史里还能看到这次跑完的结果），而它的文本通常**就是最后一段 assistant
+ * 正文**。两条都渲染 = 同一段答案出现两次，且 result 那条走系统行样式，
+ * 看起来像「原生 markdown 没渲染」。这里把重复的那条丢掉。
+ */
+function dropResultEcho(messages: AgentMessage[]): AgentMessage[] {
+  const out: AgentMessage[] = [];
+  for (const m of messages) {
+    if (m.kind === "result") {
+      const t = m.text.trim();
+      if (t) {
+        const last = [...out].reverse().find((x) => x.kind === "text" && x.role === "assistant");
+        if (last && last.text.trim() === t) continue;
+      }
+    }
+    out.push(m);
+  }
+  return out;
+}
+
+/**
  * 把「消息流」与「工具调用表」合并成一条时间线。
  *
  * - 丢弃已被调用表吸收的 tool 消息（没有对应调用的保留，兜底老 Bridge）
@@ -106,7 +129,7 @@ function absorbed(m: AgentMessage, calls: Record<string, AgentToolCall>): boolea
  */
 export function flowItems(messages: AgentMessage[], calls: AgentToolCall[]): FlowItem[] {
   const items: { seq: number; item: FlowItem }[] = [];
-  for (const m of messages) items.push({ seq: m.seq, item: { t: "msg", m } });
+  for (const m of dropResultEcho(messages)) items.push({ seq: m.seq, item: { t: "msg", m } });
   for (const c of calls) items.push({ seq: c.seq, item: { t: "tool", call: c } });
   items.sort((a, b) => a.seq - b.seq);
 
