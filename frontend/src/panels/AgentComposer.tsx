@@ -82,33 +82,33 @@ export function AgentComposer({
         </ul>
       ) : null}
 
-      <textarea
-        rows={2}
-        value={text}
-        placeholder={
-          disabled
-            ? "当前无法输入"
-            : canSend === false
-              ? "可以先输入内容；连接 Agent 后再发送"
-              : placeholder ??
-                (steering
-                  ? "Agent 正在执行；Enter 排队，等这一轮结束后发送"
-                  : "给 Agent 发一条指令，Enter 发送")
-        }
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKey}
-        disabled={disabled}
-      />
-      <div className="agc-btns">
-        {!canSend && !disabled ? <span className="agc-hint">先在「Agent」连接一个会话</span> : null}
-        {canInterrupt ? (
-          <button className="btn-ghost" onClick={onInterrupt} disabled={busy === "interrupt"} title="停止当前回合，剩余指令不再下发">
-            中断
+      <div className="agc-box">
+        <textarea
+          rows={2}
+          value={text}
+          placeholder={
+            disabled
+              ? "当前无法输入"
+              : canSend === false
+                ? "可以先输入内容；连接 Agent 后再发送"
+                : placeholder ??
+                  (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发一条指令，Enter 发送")
+          }
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKey}
+          disabled={disabled}
+        />
+        <div className="agc-btns">
+          {!canSend && !disabled ? <span className="agc-hint">先在「Agent」连接一个会话</span> : null}
+          {canInterrupt ? (
+            <button className="btn-ghost" onClick={onInterrupt} disabled={busy === "interrupt"} title="停止当前回合，剩余指令不再下发">
+              中断
+            </button>
+          ) : null}
+          <button className="btn-allow" onClick={submit} disabled={sendBlocked || !text.trim()}>
+            {busy === "send" ? "发送中…" : steering ? "排队" : "发送"}
           </button>
-        ) : null}
-        <button className="btn-allow" onClick={submit} disabled={sendBlocked || !text.trim()}>
-          {busy === "send" ? "发送中…" : steering ? "排队" : "发送"}
-        </button>
+        </div>
       </div>
     </div>
   );

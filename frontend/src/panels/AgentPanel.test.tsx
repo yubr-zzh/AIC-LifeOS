@@ -106,14 +106,16 @@ describe("AgentPanel 的结束态与工作指示", () => {
     return render(<AgentPanel store={store} api={api} onCollapse={() => undefined} />);
   };
 
-  it("批次没跑完时不显示“本次委派已结束”", () => {
-    renderPanel(session({ batchDone: 1, batchTotal: 3 }), 0);
-    expect(screen.queryByText("本次委派已结束")).toBeNull();
+  it("批次没跑完时不出结束占位", () => {
+    const { container } = renderPanel(session({ batchDone: 1, batchTotal: 3 }), 0);
+    expect(container.querySelector(".agp-end")).toBeNull();
   });
 
-  it("全部指令与待办都结束后才显示“本次委派已结束”", () => {
-    renderPanel(session({ batchDone: 3, batchTotal: 3 }), 0);
-    expect(screen.getByText("本次委派已结束")).toBeTruthy();
+  it("全部指令与待办都结束后才出结束占位", () => {
+    // 结束态不再写「本次委派已结束」——状态栏已经说了「已结束」，
+    // 正文里再写一遍是噪音。这里只看那个占位元素在不在。
+    const { container } = renderPanel(session({ batchDone: 3, batchTotal: 3 }), 0);
+    expect(container.querySelector(".agp-end")).toBeTruthy();
   });
 
   it("Agent 工作时显示转圈指示", () => {
