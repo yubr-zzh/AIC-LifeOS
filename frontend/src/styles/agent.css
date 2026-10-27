@@ -1014,7 +1014,7 @@
   color: var(--fg-4);
   font-size: 10px;
 }
-.turn-chip.is-write { border-color: color-mix(in srgb, var(--mint-6) 45%, var(--bd-2)); }
+.turn-chip.is-write { border-color: color-mix(in srgb, var(--accent-dim) 42%, var(--bd-2)); }
 .turn-chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
