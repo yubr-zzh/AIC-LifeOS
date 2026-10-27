@@ -964,3 +964,51 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   .ags2-agent-row { align-items: flex-start; flex-wrap: wrap; }
   .ags2-agent-copy p { white-space: normal; }
 }
+
+/* 第一档：成功完成的只读类调用——一行、不可交互、无 hover 反馈。 */
+.agts-progress .agts-row.agts-static {
+  cursor: default;
+  padding-left: 4px;
+}
+.agts-progress .agts-row.agts-static:hover { background: transparent; }
+.agts-progress .agts-text { color: var(--fg-3); }
+
+/* ---- 轮次容器（P0-B）----
+   对齐 VSCode 的 .interactive-item-container：一轮 = 一次用户输入 + 全部回答。
+   轮次之间用 hairline 分隔，不套卡片。 */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--bd-1);
+}
+.turn:last-of-type { border-bottom: 0; }
+.turn-body { display: flex; flex-direction: column; gap: 6px; }
+.turn-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  /* visibility 而不是 display：保留布局，hover 时不会跳一下 */
+  visibility: hidden;
+}
+.turn:hover .turn-foot,
+.turn:focus-within .turn-foot { visibility: visible; }
+.turn-act {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg-4);
+  font: 11px/1.5 var(--font-ui);
+  cursor: pointer;
+  transition: color 100ms ease-in-out, background-color 100ms ease-in-out, border-color 100ms ease-in-out;
+}
+.turn-act:hover { color: var(--fg-2); background: var(--bg-2); border-color: var(--bd-2); }
+.turn-act:focus-visible { outline: 1px solid var(--bd-4); outline-offset: 1px; }
+
+/* 触屏没有 hover：回退为常显，否则「复制 / 重试」永远不可达。 */
+@media (hover: none) {
+  .turn-foot { visibility: visible; }
+}

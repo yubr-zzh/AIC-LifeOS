@@ -65,10 +65,16 @@ describe("ToolStep", () => {
     expect(screen.getByText("已拒绝")).toBeTruthy();
   });
 
-  it("点击已完成行可以展开输入与结果", () => {
-    render(<ToolStep call={call()} />);
+  it("可展开档（Bash）点击后能看到输入与结果", () => {
+    render(<ToolStep call={call({ name: "Bash", summary: "运行 npm test", input: { command: "npm test" } })} />);
     expect(screen.queryByText("file body")).toBeNull();
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("file body")).toBeTruthy();
+  });
+
+  it("只读档（Read）成功后不可交互：没有 button、不进入 Tab 序", () => {
+    render(<ToolStep call={call()} />);
+    expect(screen.getByText("读取 b.ts")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });
