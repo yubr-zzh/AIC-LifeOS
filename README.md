@@ -7,7 +7,7 @@
   <p><b>A local-first personal agent OS that runs on your Windows machine.</b></p>
   <p>English · <a href="README.zh-CN.md">简体中文</a></p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
-  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
   <img src="https://img.shields.io/badge/tests-1093%20cases-brightgreen?style=flat-square" alt="Tests">
@@ -16,7 +16,7 @@
 
 ---
 
-**LifeOS** pairs a front-stage chat agent with a background global agent. The two share a reliable event bus, a two-phase memory store with governance and temporal versioning, a reflection engine, and a skill evolution loop. Version 2.2.0 ships as a Windows desktop app: a pywebview (WebView2) shell, an embedded Python backend, and a local agent bridge. Double-click the exe and it runs. All data stays on your machine.
+**LifeOS** pairs a front-stage chat agent with a background global agent. The two share a reliable event bus, a two-phase memory store with governance and temporal versioning, a reflection engine, and a skill evolution loop. Version 2.2.1 ships as a Windows desktop app: a pywebview (WebView2) shell, an embedded Python backend, and a local agent bridge. Double-click the exe and it runs. All data stays on your machine.
 
 ## The problem it solves
 
@@ -71,7 +71,7 @@ The horizon is plain: let the machine come to know you over the days. Chats sett
 
 Installation steps:
 
-1. Run `LifeOS-Setup-2.2.0.exe`.
+1. Run `LifeOS-Setup-2.2.1.exe`.
 2. Follow the wizard. Keep the default options.
 3. Start LifeOS from the Start menu or the desktop shortcut.
 4. Create your local account at first launch.
@@ -131,7 +131,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-The build produces `dist\LifeOS\LifeOS.exe` (onedir) and `dist\LifeOS-Setup-2.2.0.exe`.
+The build produces `dist\LifeOS\LifeOS.exe` (onedir) and `dist\LifeOS-Setup-2.2.1.exe`.
 
 ## Development
 
