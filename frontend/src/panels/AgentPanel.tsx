@@ -196,7 +196,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         ) : null}
 
         {active && active.state === "ended" && todo === 0 ? (
-          <div className="agp-end">本次委派已结束</div>
+          <div className="agp-end" aria-hidden="true" />
         ) : null}
       </div>
 
@@ -261,8 +261,9 @@ function TurnBlock({
   return (
     <section className="turn">
       {turn.user?.text ? (
-        <div className="agb agb-user">
-          <div className="agb-text">{turn.user.text}</div>
+        <div className="turn-ask">
+          <div className="turn-ask-label">你</div>
+          <div className="turn-ask-text">{turn.user.text}</div>
         </div>
       ) : null}
 
@@ -349,6 +350,13 @@ function FlowRow({
   return <Bubble m={item.m} />;
 }
 
+/** 粗粒度时长：只到「秒 / 分钟 / 小时 / 天」，不显示 2600000s 这种数字。 */
+function shiChang(s: number): string {
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时`;
+  return `${Math.floor(s / 86400)} 天`;
+}
+
 function StatusBar({ session, store }: { session: AgentSession | null; store: AgentStore }) {
   const { state } = store;
   const lei = state.lastResult[session?.sessionId ?? ""];
@@ -360,9 +368,13 @@ function StatusBar({ session, store }: { session: AgentSession | null; store: Ag
         {session ? STATE_LABEL[session.state] : CONNECTION_LABEL[state.conn]}
       </span>
       {session && session.batchTotal > 0 ? (
-        <span className="mono">第 {session.batchDone}/{session.batchTotal} 条指令</span>
+        <span className="mono">
+          {session.batchDone}/{session.batchTotal} 条
+        </span>
       ) : null}
-      {yong > 0 ? <span className="mono">已用 {yong}s</span> : null}
+      {/* 这里是**会话年龄**，不是「本轮耗时」。恢复出来的会话 createdAt 可能是
+          几天前，直接打秒数会变成 2600000s 这种看着像坏掉的数字。 */}
+      {yong >= 60 ? <span className="mono">会话 {shiChang(yong)}</span> : null}
       {lei?.totalCostUsd ? <span className="mono">{money(lei.totalCostUsd)}</span> : null}
       {session && session.pendingPermissions.length + session.pendingQuestions.length > 0 ? (
         <span className="pill confirm sm"><span className="dot" />挂起 {session.pendingPermissions.length + session.pendingQuestions.length}</span>

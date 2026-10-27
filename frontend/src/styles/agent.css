@@ -14,10 +14,13 @@
   font: 600 10px/1 var(--font-mono);
 }
 
-/* ---- 7:3 分栏（方案 11.3）---- */
+/* ---- 对话 / Agent 分栏 ----
+   VSCode 的聊天面板是**窄而固定**的：正文一栏随窗口伸缩，面板只吃
+   360–460px。原来 7:3 的比例会让面板在宽屏上摊成 500+px，表格和代码
+   跟着变稀，中间对话区反而空着。 */
 .chat-split-grid {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 460px);
   gap: 16px;
   min-height: 600px;
 }
@@ -48,14 +51,14 @@
   display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--bd-2); border-radius: var(--r-1);
   background: var(--bg-1); box-shadow: var(--shadow-1);
-  font-size: 12px; line-height: 1.55;
+  font-size: 12.5px; line-height: 1.6;
 }
 .agp-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+  padding: 9px 12px; border-bottom: 1px solid var(--bd-1); background: var(--bg-1);
 }
-.agp-title { display: flex; align-items: center; gap: 8px; }
-.agp-title strong { font-size: 13px; letter-spacing: -.01em; }
+.agp-title { display: flex; align-items: center; gap: 7px; }
+.agp-title strong { font-size: 12.5px; font-weight: 650; letter-spacing: -.01em; }
 .agp-mode {
   font-size: 10px; color: var(--fg-2); background: var(--bg-1);
   border: 1px solid var(--bd-2); border-radius: var(--r-0); padding: 1px 5px;
@@ -75,10 +78,13 @@
 .agp-off strong { display: block; margin-bottom: 4px; font-size: 13px; }
 .agp-off p { margin: 0; color: var(--fg-2); font-size: 12px; line-height: 1.7; }
 .agp-off code { font-family: var(--font-mono); background: var(--bg-1); padding: 0 3px; border-radius: var(--r-0); }
+/* 轮次结束不挂药丸：VSCode 那套里没有对应物，一个居中的胶囊反而比
+   什么都不是更抢眼。改成一行安静的分隔文字。 */
 .agp-end {
-  align-self: center; margin-top: 4px; padding: 3px 12px;
-  border: 1px solid var(--bd-2); border-radius: var(--r-pill);
-  background: var(--bg-2); color: var(--fg-2); font-size: 11px;
+  margin: 6px 0 2px;
+  color: var(--fg-4);
+  font-size: 11px;
+  text-align: center;
 }
 .agp-notices { display: flex; flex-direction: column; }
 .agp-notice {
@@ -341,16 +347,24 @@
 
 /* ---- 输入 ---- */
 .agc {
-  border-top: 1px solid var(--bd-1); background: var(--bg-2);
-  padding: 7px 8px; display: flex; flex-direction: column; gap: 6px;
+  border-top: 1px solid var(--bd-1); background: var(--bg-1);
+  padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 6px;
 }
+/* 输入框和按钮同一个边框（VSCode 的 composer 就是一只盒子 + 底部工具栏），
+   按钮挂在盒子外面会显得像是掉在面板上。 */
+.agc-box {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--bd-2); border-radius: var(--r-2);
+  background: var(--bg-1);
+  transition: border-color 120ms ease-in-out, box-shadow 120ms ease-in-out;
+}
+.agc-box:focus-within { border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
 .agc textarea {
-  width: 100%; resize: vertical; min-height: 44px; font: 12px/1.5 var(--font-ui);
-  padding: 6px 8px; border: 1px solid var(--bd-2); border-radius: var(--r-1);
-  background: var(--bg-1); color: var(--fg-1);
+  width: 100%; resize: none; min-height: 44px; max-height: 180px; font: 12.5px/1.6 var(--font-ui);
+  padding: 9px 10px 2px; border: 0; border-radius: 0; background: transparent; color: var(--fg-1);
 }
-.agc textarea:focus { outline: none; border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
-.agc-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.agc textarea:focus { outline: none; }
+.agc-btns { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 7px 7px; }
 
 /* ---- 委派计划卡 ---- */
 .dlg {
@@ -880,18 +894,42 @@
 .agts-progress .agts-row.agts-static:hover { background: transparent; }
 .agts-progress .agts-text { color: var(--fg-3); }
 
-/* ---- 轮次容器（P0-B）----
+/* ---- 轮次容器 ----
    对齐 VSCode 的 .interactive-item-container：一轮 = 一次用户输入 + 全部回答。
    轮次之间用 hairline 分隔，不套卡片。 */
 .turn {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 0 8px;
+  gap: 9px;
+  padding: 16px 0 13px;
   border-bottom: 1px solid var(--bd-1);
 }
+.turn:first-of-type { padding-top: 4px; }
 .turn:last-of-type { border-bottom: 0; }
-.turn-body { display: flex; flex-direction: column; gap: 6px; }
+.turn-body { display: flex; flex-direction: column; gap: 7px; }
+
+/* 用户消息：VSCode 是**细边框盒子 + 一个小标签**，不是整块填充。
+   填充色会让提问比回答还重，长会话里视线全被用户自己的话吸走。 */
+.turn-ask {
+  padding: 8px 11px 9px;
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+}
+.turn-ask-label {
+  margin-bottom: 3px;
+  color: var(--fg-4);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.turn-ask-text {
+  color: var(--fg-1);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .turn-foot {
   display: flex;
   align-items: center;
@@ -1028,3 +1066,56 @@
   cursor: pointer;
 }
 .agc-queue-x:hover { color: var(--fg-1); }
+
+/* ---- 提炼记忆：收到折叠条里 ----
+   它是一块辅助功能，常驻展开会在消息区顶部压掉 100+ px，还把正文推下去。 */
+.agp-capture { border-bottom: 1px solid var(--bd-1); }
+.agp-capture > summary {
+  width: 100%;
+  padding: 6px 12px;
+  color: var(--fg-3);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.agp-capture > summary::-webkit-details-marker { display: none; }
+.agp-capture > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0; height: 0;
+  margin-right: 6px;
+  border-left: 3.5px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  vertical-align: 1px;
+  transition: transform 100ms ease-in-out;
+}
+.agp-capture[open] > summary::before { transform: rotate(90deg); }
+.agp-capture > summary:hover { color: var(--fg-1); }
+.agp-capture-n {
+  margin-left: 5px; padding: 0 5px;
+  border-radius: var(--r-pill); background: var(--bg-2);
+  color: var(--fg-3); font-size: 10px;
+}
+.agp-capture-body { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 7px; }
+.agp-capture-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  color: var(--fg-3); font-size: 11.5px;
+}
+.agp-capture-hint { margin: 0; color: var(--fg-4); font-size: 11.5px; }
+.agp-capture-item {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 6px 8px; border: 1px solid var(--bd-1); border-radius: var(--r-1);
+  background: var(--bg-2); color: var(--fg-2); font-size: 11.5px; line-height: 1.6;
+}
+.agp-capture-item > span { white-space: pre-wrap; min-width: 0; }
+.agp-capture-form { display: grid; gap: 7px; }
+.agp-capture-form input, .agp-capture-form textarea {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--bd-2); border-radius: var(--r-1);
+  background: var(--bg-1); color: var(--fg-1); font: 12px/1.55 var(--font-ui);
+}
+
+/* 轮次结束不再写字：状态栏已经有「已结束」，正文里再重复一句只是噪音。
+   留一个空占位保持底部留白稳定，避免最后一条消息贴着输入框。 */
+.agp-end { height: 4px; margin: 0; }

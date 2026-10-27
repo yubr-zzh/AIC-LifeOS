@@ -50,24 +50,42 @@ export function AgentMemoryCapture({ sessionId, onCandidateCreated }: {
     }
   };
 
-  return <section style={{ padding: 12, borderTop: "1px solid var(--bd-1)" }}>
-    <strong>从执行结果提炼记忆</strong>
-    <button type="button" className="btn-ghost sm" onClick={() => void refresh()}>刷新结果</button>
-    {items.length === 0 ? <p>此会话还没有可提炼的结果。</p> : items.map((item) =>
-      <label key={item.id} style={{ display: "block", marginTop: 8 }}>
-        <input type="radio" name={`evidence-${sessionId}`} value={item.id}
-          checked={selected === item.id} onChange={() => setSelected(item.id)} />
-        <span style={{ whiteSpace: "pre-wrap" }}>{item.summary}</span>
-      </label>,
-    )}
-    {selected ? <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-      <input value={projectId} onChange={(event) => setProjectId(event.target.value)}
-        placeholder="稳定的项目 ID（必填）" />
-      <textarea value={claim} onChange={(event) => setClaim(event.target.value)} rows={3}
-        placeholder="手动写下一条长期有用的认知" />
-      <button type="button" className="btn-ghost sm" disabled={busy}
-        onClick={() => void submit()}>提交候选，等待审核</button>
-    </div> : null}
-    {message ? <p role="status">{message}</p> : null}
-  </section>;
+  return (
+    <details className="agp-capture">
+      <summary>
+        提炼记忆
+        {items.length > 0 ? <span className="agp-capture-n">{items.length}</span> : null}
+      </summary>
+      <div className="agp-capture-body">
+        <div className="agp-capture-head">
+          <span>从本轮执行结果里挑一条，写成长期有用的认知。</span>
+          <button type="button" className="btn-ghost sm" onClick={() => void refresh()}>
+            刷新
+          </button>
+        </div>
+        {items.length === 0 ? (
+          <p className="agp-capture-hint">还没有可提炼的结果。</p>
+        ) : (
+          items.map((item) => (
+            <label key={item.id} className="agp-capture-item">
+              <input type="radio" name={`evidence-${sessionId}`} value={item.id}
+                checked={selected === item.id} onChange={() => setSelected(item.id)} />
+              <span>{item.summary}</span>
+            </label>
+          ))
+        )}
+        {selected ? (
+          <div className="agp-capture-form">
+            <input value={projectId} onChange={(event) => setProjectId(event.target.value)}
+              placeholder="稳定的项目 ID（必填）" />
+            <textarea value={claim} onChange={(event) => setClaim(event.target.value)} rows={3}
+              placeholder="手动写下一条长期有用的认知" />
+            <button type="button" className="btn-ghost sm" disabled={busy}
+              onClick={() => void submit()}>提交候选，等待审核</button>
+          </div>
+        ) : null}
+        {message ? <p className="agp-capture-hint" role="status">{message}</p> : null}
+      </div>
+    </details>
+  );
 }

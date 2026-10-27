@@ -12,7 +12,8 @@ import type {
   PermissionRequest,
 } from "./agentTypes";
 
-const T0 = Date.parse("2026-09-27T09:00:00Z");
+// 会话起始时间取「刚刚」，否则状态栏的「会话 N 天」在预览里永远是 30 天。
+const T0 = Date.now() - 4 * 60 * 1000;
 
 let seq = 0;
 const nextSeq = () => ++seq;

@@ -77,26 +77,28 @@ export function AgentComposer({
         </ul>
       ) : null}
 
-      <textarea
-        rows={2}
-        value={text}
-        placeholder={
-          placeholder ??
-          (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发一条指令，Enter 发送")
-        }
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKey}
-        disabled={disabled}
-      />
-      <div className="agc-btns">
-        {canInterrupt ? (
-          <button className="btn-ghost" onClick={onInterrupt} disabled={busy === "interrupt"} title="停止当前回合，剩余指令不再下发">
-            中断
+      <div className="agc-box">
+        <textarea
+          rows={2}
+          value={text}
+          placeholder={
+            placeholder ??
+            (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发一条指令，Enter 发送")
+          }
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKey}
+          disabled={disabled}
+        />
+        <div className="agc-btns">
+          {canInterrupt ? (
+            <button className="btn-ghost" onClick={onInterrupt} disabled={busy === "interrupt"} title="停止当前回合，剩余指令不再下发">
+              中断
+            </button>
+          ) : null}
+          <button className="btn-allow" onClick={submit} disabled={disabled || busy === "send" || !text.trim()}>
+            {busy === "send" ? "发送中…" : steering ? "排队" : "发送"}
           </button>
-        ) : null}
-        <button className="btn-allow" onClick={submit} disabled={disabled || busy === "send" || !text.trim()}>
-          {busy === "send" ? "发送中…" : steering ? "排队" : "发送"}
-        </button>
+        </div>
       </div>
     </div>
   );
