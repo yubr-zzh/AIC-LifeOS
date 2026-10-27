@@ -66,7 +66,7 @@
   padding: 5px 10px; border-bottom: 1px solid var(--bd-1);
   background: var(--bg-1); font-size: 11px; color: var(--fg-2);
 }
-.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.agp-body { flex: 1; min-height: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
 .agp-hint { margin: 0; color: var(--fg-3); font-size: 12px; line-height: 1.7; }
 .agp-off {
   border: 1px dashed var(--bd-3); border-radius: var(--r-1);
@@ -91,25 +91,154 @@
 .agp-notice span:nth-child(2) { flex: 1; color: var(--fg-2); }
 .agp-notice button { background: none; border: 0; cursor: pointer; color: var(--fg-3); }
 
-/* ---- 消息气泡 ---- */
-.agb { border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
-.agb-role {
-  font-size: 10px; letter-spacing: .04em; color: var(--fg-3);
-  padding: 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+/* ---- 消息流 ----
+   边框只留给「需要区分 / 需要操作」的东西：用户消息有浅底，系统/错误有左侧
+   色条，assistant 正文完全裸。12 条消息 12 个框是视觉噪音，会盖过内容。 */
+.agb { border: 0; background: transparent; padding: 0; margin: 0 0 10px; }
+.agb-role { display: none; }
+.agb-text {
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+  color: var(--fg-1);
 }
-.agb-text { padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
-.agb-user { background: var(--bg-2); }
-.agb-user .agb-role { background: var(--bg-3); }
-.agb-thinking { border-style: dashed; }
-.agb-thinking .agb-text { color: var(--fg-2); font-style: italic; }
-.agb-tool, .agb-result { background: var(--bg-2); }
-.agb-result.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
-.agb-sys { border-color: var(--st-pending); background: var(--st-pending-bg); }
-.agb-sys .agb-role { background: transparent; color: var(--st-pending); }
+.agb-user {
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+.agb-thinking .agb-text { color: var(--fg-3); font-style: italic; font-size: 12px; }
+.agb-result.bad .agb-text { color: var(--st-failed); }
+.agb-sys {
+  padding-left: 8px;
+  border-left: 2px solid var(--st-pending);
+}
+.agb-sys.bad { border-left-color: var(--st-failed); }
+.agb-sys .agb-text { color: var(--fg-2); font-size: 12px; }
 .agb-io {
   margin: 0; padding: 6px 8px; font-size: 11px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-all; color: var(--fg-2);
   max-height: 220px; overflow: auto;
+}
+
+/* ---- 工具调用步骤（P0-A）----
+   参照 VSCode 的 .progress-container / .tool-input-output-part：
+   成功完成只占一行；等待审批/失败才展开并加重视觉。 */
+.agts { margin: 0 0 4px; }
+.agts-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg-2);
+  font: 12px/1.6 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease-in-out;
+}
+.agts-row:hover { background: var(--bg-2); }
+.agts-row:focus-visible { outline: 1px solid var(--bd-4); outline-offset: 1px; }
+
+.agts-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: opacity 100ms ease-in-out, transform 180ms cubic-bezier(.2, 0, 0, 1);
+  color: var(--fg-4);
+}
+.agts-row:hover .agts-chevron,
+.agts-row:focus-visible .agts-chevron,
+.agts.expanded .agts-chevron { opacity: 1; }
+.agts.expanded .agts-chevron > svg { transform: rotate(90deg); transition: transform 180ms cubic-bezier(.2, 0, 0, 1); }
+
+.agts-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agts-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agts-meta { flex: 0 0 auto; margin-left: auto; color: var(--fg-4); font-size: 11px; }
+
+.agts-done .agts-icon { color: var(--st-done); }
+.agts-bad .agts-icon { color: var(--st-failed); }
+.agts-bad .agts-text { color: var(--st-failed); }
+.agts-confirm .agts-icon { color: var(--st-confirm); }
+.agts-confirm .agts-text { color: var(--st-confirm); }
+.agts-busy .agts-icon { color: var(--st-processing); }
+.agts-busy .agts-icon svg { animation: agts-spin 1.1s linear infinite; }
+@keyframes agts-spin { to { transform: rotate(360deg); } }
+
+/* 进行中：文字 shimmer 而不是转圈；只给活跃那一行。 */
+.agts-busy .agts-text {
+  background: linear-gradient(90deg,
+    var(--fg-2) 0%, var(--fg-2) 30%, var(--st-processing) 50%,
+    var(--fg-2) 70%, var(--fg-2) 100%);
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: agts-shimmer 2s steps(60, end) infinite;
+}
+@keyframes agts-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agts-busy .agts-text {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+  .agts-busy .agts-icon svg { animation: none; }
+}
+
+.agts-io {
+  margin: 2px 0 6px 24px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--bd-2);
+  background: var(--bg-1);
+  border-radius: 0 var(--r-1) var(--r-1) 0;
+}
+.agts-io pre {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  max-height: 260px;
+  overflow: auto;
+}
+.agts-io pre:last-child { margin-bottom: 0; }
+.agts-warn {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--st-pending);
+}
+.agts-group-body {
+  margin: 2px 0 4px 24px;
+  padding-left: 8px;
+  border-left: 2px solid var(--bd-1);
 }
 
 /* ---- 审批卡（8.8 信息分层）---- */

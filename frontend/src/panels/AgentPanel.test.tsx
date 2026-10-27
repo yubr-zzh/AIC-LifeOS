@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { AgentPanel, Bubble } from "./AgentPanel";
 import { initialAgentState, type AgentStore } from "../state/agentStore";
 import type { AgentActions } from "../hooks/useAgentStream";
-import type { AgentMessage, DeviceStatusFrame } from "../api/agentTypes";
+import type { AgentMessage, AgentSession, AgentToolCall, DeviceStatusFrame } from "../api/agentTypes";
 
 const xiao = (a: Partial<AgentMessage> & { kind: AgentMessage["kind"] }): AgentMessage => ({
   messageId: "m", sessionId: "s-1", seq: 1, role: "system", text: "", toolUseId: null,
@@ -76,5 +76,93 @@ describe("AgentPanel 的设备离线提示", () => {
     zhuang({ state: "connected" });
     expect(screen.queryByText(/设备离线/)).toBeNull();
     expect(screen.queryByText(/正在重连/)).toBeNull();
+  });
+});
+
+/**
+ * P0-A：消息流与工具调用表的合并。
+ *
+ * 这三条钉住的是「同一件事不要渲染两遍」和「成功调用折叠成一行」：
+ * 之前 tool_use / tool_result 是两条独立 <pre>，一个 turn 12 次调用
+ * 就是 12 个平铺块。
+ */
+describe("AgentPanel 的工具调用合并", () => {
+  const sess = {
+    sessionId: "s-1", agentId: "claude-code", agentLabel: "Claude Code", cwd: ".",
+    permissionMode: "manual", effectiveMode: "manual", state: "working", title: "",
+    claudeSessionId: null, ownerId: "local", deviceId: "local", planId: null, traceId: null,
+    batchTotal: 0, batchDone: 0, createdAt: 0, updatedAt: 0, turnCount: 0,
+    pendingPermissions: [], pendingQuestions: [], alive: true, streamEpoch: 0,
+  } as unknown as AgentSession;
+
+  const msg = (a: Partial<AgentMessage> & { messageId: string; seq: number }): AgentMessage => ({
+    sessionId: "s-1", role: "assistant", kind: "text", text: "", toolUseId: null,
+    toolName: null, toolInput: null, isError: false, isPartial: false, createdAt: 0, ...a,
+  });
+
+  const call = (a: Partial<AgentToolCall> & { toolUseId: string; seq: number }): AgentToolCall => ({
+    sessionId: "s-1", name: "Read", input: {}, summary: "读取文件",
+    state: { type: "completed", isError: false, durationMs: 10 }, resultText: "", ...a,
+  });
+
+  const zhuang = (messages: AgentMessage[], toolCalls: Record<string, AgentToolCall>) => {
+    const store = {
+      state: { ...initialAgentState, conn: "open", messages: { "s-1": messages }, toolCalls },
+      dispatch: () => undefined,
+      active: sess,
+      streaming: null,
+      todo: 0,
+    } as unknown as AgentStore;
+    const api = { preview: false, busy: null, act: {} } as unknown as AgentActions;
+    return render(<AgentPanel store={store} api={api} onCollapse={() => undefined} />);
+  };
+
+  it("tool_use 已经有对应调用时不再单独渲染", () => {
+    zhuang(
+      [msg({ messageId: "m1", seq: 1, kind: "tool_use", toolUseId: "t1", toolName: "Read" })],
+      { t1: call({ toolUseId: "t1", seq: 1 }) },
+    );
+    // 旧样式会渲染 "tool_use · Read"；新样式应只有一行摘要
+    expect(screen.queryByText(/tool_use ·/)).toBeNull();
+    expect(screen.getByText("读取文件")).toBeTruthy();
+  });
+
+  it("没有对应调用的 tool_use 仍走旧样式兜底", () => {
+    zhuang(
+      [msg({ messageId: "m1", seq: 1, kind: "tool_use", toolUseId: "ghost", toolName: "Read" })],
+      {},
+    );
+    expect(screen.getByText(/tool_use · Read/)).toBeTruthy();
+  });
+
+  it("连续 3 个已完成调用合并成一行", () => {
+    zhuang(
+      [],
+      {
+        a: call({ toolUseId: "a", seq: 1, summary: "读取 a.ts" }),
+        b: call({ toolUseId: "b", seq: 2, summary: "读取 b.ts" }),
+        c: call({ toolUseId: "c", seq: 3, summary: "读取 c.ts" }),
+      },
+    );
+    expect(screen.getByText("读取了 3 个文件")).toBeTruthy();
+    // 组内明细默认折叠
+    expect(screen.queryByText("读取 a.ts")).toBeNull();
+  });
+
+  it("组里有一个等待审批就不合并，单独可见", () => {
+    zhuang(
+      [],
+      {
+        a: call({ toolUseId: "a", seq: 1, summary: "读取 a.ts" }),
+        b: call({
+          toolUseId: "b", seq: 2, summary: "运行 npm test", name: "Bash",
+          state: { type: "awaiting_confirmation", requestId: "r-1" },
+        }),
+        c: call({ toolUseId: "c", seq: 3, summary: "读取 c.ts" }),
+      },
+    );
+    expect(screen.queryByText(/读取了 3 个文件/)).toBeNull();
+    expect(screen.getByText("运行 npm test")).toBeTruthy();
+    expect(screen.getByText("等待你批准")).toBeTruthy();
   });
 });

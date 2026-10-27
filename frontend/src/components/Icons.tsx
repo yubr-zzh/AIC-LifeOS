@@ -203,3 +203,23 @@ export const IconCircleDot = (p: IconProps) =>
     "0 0 24 24",
     p,
   );
+
+export const IconPause = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M9 5v14" />
+      <path d="M15 5v14" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconSlash = (p: IconProps) =>
+  wrap(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M6.5 17.5l11-11" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
