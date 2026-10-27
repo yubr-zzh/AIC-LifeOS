@@ -14,6 +14,7 @@ import { AgentComposer } from "./AgentComposer";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { ToolGroup, ToolStep } from "./ToolStep";
+import { buildTurns, type FlowItem, type Turn } from "./agentFlow";
 import { groupLabel } from "./toolSummary";
 
 interface Props {
@@ -33,76 +34,22 @@ function toolInputText(a: unknown): string {
   return JSON.stringify(a, null, 2);
 }
 
-type LiuItem =
-  | { t: "msg"; m: AgentMessage }
-  | { t: "tool"; call: AgentToolCall }
-  | { t: "group"; calls: AgentToolCall[] };
-
-/**
- * 把「消息流」与「工具调用表」合并成一条时间线。
- *
- * - 已被 toolCalls 吸收的 tool_use / tool_result / tool_cancelled 不再单独渲染
- *   （没有对应调用的保留，作为老 Bridge / 老历史的兜底）
- * - 按 seq 排序
- * - 相邻的、全部成功完成的调用合并成一组；等待审批 / 失败 / 执行中不合并
- */
-function heBing(
-  lie: AgentMessage[],
-  calls: Record<string, AgentToolCall>,
-  sid: string,
-): LiuItem[] {
-  const items: { seq: number; item: LiuItem }[] = [];
-
-  for (const m of lie) {
-    const chongfu =
-      (m.kind === "tool_use" || m.kind === "tool_result" || m.kind === "tool_cancelled") &&
-      Boolean(m.toolUseId && calls[m.toolUseId]);
-    if (chongfu) continue;
-    items.push({ seq: m.seq, item: { t: "msg", m } });
-  }
-
-  for (const tid in calls) {
-    const c = calls[tid];
-    if (c.sessionId !== sid) continue;
-    items.push({ seq: c.seq, item: { t: "tool", call: c } });
-  }
-
-  items.sort((a, b) => a.seq - b.seq);
-
-  const out: LiuItem[] = [];
-  let buf: AgentToolCall[] = [];
-  const flush = () => {
-    if (buf.length >= 2) out.push({ t: "group", calls: buf });
-    else for (const c of buf) out.push({ t: "tool", call: c });
-    buf = [];
-  };
-
-  for (const { item } of items) {
-    if (item.t === "tool") {
-      const st = item.call.state;
-      const heBingDe = st.type === "completed" && !st.isError;
-      if (heBingDe) {
-        buf.push(item.call);
-        continue;
-      }
-    }
-    flush();
-    out.push(item);
-  }
-  flush();
-  return out;
-}
-
 export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props) {
   const { state, dispatch, active, streaming, todo } = store;
   const box = useRef<HTMLDivElement>(null);
   const [genzi, setGenzi] = useState(true);
 
   const lie = active ? state.messages[active.sessionId] ?? [] : [];
-  const liu = useMemo(
-    () => (active ? heBing(lie, state.toolCalls, active.sessionId) : []),
+  const turns = useMemo(
+    () => (active ? buildTurns(lie, state.toolCalls, active.sessionId) : []),
     [lie, state.toolCalls, active],
   );
+
+  const locateApproval = (rid: string) => {
+    const el = document.getElementById(`apr-${rid}`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el?.focus?.();
+  };
 
   // 自动滚动。依赖是「正在流式输出的那条消息 + 它的长度」，
   // 不能用 messages.length —— chunk 帧不新增消息，照抄 ChatPanel 的依赖会永不触发。
@@ -171,51 +118,20 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           <p className="agp-hint">还没有内容。从左侧的委派计划里勾选指令发过来，或直接在下面输入。</p>
         ) : null}
 
-        {liu.map((item) => {
-          if (item.t === "group") {
-            return (
-              <ToolGroup
-                key={`g-${item.calls[0].toolUseId}`}
-                calls={item.calls}
-                label={groupLabel(item.calls.map((c) => c.name), item.calls.length)}
-              />
-            );
-          }
-          if (item.t === "tool") {
-            return (
-              <ToolStep
-                key={item.call.toolUseId}
-                call={item.call}
-                onLocateApproval={(rid) => {
-                  const el = document.getElementById(`apr-${rid}`);
-                  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-                  el?.focus?.();
-                }}
-              />
-            );
-          }
-          // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
-          // 的多个内容块共用它，拿它当 key React 会报 duplicate key，
-          // 并且重渲染时会错认组件身份。
-          return <Bubble key={`${item.m.sessionId}:${item.m.seq}`} m={item.m} />;
-        })}
-
-        {streaming && streaming.sessionId === active?.sessionId ? (
-          streaming.kind === "tool_use" ? (
-            // 工具参数还在流：不把 partial_json 当正文渲染（它是不可信片段）。
-            <div className="agts agts-busy">
-              <div className="agts-row" aria-hidden="true">
-                <span className="agts-chevron" />
-                <span className="agts-icon" />
-                <span className="agts-text">生成工具参数中…</span>
-              </div>
-            </div>
-          ) : (
-            <div className={`agb agb-${streaming.kind}`}>
-              <div className="agb-text">{streaming.text}</div>
-            </div>
-          )
-        ) : null}
+        {turns.map((turn, i) => (
+          <TurnBlock
+            key={turn.key}
+            turn={turn}
+            streaming={
+              i === turns.length - 1 && streaming && streaming.sessionId === active?.sessionId
+                ? streaming
+                : null
+            }
+            canRetry={kai && active?.state !== "ended"}
+            onRetry={(text) => active && void api.act.send(active.sessionId, { text }).catch(() => undefined)}
+            onLocateApproval={locateApproval}
+          />
+        ))}
 
         {dai.length > 0 || wen.length > 0 ? (
           <div className="agp-decide">
@@ -267,6 +183,117 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
       />
     </section>
   );
+}
+
+/**
+ * 一轮对话的容器（对齐 VSCode 的 `.interactive-item-container`）。
+ *
+ * 用户消息有浅底，回答正文完全裸，工具调用折叠成行；hover 才出现
+ * 「复制 / 重试」，避免每轮都挂一排按钮。
+ */
+function TurnBlock({
+  turn,
+  streaming,
+  canRetry,
+  onRetry,
+  onLocateApproval,
+}: {
+  turn: Turn;
+  streaming: { kind: string; text: string } | null;
+  canRetry: boolean;
+  onRetry: (text: string) => void;
+  onLocateApproval: (requestId: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    const parts: string[] = [];
+    if (turn.user?.text) parts.push(turn.user.text);
+    for (const item of turn.items) {
+      if (item.t === "msg" && item.m.text) parts.push(item.m.text);
+      else if (item.t === "tool") parts.push(item.call.summary);
+      else if (item.t === "group") parts.push(groupLabel(item.calls.map((c) => c.name), item.calls.length));
+    }
+    try {
+      await navigator.clipboard.writeText(parts.join("\n\n"));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // 剪贴板被拒（非安全上下文）：静默失败，不弹假成功。
+    }
+  };
+
+  return (
+    <section className="turn">
+      {turn.user?.text ? (
+        <div className="agb agb-user">
+          <div className="agb-text">{turn.user.text}</div>
+        </div>
+      ) : null}
+
+      <div className="turn-body">
+        {turn.items.map((item) => (
+          <FlowRow key={itemKey(item)} item={item} onLocateApproval={onLocateApproval} />
+        ))}
+
+        {streaming ? (
+          streaming.kind === "tool_use" ? (
+            <div className="agts agts-busy">
+              <div className="agts-row agts-static" aria-hidden="true">
+                <span className="agts-chevron" />
+                <span className="agts-icon" />
+                <span className="agts-text">生成工具参数中…</span>
+              </div>
+            </div>
+          ) : (
+            <div className={`agb agb-${streaming.kind}`}>
+              <div className="agb-text">{streaming.text}</div>
+            </div>
+          )
+        ) : null}
+      </div>
+
+      <div className="turn-foot">
+        <button type="button" className="turn-act" onClick={() => void copy()}>
+          {copied ? "已复制" : "复制"}
+        </button>
+        {canRetry && turn.user?.text ? (
+          <button type="button" className="turn-act" onClick={() => onRetry(turn.user!.text)}>
+            重试
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function itemKey(item: FlowItem): string {
+  if (item.t === "msg") return `${item.m.sessionId}:${item.m.seq}`;
+  if (item.t === "tool") return item.call.toolUseId;
+  return `g-${item.calls[0].toolUseId}`;
+}
+
+function FlowRow({
+  item,
+  onLocateApproval,
+}: {
+  item: FlowItem;
+  onLocateApproval: (requestId: string) => void;
+}) {
+  if (item.t === "group") {
+    return (
+      <ToolGroup
+        calls={item.calls}
+        label={groupLabel(item.calls.map((c) => c.name), item.calls.length)}
+      />
+    );
+  }
+  if (item.t === "tool") {
+    return <ToolStep call={item.call} onLocateApproval={onLocateApproval} />;
+  }
+  // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
+  // 的多个内容块共用它，拿它当 key React 会报 duplicate key。
+  return <Bubble m={item.m} />;
 }
 
 function StatusBar({ session, store }: { session: AgentSession | null; store: AgentStore }) {
@@ -388,9 +415,13 @@ export function Bubble({ m }: { m: AgentMessage }) {
       </div>
     );
   }
+  // tool_use / tool_result 没有对应调用时的兜底：用系统行的左侧色条，
+  // 不要 `agb-user`——tool_result 的 role 也是 user，给底色会看成一问一答。
+  // 走到这里时 tool_use / tool_result 已被上面的分支处理，只剩 tool_cancelled
+  // 这类系统事件，用左侧色条而不是用户气泡底色。
+  const cls = m.kind === "tool_cancelled" ? "agb-sys" : `agb-${m.role}`;
   return (
-    <div className={`agb agb-${m.role}`}>
-      <div className="agb-role mono">{m.role}</div>
+    <div className={`agb ${cls}`}>
       <div className="agb-text">{m.text}</div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentToolCall } from "../api/agentTypes";
+import { toolTier } from "./agentFlow";
 import {
   IconCheck,
   IconChevron,
@@ -58,6 +59,9 @@ export function ToolStep({ call, forceOpen, onLocateApproval }: Props) {
   // 等待用户决定 / 失败必须可见，不允许折叠。
   const locked = isAwaiting || isFailed;
   const expanded = locked || open;
+  // 第一档：成功完成的「只读类」调用只占一行，且**不可交互**。
+  const progressOnly =
+    !locked && state.type === "completed" && toolTier(call.name) === "progress";
 
   // 「执行中 3s」的秒表。**离开 executing 必须清掉**，否则每个调用都会留下
   // 一个永不停止的 interval。
@@ -108,6 +112,20 @@ export function ToolStep({ call, forceOpen, onLocateApproval }: Props) {
     }
     setOpen((v) => !v);
   };
+
+  if (progressOnly) {
+    // 不可交互的一行：没有 chevron、不是 button、不进入 Tab 序。
+    return (
+      <div className={`agts agts-progress ${tone}`} data-tool={call.name}>
+        <div className="agts-row agts-static">
+          <span className="agts-chevron" aria-hidden="true" />
+          <span className="agts-icon" aria-hidden="true">{icon}</span>
+          <span className="agts-text">{text}</span>
+          {meta ? <span className="agts-meta mono">{meta}</span> : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`agts ${tone} ${expanded ? "expanded" : ""}`} data-tool={call.name}>
