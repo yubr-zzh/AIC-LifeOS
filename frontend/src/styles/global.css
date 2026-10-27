@@ -1,4 +1,4 @@
-﻿/* LifeOS Agent Console 鈥?design tokens & global styles.
+/* LifeOS Agent Console 鈥?design tokens & global styles.
    Claude-style warm cream aesthetic: #faf9f5 surfaces, #141413 ink,
    #d97757 accent, Poppins display + Lora body, mono for operational labels. */
 
@@ -713,7 +713,8 @@ textarea { resize: vertical; }
 .chat-card { height: min(760px, calc(100dvh - 210px)); min-height: 580px; padding: 0; border-color: #e5e2d6; background: #fdfcf8; box-shadow: 0 14px 45px rgba(50, 46, 38, .08); }
 .page-intro-chat,
 .page-intro.page-intro-chat { display: none; }
-/* Page intro: one functional title + one line of context. No eyebrow, no date block 鈥?   闈㈠寘灞戝拰鏃ユ湡鍙湪椤舵爮鍑虹幇涓€娆★紙craft-floor锛氭瘡鑺傛爣棰樺墠涓嶅姞灏忔爣绛撅級銆?*/
+/* Page intro: one functional title + one line of context. No eyebrow, no date block —
+   面包屑和日期只在顶栏出现一次（craft-floor：每节标题前不加小标签）。 */
 .page-intro {
   display: flex;
   flex-direction: column;
@@ -801,7 +802,7 @@ textarea { resize: vertical; }
 }
 .lifeos-shell.is-nav-collapsed .dev-footer-link svg { margin: 0; }
 
-/* 鈹€鈹€ Chat history collapse toggle (瀵硅瘽鍘嗗彶鏍忔敹璧? 鈹€鈹€ */
+/* ── Chat history collapse toggle (对话历史栏收起) ── */
 .chat-history {
   display: flex;
   flex-direction: column;
@@ -1527,7 +1528,7 @@ button.activity-day { cursor: pointer; }
 @media (max-width: 900px) { .settings-layout { grid-template-columns: 220px minmax(0, 1fr); } .provider-card { align-items: flex-start; flex-direction: column; } .provider-actions { justify-content: flex-start; } }
 @media (max-width: 680px) { .settings-layout { grid-template-columns: 1fr; } .settings-sidebar { position: static; padding: 15px; } .settings-sidebar-heading { padding-bottom: 12px; } .settings-sidebar > button { width: calc(50% - 4px); display: inline-flex; vertical-align: top; } .settings-sidebar-foot { display: none; } .settings-content { padding: 17px; } .settings-section-heading { align-items: flex-start; flex-direction: column; } .provider-form-grid { grid-template-columns: 1fr; gap: 0; } .provider-editor { padding: 18px; } .provider-editor-footer { align-items: flex-start; flex-direction: column; } }
 
-/* ---- 鐧诲綍浣撶郴锛堟柟妗?6.4锛?--- */
+/* ---- 登录体系（方案 6.4）---- */
 .auth-screen { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(160deg, #faf9f5, #efede4); padding: 24px; }
 .auth-card { width: min(400px, 100%); background: #fff; border: 1px solid var(--bd-1, #e0ddcf); border-radius: 14px; padding: 28px 26px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(40, 70, 40, 0.08); }
 .auth-brand { font-weight: 800; letter-spacing: 0.06em; color: #c15f3f; font-size: 15px; }

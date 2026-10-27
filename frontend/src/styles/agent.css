@@ -1,8 +1,11 @@
-﻿/* ==========================================================================
-   Agent 鍩燂紙闃舵 4锛夈€傛祬鑹插簳 + 鎺у埗鍙板瘑搴︼細娌跨敤 global.css 鐨勪护鐗岋紝
-   浣嗗崐寰勬敹鍒?--r-1銆佸瓧鍙峰帇鍒?10鈥?2px銆佺姸鎬佽壊鎵挎媴涓昏淇℃伅銆?   宸﹁竟鏄粰浜虹湅鐨勶紝鍙宠竟鏄粰鏈哄櫒鐪嬬殑鈥斺€斿瘑搴﹀樊鏈韩灏辨槸鍒嗗尯淇″彿銆?
-   鍗曠嫭涓€涓枃浠惰€屼笉鏄户缁爢杩?global.css锛歡lobal.css 宸茬粡 787 琛岋紝
-   娣峰湪涓€璧锋敼涓€澶勫鏄撶鍧忓彟涓€澶勶紙涓?agentStore 鐙珛浜?store.ts 鍚岀悊锛夈€?   ========================================================================== */
+/* ==========================================================================
+   Agent 域（阶段 4）。浅色底 + 控制台密度：沿用 global.css 的令牌，
+   但半径收到 --r-1、字号压到 10–12px、状态色承担主要信息。
+   左边是给人看的，右边是给机器看的——密度差本身就是分区信号。
+
+   单独一个文件而不是继续堆进 global.css：global.css 已经 787 行，
+   混在一起改一处容易碰坏另一处（与 agentStore 独立于 store.ts 同理）。
+   ========================================================================== */
 
 .nav-badge {
   margin-left: auto; min-width: 17px; height: 17px; padding: 0 5px;
@@ -11,19 +14,20 @@
   font: 600 10px/1 var(--font-mono);
 }
 
-/* ---- 7:3 鍒嗘爮锛堟柟妗?11.3锛?--- */
+/* ---- 7:3 分栏（方案 11.3）---- */
 .chat-split-grid {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
   gap: 16px;
   min-height: 600px;
 }
-/* 蹇呴』瑕嗙洊鐖剁骇鐨?600px锛屽惁鍒欏乏鏍艰鎾戠牬銆傜粍浠剁粨鏋勪竴瀛楁湭鏀癸紝鍙帇杩欎竴澶勩€?*/
+/* 必须覆盖父级的 600px，否则左格被撑破。组件结构一字未改，只压这一处。 */
 .chat-split-grid > .chat-page-grid { min-height: 0; }
-/* Agent 鍗′笌瀵硅瘽鍗″悓楂橈細涓嶉拤浣忕殑璇濓紝琛岄珮闅?Agent 娑堟伅娑紝闀夸細璇濇妸鏁撮〉寰€涓嬮《锛?   .agp-body 鐨勫唴婊氭案杩滆疆涓嶅埌鐢熸晥銆?*/
+/* Agent 卡与对话卡同高：不钉住的话，行高随 Agent 消息涨，长会话把整页往下顶，
+   .agp-body 的内滚永远轮不到生效。 */
 .chat-split-grid > .agp { max-height: min(760px, calc(100dvh - 210px)); }
 
-/* ---- 鎶樺彔鎬佸鎵规潯锛?1.7锛?--- */
+/* ---- 折叠态审批条（11.7）---- */
 .apb {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 12px; padding: 8px 12px;
@@ -42,7 +46,7 @@
 .apb-more { background: none; border: 0; color: var(--accent-dim); font-size: 11px; cursor: pointer; padding: 2px 4px; }
 .apb-more:hover { text-decoration: underline; }
 
-/* ---- Agent 闈㈡澘楠ㄦ灦 ---- */
+/* ---- Agent 面板骨架 ---- */
 .agp {
   display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--bd-2); border-radius: var(--r-1);
@@ -260,7 +264,7 @@
 }
 .apr:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
 .apr-done { border-color: var(--bd-2); opacity: .82; }
-/* 宸︿晶绔栨潯鏄秴鏃跺€掕鏃讹紝涓嶉潬鏂囧瓧璇荤銆?*/
+/* 左侧竖条是超时倒计时，不靠文字读秒。 */
 .apr-rail { width: 3px; background: var(--bg-3); flex: none; }
 .apr-rail-fill { display: block; width: 100%; background: var(--st-processing); transition: height 1s linear; }
 .apr-rail-fill.st-pending { background: var(--st-pending); }
@@ -275,7 +279,7 @@
 .apr-count.st-pending { color: var(--st-pending); }
 .apr-count.st-failed { color: var(--st-failed); font-weight: 600; }
 
-/* 鍙俊鍖猴細绯荤粺缁欑殑鍘熸枃锛屾渶澶ч潰绉紝绛夊 */
+/* 可信区：系统给的原文，最大面积，等宽 */
 .apr-trust { border: 1px solid var(--bd-2); border-radius: var(--r-0); background: var(--bg-2); }
 .apr-trust-tag { font-size: 10px; color: var(--fg-3); padding: 3px 8px 0; }
 .apr-cmd {
@@ -286,7 +290,7 @@
 .apr-cmd mark { background: var(--st-failed-soft); color: var(--st-failed); font-weight: 700; border-radius: 2px; padding: 0 2px; }
 .apr-note { margin: 0 8px 8px; font-size: 11px; line-height: 1.6; color: var(--st-pending); }
 
-/* 涓嶅彲淇″尯锛欰gent 鑷挵锛岄粯璁ゆ姌鍙狅紝鏉ユ簮鍐欐槑 */
+/* 不可信区：Agent 自撰，默认折叠，来源写明 */
 .apr-untrust { border-top: 1px dashed var(--bd-2); padding-top: 5px; }
 .apr-untrust summary { cursor: pointer; font-size: 10px; color: var(--fg-3); }
 .apr-untrust p { margin: 4px 0 0; font-size: 11px; color: var(--fg-2); }
@@ -333,7 +337,7 @@
 .qst-opt-main strong { font-size: 12px; font-weight: 600; }
 .qst-opt-main small { font-size: 11px; color: var(--fg-3); line-height: 1.5; }
 
-/* ---- 鎸夐挳 ---- */
+/* ---- 按钮 ---- */
 .btn-allow, .btn-reject, .btn-ghost {
   font: 600 11px/1 var(--font-ui); padding: 5px 10px; cursor: pointer;
   border-radius: var(--r-1); border: 1px solid transparent;
@@ -351,7 +355,7 @@
   outline: 2px solid var(--accent-dim); outline-offset: 1px;
 }
 
-/* ---- 杈撳叆 ---- */
+/* ---- 输入 ---- */
 .agc {
   border-top: 1px solid var(--bd-1); background: var(--bg-2);
   padding: 7px 8px; display: flex; flex-direction: column; gap: 6px;
@@ -389,12 +393,14 @@
 .dlg-foot .mono { font-size: 10.5px; }
 .dlg-btns { display: flex; gap: 6px; }
 
-/* ---- 銆屾湰鍦?Agent銆嶉〉 ---- */
+/* ---- 「本地 Agent」页 ---- */
 .ags {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px; align-items: stretch;
 }
-/* 鍑嵁鐩綍寤轰笉鍑烘潵鏃剁殑閫氭爮鍛婅锛坰pec 11.2锛夈€傝蛋 `.agp-notice` 鐨勯厤鑹叉儻渚?   锛堢惀鐝€搴?= 寰呭姙锛岀孩搴?= 宸插潖锛夛紝浣嗚法鏁村睆瀹藉害涓斾笉閫氭爮鏀剁缉鈥斺€擿.ags` 鏄?   auto-fit 缃戞牸锛屼笉鍐?`grid-column` 瀹冨彧鍗犱竴鏍硷紙340px锛夛紝杩欎箞闀跨殑璇濊鎸ゆ柇琛屻€?*/
+/* 凭据目录建不出来时的通栏告警（spec 11.2）。走 `.agp-notice` 的配色惯例
+   （橙底 = 待办，红底 = 已坏），但跨整屏宽度且不通栏收缩——`.ags` 是
+   auto-fit 网格，不给 `grid-column` 它只占一格（340px），这么长的话被挤断行。 */
 .ags-alarm {
   grid-column: 1 / -1;
   display: flex; flex-direction: column; gap: 4px; padding: 10px 13px;
@@ -403,7 +409,7 @@
   font-size: 11.5px; line-height: 1.7; color: var(--fg-2);
 }
 .ags-alarm strong { color: var(--st-failed); font-size: 12.5px; }
-/* 銆岀┖鐨勩€嶉偅鍙ユ槸鍔犵矖鐨勮鍐呭己璋冿紝涓嶈璺熼琛岄偅涓暣娈垫爣棰樺悓瀛楀彿鈥斺€斾袱涓?strong 涓嶅姞鍖哄垎浼氫竴楂樹竴浣庛€?*/
+/* 「空的」那句是加粗的行内强调，不该跟首行那个整段标题同字号——两个 strong 不加区分会一高一低。 */
 .ags-alarm span strong { font-size: inherit; color: inherit; }
 .ags-alarm code { font-family: var(--font-mono); }
 
@@ -411,9 +417,11 @@
   border: 1px solid var(--bd-2); border-radius: var(--r-1); background: var(--bg-1);
   padding: 14px 15px; display: flex; flex-direction: column; gap: 9px;
 }
-/* 銆孉gent 娲诲姩銆嶉潰鏉挎槸 .ags 閲屽敮涓€鐨?Panel锛岃瀹冩暣琛岄€氭爮銆?   涓嶅啓杩欎竴鏉＄殑璇濆畠鍙崰涓€鏍硷紙minmax(340px, 1fr)锛夛紝浜嬩欢琛ㄥ拰璇︽儏鎸ゅ湪 340px 閲屾病娉曠湅銆?*/
+/* 「Agent 活动」面板是 .ags 里唯一的 Panel，让它整行通栏。
+   不写这一条的话它只占一格（minmax(340px, 1fr)），事件表和详情挤在 340px 里没法看。 */
 .ags > .panel { grid-column: 1 / -1; }
-/* 娲诲姩琛ㄨ鏁颁笂闄?40锛氫笉缁?panel-body 灏侀《鐨勮瘽锛岄潰鏉块殢浜嬩欢鏃犻檺闀块珮锛?   鏁撮〉琚線涓嬮《鈥斺€斿皝椤跺悗琛ㄥ湪鍗″唴婊氥€?*/
+/* 活动表行数上限 40：不给 panel-body 封顶的话，面板随事件无限长高，
+   整页被往下顶——封顶后表在卡内滚。 */
 .ags > .panel .panel-body { max-height: 320px; }
 .ags-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ags-head h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
@@ -475,8 +483,9 @@
 .ags-toggle input { flex: 0 0 auto; margin: 0; }
 .ags-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---- 绉诲姩绔細Agent 闈㈡澘鍏ㄥ睆瑕嗙洊 ----
-   overlay 鏄?CSS 鍦ㄧ獎灞忎笅鐨勫憟鐜帮紝涓嶆槸 JS 鐘舵€侊紙11.3 瑙勫垯 2锛夆€斺€?   agentLayout 鍙湁 collapsed / split 涓ゆ€併€?*/
+/* ---- 移动端：Agent 面板全屏覆盖 ----
+   overlay 是 CSS 在窄屏下的呈现，不是 JS 状态（11.3 规则 2）——
+   agentLayout 只有 collapsed / split 两态。 */
 @media (max-width: 760px) {
   .chat-split-grid { grid-template-columns: 1fr; min-height: 0; }
   .chat-split-grid > .agp {
@@ -512,7 +521,7 @@
 .agent-activity-panel .panel-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
 .agent-activity-panel .panel-body::-webkit-scrollbar { width: 8px; }
 .agent-activity-panel .panel-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--bd-3); }
-/* ---- 瀵硅瘽 / Agent 鍙嫋鎷藉垎鏍?---- */
+/* ---- 对话 / Agent 可拖拽分栏 ---- */
 .chat-split-grid.resizable { gap: 0; align-items: stretch; min-height: 620px; }
 .chat-split-grid.resizable > .chat-page-grid,
 .chat-split-grid.resizable > .agp { min-width: 0; }
@@ -542,7 +551,7 @@
 body.chat-split-resizing { cursor: col-resize; user-select: none; }
 body.chat-split-resizing * { cursor: col-resize !important; }
 
-/* Agent 杈撳叆鍖猴細鍗充娇灏氭湭杩炴帴涔熷厑璁哥紪杈戣崏绋匡紝鍙檺鍒跺彂閫併€?*/
+/* Agent 输入区：即使尚未连接也允许编辑草稿，只限制发送。 */
 .agc { flex: 0 0 auto; position: relative; z-index: 2; }
 .agc textarea { pointer-events: auto; cursor: text; }
 .agc textarea:disabled { cursor: not-allowed; opacity: .65; }
@@ -553,8 +562,10 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   .chat-split-resizer { display: none; }
   .chat-split-grid.resizable > .agp { height: auto; max-height: none; }
 }
-/* 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-   Agent 绠＄悊椤碉紙鍙傝€冪晫闈㈤噸鏋勭増锛?   .ags2-* 鍙湪鏈湴 Agent 椤典娇鐢紱鏃х殑 .ags-* 淇濈暀缁欓殣钘忕殑閰嶅鍗°€?   鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ────────────────────────────────────────────────────────────
+   Agent 管理页（参考界面重构版）。
+   .ags2-* 只在本「本地 Agent」页使用；旧的 .ags-* 保留给隐藏的配对卡。
+   ──────────────────────────────────────────────────────────── */
 .ags2 {
   display: flex;
   flex-direction: column;
@@ -562,7 +573,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   width: 100%;
 }
 
-/* 鏍囬琛?*/
+/* 标题行 */
 .ags2-title {
   display: flex;
   align-items: flex-end;
@@ -601,7 +612,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   gap: 8px;
 }
 
-/* 缁熻 */
+/* 统计 */
 .ags2-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -632,7 +643,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-stat-value.ok { color: var(--accent-dim); }
 .ags2-stat-value.warn { color: var(--st-pending); }
 
-/* 涓绘爡鏍?*/
+/* 主栅格 */
 .ags2-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(290px, 1fr);
@@ -645,7 +656,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   gap: 16px;
 }
 
-/* 鍗＄墖 */
+/* 卡片 */
 .ags2-card {
   display: flex;
   flex-direction: column;
@@ -680,7 +691,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-muted.small { font-size: 11.5px; }
 .ags2-sep { height: 1px; background: var(--bd-1); margin: 2px 0; }
 
-/* Agent 鍒楄〃 */
+/* Agent 列表 */
 .ags2-list-card { padding: 0; overflow: hidden; }
 .ags2-list-card > .ags2-card-head {
   padding: 18px 20px 14px;
@@ -849,7 +860,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   border-color: var(--accent);
 }
 
-/* 杩炴帴琛ㄥ崟 */
+/* 连接表单 */
 .ags2-connect { gap: 14px; }
 .ags2-form {
   display: grid;
@@ -895,7 +906,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-note.err { color: var(--st-failed); }
 .ags2-note.warn { color: var(--st-pending); }
 
-/* 璇︽儏鎶藉眽 */
+/* 详情抽屉 */
 .ags2-shade {
   position: fixed;
   inset: 0;
