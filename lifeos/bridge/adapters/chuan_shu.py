@@ -48,6 +48,10 @@ from lifeos.bridge.adapters.base import AgentAdapter
 # 不接的话症状是「挂到超时」而不是「参数错了」——差一个数量级的排查时间。
 CUO_CHENG = 8 * 1024
 
+# 每次向 stdout 管道要的字节数。单行多长都行——不够就多读几次，
+# 直到遇见换行符为止。
+DU_DUAN = 64 * 1024
+
 
 def _qu(a1: Any, a2: str, a3: Any = None) -> Any:
     """取一个字段，dict 与对象都支持。跟 claude_code._qu 同义，两处各留一份。
@@ -116,6 +120,9 @@ class ZiChengAdapter(AgentAdapter):
         self.zhu_zi = 0
         self.jie_da: dict[str, Any] = {}    # requestId -> 回写目标
         self.cuo_wei = ""                   # stderr 最近内容（错误时带进 result）
+        #: 读循环失败的原因。非空 = 本回合的 stdout 已不可用。
+        #: `fasong()` 靠它把「读不出东西」报成失败，而不是当成跑完了。
+        self._du_cuo = ""
         self._ting_du: asyncio.Task | None = None        # 读 stdout 的后台任务
         self._cuo_wei_ting_du: asyncio.Task | None = None  # 读 stderr 的后台任务
 
@@ -210,6 +217,7 @@ class ZiChengAdapter(AgentAdapter):
         """
         if self.guan_le:
             raise RuntimeError("会话已关闭")
+        self._du_cuo = ""
         await self._fa_chu_ming_ling(a1)
         fu = self.loop.create_future()
         # **key 用递增序号，不用指令原文。** 理由不是「原文会挂死」——
@@ -230,6 +238,11 @@ class ZiChengAdapter(AgentAdapter):
             # 用局部 `men` 而不是 `self._xu_hao`：后者可能已被下一次
             # `fasong()` 推进，pop 掉别人的 Future。
             self._jie_shu.pop(men, None)
+        # **读循环死了就必须报失败。** 只唤醒 Future 的话，`paichu` 会把这
+        # 一回合算成成功（它只认「fasong 有没有抛」），用户看到 error 帧、
+        # 会话却标成 ended。
+        if self._du_cuo:
+            raise RuntimeError(f"读取 Agent 输出失败：{self._du_cuo}")
 
     async def zhong_duan(self) -> None:
         """中断当前回合。一次性进程直接杀；常驻进程由子类覆写。"""
@@ -319,34 +332,67 @@ class ZiChengAdapter(AgentAdapter):
         return {}
 
     async def _du_zhan(self) -> None:
-        """读 stdout 的后台循环。每读到非空行就交给 `fan_yi`。
+        """读 stdout 的后台循环。按字节块自己切行，每读到非空行就交给 `fan_yi`。
+
+        **不能用 `readline()`。** `StreamReader.readline()` 遇到超过流 limit
+        （asyncio 默认 64 KiB）的单行会抛
+        `ValueError: Separator is found, but chunk is longer than limit`。
+        2026-10-27 真机症状：几轮对话后报 `stdout_read_failed`，此后这条管道
+        再没人读，子进程写满管道就阻塞，回合边界永远收不到，最后被 900 秒
+        停滞看门狗收走——表现为「长任务中途异常终止、输出截断」。
+        触发它只需要一个大的 `tool_result` 或一条长消息。
+
+        **单行不设上限。** `read(n)` 本来就没有单行限制，切行自己做，
+        于是多长的行都能完整读进来——输出一个字都不许丢。
+        缓冲的内存量由 Agent 实际写出的内容决定；对面真吐出一条无限长的行，
+        那是那个 CLI 坏了，不是这里该替它截断的理由。
 
         **这里不做超时判断**——超时是会话层的事（`HuiHua` 的三层看门狗），
         在这里加超时会把「Agent 正在思考」误判成「Agent 卡死」。
         """
         if self.jin is None or self.jin.stdout is None:
             return
+        liu = self.jin.stdout
+        huan = b""
         try:
             while True:
-                xing = await self.jin.stdout.readline()
-                if not xing:
+                kuai = await liu.read(DU_DUAN)
+                if not kuai:
                     break
-                wen = xing.decode("utf-8", errors="replace").strip()
-                if not wen:
-                    continue
-                try:
-                    self.fan_yi(wen)
-                except Exception as e:  # noqa: BLE001
-                    self._fa("error", {"code": "translate_failed",
-                                      "message": f"{type(e).__name__}: {e}",
-                                      "recoverable": True})
+                huan += kuai
+                while True:
+                    i = huan.find(b"\n")
+                    if i < 0:
+                        break
+                    xing, huan = huan[:i], huan[i + 1:]
+                    self._chu_li_xing(xing)
+            # EOF 时最后一行可能没有换行符：`readline()` 原本会把它交出来。
+            if huan:
+                self._chu_li_xing(huan)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
+            self._du_cuo = f"{type(e).__name__}: {e}"
             self._fa("error", {"code": "stdout_read_failed",
-                              "message": f"{type(e).__name__}: {e}", "recoverable": False})
+                              "message": self._du_cuo, "recoverable": False})
+            # **必须唤醒挂着的回合。** 读循环已经死了，回合边界再也读不到；
+            # 只发 error 帧的话 `fasong()` 会空等到 900 秒停滞看门狗，
+            # 症状是「Agent 无响应」而不是「读输出失败」。
+            self._jie_shu_kao_ben(None)
         finally:
             await self._fan_cheng_kao_ben()
+
+    def _chu_li_xing(self, a1: bytes) -> None:
+        """一行字节 → `fan_yi`。坏行只影响这一行，不拖垮整个读循环。"""
+        wen = a1.decode("utf-8", errors="replace").strip()
+        if not wen:
+            return
+        try:
+            self.fan_yi(wen)
+        except Exception as e:  # noqa: BLE001
+            self._fa("error", {"code": "translate_failed",
+                              "message": f"{type(e).__name__}: {e}",
+                              "recoverable": True})
 
     async def _shou_cuo_wei(self) -> None:
         """读 stderr，攒进 `cuo_wei`。不读的话管道会满，进程会卡死。"""

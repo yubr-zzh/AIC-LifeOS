@@ -245,7 +245,9 @@ class FangXiangTests(unittest.TestCase):
 
     def setUp(self):
         from lifeos.agent.context import AgentContextStore
-        self.c = AgentContextStore(3, 50)
+        # 条数上限用 3；总量预算留默认值——这一组用例守的是「条数」，
+        # 把预算也压到 50 字的话，先触发的是预算而不是条数。
+        self.c = AgentContextStore(3)
 
     def test_chao_liang_diu_zui_jiu_de(self):
         for i in range(6):
@@ -254,9 +256,28 @@ class FangXiangTests(unittest.TestCase):
         self.assertEqual(len(shang), 3)
         self.assertIn("第5条", shang[-1]["text"])
 
-    def test_zhi_dao_chang_du(self):
+    def test_zhi_dao_chang_du_bu_zai_jie_duan(self):
+        """单条不再截断：主服务的大模型要读到 Agent 的完整回复。
+
+        旧实现按 50 字切，长回答的结论部分永远到不了模型。
+        现在整段进上下文，由总量预算兜底。
+        """
         wen = self.c.tian_jia("s", "agent.result", {"resultText": "x" * 500})
-        self.assertLessEqual(len(wen), 80)  # 前缀 20 字 + 截断后的正文
+        self.assertIn("x" * 500, wen)
+
+    def test_zong_liang_yu_suan_zheng_tiao_diu_zui_jiu(self):
+        """超总量时**整条**丢最旧的，最新一条永远留着——不切半句。
+
+        预算 50 字、每条 40 字：两条加起来超了，丢的是最早那条，
+        留下的那条必须完整。条数上限放到 10，确保先触发的是预算。
+        """
+        from lifeos.agent.context import AgentContextStore
+        c = AgentContextStore(10, 50)
+        c.tian_jia("s", "agent.result", {"resultText": "a" * 40})
+        c.tian_jia("s", "agent.result", {"resultText": "b" * 40})
+        shang = c.du("s")
+        self.assertEqual(len(shang), 1, f"预算 50 字，两条 40 字必须丢一条：{shang}")
+        self.assertIn("b" * 40, shang[0]["text"])
 
     def test_shi_bai_yu_jie_shu_de_wen_an(self):
         self.assertIn("中断", self.c.tian_jia("s", "agent.failed", {"reason": "用户中断"}))

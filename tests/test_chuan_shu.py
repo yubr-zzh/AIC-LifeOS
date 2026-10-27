@@ -19,6 +19,7 @@ import asyncio
 import json
 import sys
 import unittest
+from unittest import mock
 
 from lifeos.bridge.adapters.chuan_shu import ZiChengAdapter
 
@@ -37,6 +38,11 @@ for wen in sys.stdin:
         sys.stderr.write('can shu cuo wu: mo shi xuan xiang\\n')
         sys.stderr.flush()
         sys.exit(2)
+    if wen == 'big':
+        # 单行 200 KB：远超 asyncio StreamReader 的默认单行上限（64 KiB）
+        print(json.dumps({'kind': 'echo', 'text': 'x' * 200000}), flush=True)
+        print(json.dumps({'kind': 'result', 'resultText': 'done:big'}), flush=True)
+        continue
     print(json.dumps({'kind': 'echo', 'text': wen}), flush=True)
     print(json.dumps({'kind': 'result', 'resultText': 'done:' + wen}), flush=True)
 """
@@ -71,6 +77,18 @@ class JiaShi(ZiChengAdapter):
     async def _fa_chu_ming_ling(self, a1: str) -> None:
         self.jin.stdin.write((a1 + "\n").encode())
         await self.jin.stdin.drain()
+
+
+class DuShiBai(JiaShi):
+    """读循环在本回合内死掉。`fasong()` 必须抛，而不是当成跑完了。"""
+
+    async def _fa_chu_ming_ling(self, a1: str) -> None:
+        async def sha():
+            await asyncio.sleep(0)
+            self._du_cuo = "OSError: 管道坏了"
+            self._jie_shu_kao_ben(None)
+
+        asyncio.ensure_future(sha())
 
 
 class ChuanShuTests(unittest.TestCase):
@@ -181,6 +199,78 @@ class ChuanShuTests(unittest.TestCase):
                     await asyncio.wait_for(a.fasong("zai pao yi bian"), SUO_DING)
                     self.assertEqual(a._jie_shu, {},
                                      f"回合 Future 有残留：{list(a._jie_shu)}")
+            finally:
+                await a.guan_bi()
+
+        asyncio.run(zhen())
+
+    def test_chao_64k_de_dan_xing_yao_wan_zheng_du_chu_lai(self):
+        """单行超过 64 KiB 必须逐字节完整读进来。
+
+        回归 2026-10-27 的真机 bug：`readline()` 遇到超过 StreamReader limit
+        （asyncio 默认 64 KiB）的行会抛
+        `ValueError: Separator is found, but chunk is longer than limit`。
+        读循环一死，整条 stdout 再没人读，子进程写满管道就阻塞，回合挂到
+        900 秒停滞看门狗——用户看到的是「输出截断 + 长任务异常终止」。
+        """
+
+        async def zhen():
+            a = self._kaishi(JiaShi())
+            await a.kaishi({"cwd": "."})
+            try:
+                await asyncio.wait_for(a.fasong("big"), SUO_DING)
+            finally:
+                await a.guan_bi()
+            wen = [p["text"] for k, p in a.shuju if k == "text"]
+            self.assertTrue(wen, f"大行没被读出来：{a.shuju}")
+            self.assertEqual(len(wen[-1]), 200000, "单行必须一字不丢")
+            self.assertFalse(
+                [p for k, p in a.shuju
+                 if k == "error" and p.get("code") == "stdout_read_failed"],
+                f"不该有读失败：{a.shuju}")
+
+        asyncio.run(zhen())
+
+    def test_du_xun_huan_shi_bai_yao_huan_xing_hui_he(self):
+        """读 stdout 失败：必须唤醒挂着的回合，并报 stdout_read_failed。
+
+        只发 error 帧不唤醒的话，`fasong()` 空等到 900 秒看门狗，
+        症状是「Agent 无响应」而不是「读输出失败」。
+        """
+
+        class DuanLiu:
+            async def read(self, a1):
+                raise OSError("pipe broken")
+
+        async def zhen():
+            a = self._kaishi(JiaShi())
+            a.jin = mock.Mock()
+            a.jin.stdout = DuanLiu()
+            a.jin.wait = mock.AsyncMock(return_value=1)
+            a.jin.returncode = 1
+            fu = asyncio.get_event_loop().create_future()
+            a._jie_shu[1] = fu
+            await asyncio.wait_for(a._du_zhan(), SUO_DING)
+            self.assertTrue(fu.done(), "读循环死了必须唤醒挂着的回合")
+            self.assertIn("stdout_read_failed",
+                          [p.get("code") for k, p in a.shuju if k == "error"])
+
+        asyncio.run(zhen())
+
+    def test_du_shi_bai_de_hui_he_fasong_yao_pao_cuo(self):
+        """读输出失败不能被当成「这一轮跑完了」。
+
+        `paichu` 只认 `fasong` 有没有抛异常；只唤醒不抛的话，用户看到
+        error 帧、会话却标成 ended。
+        """
+
+        async def zhen():
+            a = self._kaishi(DuShiBai())
+            await a.kaishi({"cwd": "."})
+            try:
+                with self.assertRaises(RuntimeError) as e:
+                    await asyncio.wait_for(a.fasong("ni hao"), SUO_DING)
+                self.assertIn("读取 Agent 输出失败", str(e.exception))
             finally:
                 await a.guan_bi()
 

@@ -23,9 +23,15 @@ JIJIAN = {
     "snapshot", "permission", "permission_resolved", "question", "question_resolved",
     "state", "result", "session_added", "session_removed", "device_status",
     "delegation_update", "agent_status", "error",
+    # **message 必須在這裡。** 它是對話正文的真相，而 snapshot 明確不帶
+    # messages（見 `zha_pian()` 的說明）。丟一條 message 就等於永久丟一段
+    # 回答——前端只剩殘缺的 chunk 累加值，症狀是「Agent 的長輸出被截斷」。
+    # 隊列滿時寧可斷開該訂閱者（它會重連 + 補發），也不靜默丟正文。
+    "message",
 }
-# 丟了也能靠重連的 snapshot / transcript 補回來的幀
-KEI = {"chunk", "message"}
+# 丟了也能靠重連的 snapshot / transcript 補回來的幀。
+# **只有 chunk**：它是打字機效果，不是真相（6.3）。
+KEI = {"chunk"}
 
 CHONG_FANG = 2000  # 重放緩衝深度
 DUI_LI = 512      # 每訂閱者隊列容量

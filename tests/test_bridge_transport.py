@@ -167,6 +167,22 @@ class EventBusTests(unittest.TestCase):
         d.ru({"type": "permission", "streamSeq": 1})  # 关键帧进不去
         self.assertTrue(d.chao)  # 标记写线程断开，让它走重连补齐
 
+    def test_message_zhen_ye_shi_guan_jian_zhen(self):
+        """**message 不能丢。** 它是对话正文的真相，而 snapshot 不带 messages。
+
+        队列满时丢一条 message，前端就永久少一段回答——只剩残缺的 chunk
+        累加值，症状是「Agent 的长输出被截断」。所以它必须和审批帧同级：
+        进不了队列就让写线程断开重连，靠补发补齐。
+        """
+        from lifeos.bridge.events import DingYue
+
+        d = DingYue("d1")
+        d.que = __import__("queue").Queue(maxsize=1)
+        d.ru({"type": "chunk", "streamSeq": 0})
+        d.ru({"type": "message", "streamSeq": 1,
+              "message": {"messageId": "m-1", "seq": 1}})
+        self.assertTrue(d.chao, "message 进不了队列时必须让写线程走重连补齐")
+
     def test_bu_di_xian_shao_zhong_bu_lian(self):
         for i in range(10):
             self.z.fa("state", "s-1", state="thinking", i=i)

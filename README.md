@@ -54,7 +54,7 @@ The horizon is plain: let the machine come to know you over the days. Chats sett
 
 **Assign work.** The Agent page lists every local agent as a card, with status, version, and a connect checklist. Pick one and point it at a folder. It reads files, edits code, and runs commands there, and shows you each action first. A detail drawer shows Bridge health, and you can re-detect agents at any time.
 
-**Talk.** Agent replies appear as ordinary message bubbles, with streaming text and expandable execution details. Earlier chats and agent results settle into memory, so your next question carries the context on its own. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
+**Talk.** Agent replies appear as message bubbles that show the answer text only — reasoning, tool calls, and intermediate results stay in the background. Text streams in; an over-long reply is split into several messages with nothing lost. Question and permission boxes still pop up when the agent needs a choice or an approval, and it continues once you answer. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
 
 **Today.** Check off today's plan item by item. 20 reminders arrive on schedule, and agent results and to-dos land in the inbox. Collapse the sidebars; drag to widen the chat pane.
 

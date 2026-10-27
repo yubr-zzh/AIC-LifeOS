@@ -40,14 +40,36 @@ class XiangShiTests(unittest.TestCase):
     def _lei(self, a1):
         return [m.kind for m in self.h._xiang["s-1"]]
 
-    def test_result_cheng_wei_xiao_xi(self):
+    def test_result_bu_shang_ping(self):
+        """`result` 帧不上屏：界面只收正文、选择框、权限框。
+
+        结果仍然要回决策回路（`lu_dao.jie_guo`），但那条路不走消息存储。
+        """
         fa = self.fu._hui_zhuan("s-1")
         fa("result", {"subtype": "success", "resultText": "算完了", "isError": False,
                       "durationMs": 10, "numTurns": 1, "totalCostUsd": 0.01})
-        self.assertIn("result", self._lei("s-1"))
-        xiao = [m for m in self.h._xiang["s-1"] if m.kind == "result"][0]
-        self.assertEqual(xiao.text, "算完了")
-        self.assertEqual(xiao.role, "system")
+        self.assertNotIn("result", self._lei("s-1"))
+
+    def test_zhi_you_zheng_wen_shang_ping(self):
+        """thinking / tool_use / tool_result 一律不上屏。"""
+        fa = self.fu._hui_zhuan("s-1")
+        fa("thinking", {"text": "想一下", "messageId": "m1"})
+        fa("tool_use", {"toolUseId": "t1", "toolName": "Bash", "toolInput": {"command": "ls"}})
+        fa("tool_result", {"toolUseId": "t1", "toolName": "Bash", "text": "a.txt"})
+        self.assertEqual(self._lei("s-1"), [], "只有正文该上屏")
+        fa("text", {"text": "答案", "messageId": "m1"})
+        self.assertEqual(self._lei("s-1"), ["text"])
+
+    def test_chang_zheng_wen_fen_pi_er_bu_diu_zi(self):
+        """超过 FEN_PI 的正文分批上屏，**拼起来必须等于原文**。"""
+        from lifeos.bridge.http import FEN_PI
+
+        yuan = "第一段" * (FEN_PI // 3 + 500) + "\n" + "结尾"
+        fa = self.fu._hui_zhuan("s-1")
+        fa("text", {"text": yuan, "messageId": "m-long"})
+        lie = [m.text for m in self.h._xiang["s-1"] if m.kind == "text"]
+        self.assertGreater(len(lie), 1, "超长正文必须被切成多条")
+        self.assertEqual("".join(lie), yuan, "分批不能丢字")
 
     def test_jue_ding_cheng_wei_xiao_xi(self):
         import asyncio
