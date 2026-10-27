@@ -87,6 +87,7 @@ export async function sendChat(
   memoryScope?: MemoryScope,
   sessionId?: string,
   routingPolicy: AgentRoutingPolicy = "auto",
+  agentSessionId?: string,
 ): Promise<ChatResponse> {
   const base = getBase(opts);
   const res = await f(opts)(`${base}/chat`, {
@@ -96,6 +97,7 @@ export async function sendChat(
       message,
       ...(memoryScope ? { memory_scope: memoryScope } : {}),
       ...(sessionId ? { session_id: sessionId } : {}),
+      ...(agentSessionId ? { agent_session_id: agentSessionId } : {}),
       routing_policy: routingPolicy,
     }),
   });

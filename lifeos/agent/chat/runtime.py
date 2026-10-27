@@ -2,7 +2,7 @@
 
 import asyncio
 
-from lifeos.agent.context import AgentContextStore
+from lifeos.agent.context import AgentContextStore, ConversationContextStore
 from lifeos.agent.planner.planner import Planner
 from lifeos.memory.schema import normalize_scope
 from lifeos.memory.query_context import SessionQueryContext
@@ -33,11 +33,14 @@ class ChatRuntime:
         # （7.7.1 的关键约束：主服务不能自己下发下一条指令）。
         self.agent_context = agent_context or AgentContextStore()
         self.query_context = SessionQueryContext()
+        self.conversation_context = ConversationContextStore()
 
     async def handle_message(self, user_input: str, session_id: str | None = None,
-                             memory_scope: dict | None = None, routing_policy: str = "auto"):
+                             memory_scope: dict | None = None, routing_policy: str = "auto",
+                             agent_session_id: str | None = None):
         trace_id = self.trace.start(user_input)
         resolved_scope = normalize_scope(memory_scope) if memory_scope is not None else None
+        history = self.conversation_context.read(session_id, resolved_scope)
         retrieval_query = self.query_context.add_and_build(session_id, user_input, resolved_scope)
         historical_as_of = resolve_as_of(retrieval_query)
         try:
@@ -106,9 +109,10 @@ class ChatRuntime:
         # 只有进入执行路径才生成可交给本机 Agent 的委派草案。
         plan = None
         if planning["decision"] == "agent":
-            plan = legacy_plan or await self.planner.cehuao(
-                user_input, trace_id, self.delegation_enabled
-            )
+            build_plan = getattr(self.planner, "create_delegation_plan", None)
+            plan = legacy_plan or (await build_plan(user_input, trace_id, self.delegation_enabled)
+                                   if callable(build_plan) else await self.planner.cehuao(
+                                       user_input, trace_id, self.delegation_enabled))
         if plan is not None:
             self.trace.event(trace_id, "delegation.planned", {"planId": plan["planId"]})
 
@@ -151,8 +155,10 @@ class ChatRuntime:
                 user_input=user_input,
                 memory=chunks,
                 trace_id=trace_id,
-                context=self.agent_context.du(session_id),
+                context=self.agent_context.du(agent_session_id or session_id),
             )
+            if history:
+                answer_args["history"] = history
             answer = getattr(self.executor, "answer_chat_turn", None)
             if callable(answer):
                 result = await answer(**answer_args)
@@ -164,9 +170,11 @@ class ChatRuntime:
                 user_input=user_input,
                 memory=chunks,
                 trace_id=trace_id,
-                context=self.agent_context.du(session_id),
+                context=self.agent_context.du(agent_session_id or session_id),
                 plan=plan,
             )
+            if history:
+                executor_args["history"] = history
             if project_context:
                 executor_args["project_context"] = project_context
             result = await self.executor.execute_chat_turn(**executor_args)
@@ -190,6 +198,7 @@ class ChatRuntime:
         self.trace.event(trace_id, "conversation.completed", {
             "decision": planning["decision"], "result": result,
         })
+        self.conversation_context.append(session_id, resolved_scope, user_input, result["response"])
         # 保持纯字典返回，不引入新返回类型——与现有风格一致。
         out = {
             "trace_id": trace_id,

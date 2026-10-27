@@ -183,7 +183,8 @@ export function ChatPanel({ store, agent, api }: Props) {
       : scopeKind === "scenario"
         ? { kind: "scenario", scenario_type: scenarioType }
         : { kind: "global" };
-    void sendMessage(t, memoryScope, agent?.active?.sessionId, routingPolicy, sentAttachments);
+    void sendMessage(t, memoryScope, activeId, routingPolicy, sentAttachments,
+      agent?.active?.sessionId);
   };
 
   const startNew = () => {

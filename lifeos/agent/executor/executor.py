@@ -24,7 +24,7 @@ class Executor:
         return similar[0]
 
     async def execute_chat_turn(self, user_input, memory, trace_id=None, context=None, plan=None,
-                                project_context=None, allow_tools=True):
+                                project_context=None, allow_tools=True, history=None):
         skill = await self._match_skill(user_input)
         if skill and self.trace and trace_id:
             self.trace.event(
@@ -83,17 +83,9 @@ class Executor:
                 "由用户勾选后逐条下发给本地 Agent 执行。请在回复里用一句话说明这份计划做了什么，"
                 "并提示用户可以修改后发送；不要声称任务已经完成。"
             )
-        messages = [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": user_input,
-                "memory": memory,
-            },
-        ]
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history or [])
+        messages.append({"role": "user", "content": user_input, "memory": memory})
         try:
             completion = await self.llm.complete(messages)
         except Exception:
@@ -144,7 +136,7 @@ class Executor:
         }
 
     async def answer_chat_turn(self, user_input, memory, trace_id=None, context=None,
-                              project_context=None):
+                              project_context=None, history=None):
         """Generate a normal conversational answer while keeping tools disabled."""
         return await self.execute_chat_turn(
             user_input=user_input,
@@ -152,6 +144,7 @@ class Executor:
             trace_id=trace_id,
             context=context,
             project_context=project_context,
+            history=history,
             allow_tools=False,
         )
 

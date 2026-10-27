@@ -102,6 +102,33 @@ class ChatRuntimeMemoryContextTests(unittest.TestCase):
         self.assertNotIn("周会纪要", call["query"])
         self.assertIsNone(call["as_of"])
 
+    def test_previous_exchange_reaches_model_only_in_same_session(self):
+        from lifeos.agent.executor.executor import Executor
+
+        class RecordingLLM:
+            def __init__(self):
+                self.calls = []
+
+            async def complete(self, messages, tools=None):
+                self.calls.append(messages)
+                return {"content": "回复一", "tool_calls": []}
+
+        llm = RecordingLLM()
+        runtime, _ = self.make_runtime()
+        runtime.executor = Executor(llm)
+
+        async def run_turns():
+            await runtime.handle_message("我的目标是完成论文", session_id="a")
+            await runtime.handle_message("下一步呢？", session_id="a")
+            await runtime.handle_message("另一个会话", session_id="b")
+
+        asyncio.run(run_turns())
+        self.assertEqual(
+            [(item["role"], item["content"]) for item in llm.calls[1][1:]],
+            [("user", "我的目标是完成论文"), ("assistant", "回复一"), ("user", "下一步呢？")],
+        )
+        self.assertEqual(len(llm.calls[2]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

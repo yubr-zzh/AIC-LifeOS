@@ -357,6 +357,22 @@ class Planner:
         ]
         return hui
 
+    async def create_delegation_plan(self, user_input: str, trace_id: str,
+                                     enabled: bool = True) -> dict | None:
+        """Build the card after routing has already decided this is an Agent turn."""
+        if not enabled or not (user_input or "").strip():
+            return None
+        text = user_input.strip()
+        summary = text if len(text) <= 200 else text[:197] + "…"
+        instruction = text if len(text) <= 4000 else text[:3997] + "…"
+        plan = ci_plan(trace_id, summary, XIANG)
+        plan["items"] = [{
+            "itemId": "i-1", "order": 1, "title": summary[:40],
+            "instruction": instruction, "dependsOn": [], "editable": True,
+            "enabled": True, "status": "pending",
+        }]
+        return plan
+
     @staticmethod
     def _zhong(a1: str) -> bool:
         if _LUJING.search(a1):

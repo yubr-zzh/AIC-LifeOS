@@ -78,3 +78,43 @@ class AgentContextStore:
         if a1 == "plan.updated":
             return f"委派计划 {a2.get('planId', '')} 状态变为 {a2.get('status', '')}。"
         return ""
+
+
+class ConversationContextStore:
+    """Bounded model-visible exchanges, isolated by session and memory scope."""
+
+    def __init__(self, max_messages: int = 12, max_chars: int = 8000) -> None:
+        self.lock = threading.RLock()
+        self.sessions: dict[tuple, list[dict]] = {}
+        self.max_messages = max_messages
+        self.max_chars = max_chars
+
+    @staticmethod
+    def _key(session_id: str, scope: dict | None) -> tuple:
+        return (session_id, *(scope.get(field) if scope else None for field in
+                              ("kind", "scenario_type", "project_id", "user_id")))
+
+    def read(self, session_id: str | None, scope: dict | None = None) -> list[dict]:
+        if not session_id:
+            return []
+        key = self._key(session_id, scope)
+        with self.lock:
+            # A scope change must not expose prior conversation through the model prompt.
+            for old_key in list(self.sessions):
+                if old_key[0] == session_id and old_key != key:
+                    del self.sessions[old_key]
+            return [dict(message) for message in self.sessions.get(key, [])]
+
+    def append(self, session_id: str | None, scope: dict | None,
+               user_input: str, response: str) -> None:
+        if not session_id:
+            return
+        key = self._key(session_id, scope)
+        with self.lock:
+            messages = self.sessions.setdefault(key, [])
+            messages.extend((
+                {"role": "user", "content": user_input[-2000:]},
+                {"role": "assistant", "content": response[-2000:]},
+            ))
+            while len(messages) > self.max_messages or sum(len(m["content"]) for m in messages) > self.max_chars:
+                del messages[:2]
