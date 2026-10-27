@@ -35,11 +35,18 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   const { state, dispatch, active, streaming, todo } = store;
   const box = useRef<HTMLDivElement>(null);
   const [genzi, setGenzi] = useState(true);
-  const [memoryOpen, setMemoryOpen] = useState(true);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
-  useEffect(() => { setMemoryOpen(true); }, [active?.sessionId]);
+  useEffect(() => { setMemoryOpen(false); }, [active?.sessionId]);
 
   const lie = active ? state.messages[active.sessionId] ?? [] : [];
+
+  // 新会话只靠 session_added 进入前端时不会再有 snapshot。打开面板及每次
+  // 状态推进都补拉一次 transcript，避免“执行证据有内容、对话正文为空”。
+  useEffect(() => {
+    if (active && !api.preview) void store.loadHistory(active.sessionId);
+  }, [active?.sessionId, active?.state, api.preview, store.loadHistory]);
+
 
   // 自动滚动。依赖是「正在流式输出的那条消息 + 它的长度」，
   // 不能用 messages.length —— chunk 帧不新增消息，照抄 ChatPanel 的依赖会永不触发。
@@ -62,6 +69,11 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   const wen = Object.values(state.questions).filter((q) => !state.questionClosed[q.questionId]);
   const kai = state.conn === "open";
   const working = Boolean(active && (active.state === "thinking" || active.state === "working" || active.state === "backoff"));
+  const visibleLie = conversationMessages(lie);
+  const lastAssistantText = [...visibleLie].reverse()
+    .find((m) => m.role === "assistant" && m.kind === "text")?.text.trim() ?? "";
+  const showStreaming = Boolean(streaming && streaming.sessionId === active?.sessionId
+    && streaming.text.trim() !== lastAssistantText);
 
   return (
     <section className="agp">
@@ -89,8 +101,6 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
 
       <StatusBar session={active} store={store} />
       <DeviceBanner store={store} />
-      {active && memoryOpen ? <AgentMemoryCapture sessionId={active.sessionId}
-        onCandidateCreated={onCandidateCreated} onClose={() => setMemoryOpen(false)} /> : null}
 
       {state.notices.length > 0 ? (
         <div className="agp-notices">
@@ -111,19 +121,15 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           <p className="agp-hint">还没有内容。从左侧的委派计划里勾选指令发过来，或直接在下面输入。</p>
         ) : null}
 
-        {lie.map((m) => (
+        {visibleLie.map((m) => (
           // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
           // 的多个内容块共用它，拿它当 key React 会报 duplicate key，
           // 并且重渲染时会错认组件身份。
           <Bubble key={`${m.sessionId}:${m.seq}`} m={m} />
         ))}
 
-        {streaming && streaming.sessionId === active?.sessionId ? (
-          <div className={`agb agb-${streaming.kind}`}>
-            <div className="agb-role mono">{streaming.kind === "thinking" ? "thinking" : "assistant"}</div>
-            {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
-            <div className="agb-text">{streaming.text}</div>
-          </div>
+        {showStreaming && streaming ? (
+          <StreamingBubble text={streaming.text} kind={streaming.kind} />
         ) : null}
 
         {dai.length > 0 || wen.length > 0 ? (
@@ -166,11 +172,17 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         ) : null}
       </div>
 
+      {active && memoryOpen ? <AgentMemoryCapture sessionId={active.sessionId}
+        onCandidateCreated={onCandidateCreated} onClose={() => setMemoryOpen(false)} /> : null}
+
       <AgentComposer
         canSend={Boolean(kai && active)}
         busy={api.busy}
         canInterrupt={Boolean(active) && !["idle", "ended", "attention", "waiting_input"].includes(active!.state)}
-        onSend={(t) => active && void api.act.send(active.sessionId, { text: t }).catch(() => undefined)}
+        onSend={async (t) => {
+          if (!active) throw new Error("还没有可用的 Agent 会话");
+          await api.act.send(active.sessionId, { text: t });
+        }}
         onInterrupt={() => active && void api.act.interrupt(active.sessionId)}
       />
     </section>
@@ -246,68 +258,98 @@ function Disconnected({ conn, msg, preview }: { conn: string; msg: string | null
   );
 }
 
-export function Bubble({ m }: { m: AgentMessage }) {
-  if (m.kind === "tool_use") {
-    return (
-      <div className="agb agb-tool">
-        <div className="agb-role mono">
-          tool_use · {m.toolName}
+function timeText(createdAt: number): string {
+  if (!createdAt) return "";
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.valueOf())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** 结果帧经常与最后一条 assistant 文本完全相同；只保留一条，避免正文重复。 */
+export function conversationMessages(messages: AgentMessage[]): AgentMessage[] {
+  const assistantTexts = new Set<string>();
+  return messages.filter((m) => {
+    const text = m.text.trim();
+    if (m.role === "assistant" && m.kind === "text" && text) assistantTexts.add(text);
+    if (m.kind === "result" && text && assistantTexts.has(text)) return false;
+    return true;
+  });
+}
+
+function MessageFooter({ text, createdAt }: { text: string; createdAt: number }) {
+  return (
+    <footer className="agent-exchange-footer">
+      <time>{timeText(createdAt)}</time>
+      {text ? <CopyTextButton text={text} /> : null}
+    </footer>
+  );
+}
+
+export function StreamingBubble({ text, kind }: { text: string; kind: "text" | "thinking" | "tool_use" }) {
+  return (
+    <article className="agent-exchange assistant streaming" aria-live="polite">
+      <div className="agent-exchange-avatar" aria-hidden="true">A</div>
+      <div className="agent-exchange-main">
+        <div className="agent-exchange-meta">
+          <strong>Agent</strong>
+          <span>{kind === "thinking" ? "正在思考" : "正在回复"}</span>
+          <span className="agent-typing-dot" aria-hidden="true" />
         </div>
-        <CopyTextButton text={toolInputText(m.toolInput)} className="agb-copy" />
-        <pre className="agb-io mono">{toolInputText(m.toolInput)}</pre>
+        <div className="agent-exchange-bubble agent-streaming-bubble">
+          <div className="agent-exchange-text">{text || "…"}</div>
+        </div>
       </div>
-    );
-  }
-  if (m.kind === "tool_result") {
+    </article>
+  );
+}
+
+export function Bubble({ m }: { m: AgentMessage }) {
+  if (m.kind === "tool_use" || m.kind === "tool_result" || m.kind === "thinking" || m.kind === "permission_resolved") {
+    const title = m.kind === "tool_use"
+      ? `调用工具 · ${m.toolName ?? "工具"}`
+      : m.kind === "tool_result"
+        ? `工具返回${m.isError ? " · 失败" : ""}`
+        : m.kind === "thinking"
+          ? "思考过程"
+          : "权限决定";
+    const text = m.kind === "tool_use" ? toolInputText(m.toolInput) : m.text;
     return (
-      <div className={`agb agb-result ${m.isError ? "bad" : ""}`}>
-        <div className="agb-role mono">tool_result{m.isError ? " · 失败" : ""}</div>
-        <CopyTextButton text={m.text} className="agb-copy" />
-        <pre className="agb-io mono">{m.text}</pre>
-      </div>
+      <details className={`agent-execution-detail ${m.isError ? "bad" : ""}`}>
+        <summary>
+          <span>{title}</span>
+          <span className="mono">{m.kind}</span>
+        </summary>
+        {text ? <CopyTextButton text={text} /> : null}
+        <pre>{text || "无内容"}</pre>
+      </details>
     );
   }
-  if (m.kind === "thinking") {
-    return (
-      <div className="agb agb-thinking">
-        <div className="agb-role mono">thinking</div>
-        <CopyTextButton text={m.text} className="agb-copy" />
-        <div className="agb-text">{m.text}</div>
-      </div>
-    );
-  }
-  if (m.kind === "result") {
-    return (
-      <div className={`agb agb-sys ${m.isError ? "bad" : ""}`}>
-        <div className="agb-role mono">result{m.isError ? " · 失败" : ""}</div>
-        <CopyTextButton text={m.text} className="agb-copy" />
-        <div className="agb-text">{m.text}</div>
-      </div>
-    );
-  }
-  if (m.kind === "permission_resolved") {
-    return (
-      <div className="agb agb-sys">
-        <div className="agb-role mono">permission_resolved</div>
-        <CopyTextButton text={m.text} className="agb-copy" />
-        <div className="agb-text">{m.text}</div>
-      </div>
-    );
-  }
+
   if (m.kind === "error" || m.kind === "rate_limit" || m.kind === "context_reset") {
     return (
-      <div className="agb agb-sys">
-        <div className="agb-role mono">{m.kind}</div>
-        <CopyTextButton text={m.text} className="agb-copy" />
-        <div className="agb-text">{m.text}</div>
+      <div className={`agent-system-note ${m.isError ? "bad" : ""}`} role="status">
+        <strong>Agent 提醒</strong>
+        <p>{m.text}</p>
       </div>
     );
   }
+
+  if (!m.text.trim()) return null;
+  const fromUser = m.role === "user";
+  const label = fromUser ? "你" : m.kind === "result" && m.isError ? "执行失败" : "Agent";
   return (
-    <div className={`agb agb-${m.role}`}>
-      <div className="agb-role mono">{m.role}</div>
-      <CopyTextButton text={m.text} className="agb-copy" />
-      <div className="agb-text">{m.text}</div>
-    </div>
+    <article className={`agent-exchange ${fromUser ? "user" : "assistant"}`}>
+      {!fromUser ? <div className="agent-exchange-avatar" aria-hidden="true">A</div> : null}
+      <div className="agent-exchange-main">
+        <div className="agent-exchange-meta">
+          <strong>{label}</strong>
+          {m.isError ? <span>出错</span> : null}
+        </div>
+        <div className="agent-exchange-bubble">
+          <div className="agent-exchange-text">{m.text}</div>
+          <MessageFooter text={m.text} createdAt={m.createdAt} />
+        </div>
+      </div>
+    </article>
   );
 }

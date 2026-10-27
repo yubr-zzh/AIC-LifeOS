@@ -9,26 +9,33 @@ interface Props {
   busy?: string | null;
   canInterrupt?: boolean;
   placeholder?: string;
-  onSend: (a: string) => void;
+  onSend: (a: string) => Promise<void> | void;
   onInterrupt?: () => void;
 }
 
 export function AgentComposer({ disabled, canSend = true, busy, canInterrupt, placeholder, onSend, onInterrupt }: Props) {
   const [text, setText] = useState("");
+  const [sendError, setSendError] = useState("");
   const sendBlocked = Boolean(disabled || !canSend || busy === "send");
 
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
     if (!t || sendBlocked) return;
-    setText("");
-    onSend(t);
+    setSendError("");
+    try {
+      await onSend(t);
+      // 发送失败时保留原文，用户不用重打；发送成功后再清空。
+      setText((current) => current === text ? "" : current);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 中文输入法选词按 Enter 会误发送——必须判 isComposing。
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !sendBlocked) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   };
 
@@ -36,12 +43,14 @@ export function AgentComposer({ disabled, canSend = true, busy, canInterrupt, pl
     <div className="agc">
       <textarea
         rows={2}
+        aria-label="给 Agent 发送消息"
         value={text}
-        placeholder={disabled ? "当前无法输入" : canSend === false ? "可以先输入内容；连接 Agent 后再发送" : placeholder ?? "给 Agent 发一条指令，Enter 发送"}
-        onChange={(e) => setText(e.target.value)}
+        placeholder={disabled ? "当前无法输入" : canSend === false ? "可以先输入内容；连接 Agent 后再发送" : placeholder ?? "给 Agent 发消息，Enter 发送"}
+        onChange={(e) => { setSendError(""); setText(e.target.value); }}
         onKeyDown={onKey}
         disabled={disabled}
       />
+      {sendError ? <p className="agc-error" role="alert">{sendError}</p> : null}
       <div className="agc-btns">
         {!canSend && !disabled ? <span className="agc-hint">先在「Agent」连接一个会话</span> : null}
         {canInterrupt ? (
@@ -49,7 +58,7 @@ export function AgentComposer({ disabled, canSend = true, busy, canInterrupt, pl
             中断
           </button>
         ) : null}
-        <button className="btn-allow" onClick={submit} disabled={sendBlocked || !text.trim()}>
+        <button className="btn-allow" onClick={() => void submit()} disabled={sendBlocked || !text.trim()}>
           {busy === "send" ? "发送中…" : "发送"}
         </button>
       </div>
