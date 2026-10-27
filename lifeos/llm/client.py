@@ -233,6 +233,12 @@ class LLMClient:
                 continue
             if role not in {"user", "assistant"}:
                 continue
+            # 连续同角色的 user 消息合并成一条：对话历史里允许注入独立的
+            # 上下文消息（如 Agent 执行记录），部分 provider 要求
+            # user/assistant 交替，这里兜底。
+            if converted and converted[-1]["role"] == role:
+                converted[-1]["content"] = converted[-1]["content"] + "\n\n" + content
+                continue
             converted.append({"role": role, "content": content})
 
         payload = {

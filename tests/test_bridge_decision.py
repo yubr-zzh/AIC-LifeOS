@@ -6,7 +6,7 @@ v1.0 方案在这一项上是**完全空白**的——它一边说 Agent 事件�
 
 所以这个测试必须打通整条链：
 Bridge 跑完指令 → 出站 POST → 主服务 `/api/agent-events` → `AgentContextStore`
-→ `/chat` 时进 `execute_chat_turn` 的 system 消息。
+→ `/chat` 时进 `execute_chat_turn` 的对话历史（独立的 user 消息，不进 system 消息）。
 少任何一段，这个测试都会红。
 """
 
@@ -130,9 +130,18 @@ class JueCeHuiLuTests(unittest.TestCase):
         s, d = self._zhu_qiao("/chat", {"message": "刚才那个 Agent 干了什么？",
                                         "session_id": sid})
         self.assertEqual(s, 200)
-        xi = self.llm.kan[-1][0]["content"]
-        self.assertIn("本地 Agent 刚刚的执行记录", xi)
-        self.assertIn("echo: 算一下 7 乘 8", xi)
+        xin_xi = self.llm.kan[-1]
+        # 执行记录进对话历史：独立 user 消息承载，system 消息里不再出现。
+        self.assertNotIn("本地 Agent 刚刚的执行记录", xin_xi[0]["content"])
+        ji_lu = [m for m in xin_xi if m.get("role") == "user"
+                 and "本地 Agent 刚刚的执行记录" in m.get("content", "")]
+        self.assertEqual(len(ji_lu), 1)
+        self.assertIn("echo: 算一下 7 乘 8", ji_lu[0]["content"])
+        # 记录按对话时序放在用户本轮发言之前。
+        self.assertLess(xin_xi.index(ji_lu[0]),
+                        next(i for i, m in enumerate(xin_xi)
+                             if m.get("role") == "user"
+                             and m.get("content") == "刚才那个 Agent 干了什么？"))
         self.assertIn(d["response"], d["response"])  # 结构没变
 
     def test_echo_bridge_result_can_be_approved_and_recalled(self):
@@ -211,8 +220,9 @@ class JueCeHuiLuTests(unittest.TestCase):
         self.assertEqual(self.agent.agent_context.du(b_sid), [])
         self.llm.kan.clear()
         self._zhu_qiao("/chat", {"message": "我刚才让你做了什么？", "session_id": b_sid})
-        xi = self.llm.kan[-1][0]["content"]
-        self.assertNotIn("A 的指令", xi)
+        # 记录现在可能出现在任何一条消息里（system 或独立的 user 消息），
+        # 所以整份消息列表都要查，不能只看第一条。
+        self.assertNotIn("A 的指令", json.dumps(self.llm.kan[-1], ensure_ascii=False))
 
     def test_wai_di_chuan_tiao_bu_neng_wu_quan_zhui_jie(self):
         """出站失败只丢事件，不许把会话带崩（Agent 还在跑）。"""
