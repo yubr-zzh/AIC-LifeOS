@@ -202,7 +202,8 @@ export default function App() {
         </header>
 
         <main id="main-content" className={`workspace-main ${active === "chat" ? "workspace-main-chat" : ""}`}>
-          <div className={`page-intro ${active === "chat" ? "page-intro-chat" : ""}`}>
+          {/* agents 页自带标题块（参考界面），隐藏外层 page-intro，避免双标题。 */}
+          <div className={`page-intro ${active === "chat" || active === "agents" ? "page-intro-chat" : ""}`}>
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
               <h1>{meta.title}</h1>

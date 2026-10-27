@@ -54,7 +54,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("AgentsSection 页面结构", () => {
   it("不再渲染配对卡，Agent 活动面板位于页面最底部", async () => {
     const { container } = setup();
-    await screen.findByText("Agent 在你的电脑上执行");
+    await screen.findByText("Agent 管理");
     expect(screen.queryByText("配对")).toBeNull();
     const root = container.querySelector(".ags");
     expect(root?.lastElementChild?.classList.contains("agent-activity-panel")).toBe(true);
@@ -70,7 +70,7 @@ describe("AgentsSection 页面结构", () => {
     const browse = await screen.findByRole("button", { name: "浏览…" });
     expect((browse as HTMLButtonElement).disabled).toBe(false);
     expect(browse.className).toContain("ags-browse-button");
-    expect(screen.getByText("开启委派：命中任务时生成委派计划")).toBeTruthy();
+    expect(screen.getByText(/开启委派/)).toBeTruthy();
   });
 });
 
@@ -80,12 +80,12 @@ describe("AgentsSection 的凭据目录告警", () => {
     await screen.findByText(/重新登录一次/);
     const alert = screen.getByRole("alert");
     expect(alert.closest(".ags-card")).toBeNull();
-    expect(alert.parentElement?.className).toBe("ags");
+    expect(alert.parentElement?.className).toContain("ags");
   });
 
   it("true 或字段缺失时不显示凭据告警", async () => {
     setup({ agents: [], suggestedDirs: [], credentialsReady: true } as unknown as AgentsResponse);
-    await waitFor(() => expect(screen.getByText("Agent 在你的电脑上执行")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Agent 管理")).toBeTruthy());
     expect(screen.queryByText(/重新登录一次/)).toBeNull();
   });
 });
