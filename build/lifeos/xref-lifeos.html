@@ -10068,6 +10068,8 @@ imported by:
  &#8226;   <a href="#jsonschema.validators">jsonschema.validators</a>
  &#8226;   <a href="#lifeos.api.tunnel_gw">lifeos.api.tunnel_gw</a>
  &#8226;   <a href="#lifeos.bridge.events">lifeos.bridge.events</a>
+ &#8226;   <a href="#lifeos.memory.query_context">lifeos.memory.query_context</a>
+ &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#mcp.server.transport_security">mcp.server.transport_security</a>
  &#8226;   <a href="#multiprocessing.heap">multiprocessing.heap</a>
@@ -12592,7 +12594,9 @@ imported by:
  &#8226;   <a href="#lifeos.memory.lifecycle">lifeos.memory.lifecycle</a>
  &#8226;   <a href="#lifeos.memory.manager">lifeos.memory.manager</a>
  &#8226;   <a href="#lifeos.memory.profile">lifeos.memory.profile</a>
+ &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#lifeos.memory.schema">lifeos.memory.schema</a>
+ &#8226;   <a href="#lifeos.memory.temporal">lifeos.memory.temporal</a>
  &#8226;   <a href="#lifeos.memory.updater">lifeos.memory.updater</a>
  &#8226;   <a href="#lifeos.reflection.engine">lifeos.reflection.engine</a>
  &#8226;   <a href="#lifeos.skills.registry">lifeos.skills.registry</a>
@@ -16788,6 +16792,7 @@ imported by:
  &#8226;   <a href="#lifeos.bridge.arbiter">lifeos.bridge.arbiter</a>
  &#8226;   <a href="#lifeos.bridge.pingju">lifeos.bridge.pingju</a>
  &#8226;   <a href="#lifeos.memory.profile">lifeos.memory.profile</a>
+ &#8226;   <a href="#lifeos.memory.providers.tencentdb">lifeos.memory.providers.tencentdb</a>
  &#8226;   <a href="#mcp.client.client">mcp.client.client</a>
  &#8226;   <a href="#mcp.server.auth.handlers.token">mcp.server.auth.handlers.token</a>
  &#8226;   <a href="#mcp.server.mcpserver.resolve">mcp.server.mcpserver.resolve</a>
@@ -20774,7 +20779,9 @@ imports:
  &#8226;   <a href="#lifeos.agent.chat">lifeos.agent.chat</a>
  &#8226;   <a href="#lifeos.agent.context">lifeos.agent.context</a>
  &#8226;   <a href="#lifeos.agent.planner.planner">lifeos.agent.planner.planner</a>
+ &#8226;   <a href="#lifeos.memory.query_context">lifeos.memory.query_context</a>
  &#8226;   <a href="#lifeos.memory.schema">lifeos.memory.schema</a>
+ &#8226;   <a href="#lifeos.memory.temporal">lifeos.memory.temporal</a>
 
   </div>
   <div class="import">
@@ -22065,8 +22072,10 @@ imported by:
  &#8226;   <a href="#lifeos.memory.manager">lifeos.memory.manager</a>
  &#8226;   <a href="#lifeos.memory.profile">lifeos.memory.profile</a>
  &#8226;   <a href="#lifeos.memory.providers">lifeos.memory.providers</a>
+ &#8226;   <a href="#lifeos.memory.query_context">lifeos.memory.query_context</a>
  &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#lifeos.memory.schema">lifeos.memory.schema</a>
+ &#8226;   <a href="#lifeos.memory.temporal">lifeos.memory.temporal</a>
  &#8226;   <a href="#lifeos.memory.updater">lifeos.memory.updater</a>
 
   </div>
@@ -22172,6 +22181,7 @@ imports:
  &#8226;   <a href="#hashlib">hashlib</a>
  &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#lifeos.memory">lifeos.memory</a>
+ &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#lifeos.memory.schema">lifeos.memory.schema</a>
  &#8226;   <a href="#typing">typing</a>
 
@@ -22230,6 +22240,7 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#dataclasses">dataclasses</a>
+ &#8226;   <a href="#hashlib">hashlib</a>
  &#8226;   <a href="#ipaddress">ipaddress</a>
  &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#lifeos.memory.providers">lifeos.memory.providers</a>
@@ -22248,14 +22259,34 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="lifeos.memory.query_context"></a>
+  <a target="code" href="///C:/Users/Liuxj/.zcode/workspace/e0d847eb-665a-494b-8f2a-52c9c427e599/lifeos/memory/query_context.py" type="text/plain"><tt>lifeos.memory.query_context</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#collections">collections</a>
+ &#8226;   <a href="#lifeos.memory">lifeos.memory</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#lifeos.agent.chat.runtime">lifeos.agent.chat.runtime</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="lifeos.memory.retriever"></a>
   <a target="code" href="///C:/Users/Liuxj/.zcode/workspace/e0d847eb-665a-494b-8f2a-52c9c427e599/lifeos/memory/retriever.py" type="text/plain"><tt>lifeos.memory.retriever</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#json">json</a>
+    <a href="#collections">collections</a>
+ &#8226;   <a href="#datetime">datetime</a>
+ &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#lifeos.memory">lifeos.memory</a>
  &#8226;   <a href="#lifeos.memory.schema">lifeos.memory.schema</a>
  &#8226;   <a href="#lifeos.skills.metrics">lifeos.skills.metrics</a>
+ &#8226;   <a href="#math">math</a>
  &#8226;   <a href="#re">re</a>
  &#8226;   <a href="#typing">typing</a>
 
@@ -22263,6 +22294,7 @@ imports:
   <div class="import">
 imported by:
     <a href="#lifeos.memory.manager">lifeos.memory.manager</a>
+ &#8226;   <a href="#lifeos.memory.profile">lifeos.memory.profile</a>
 
   </div>
 
@@ -22286,6 +22318,24 @@ imported by:
  &#8226;   <a href="#lifeos.memory.profile">lifeos.memory.profile</a>
  &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#lifeos.memory.updater">lifeos.memory.updater</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="lifeos.memory.temporal"></a>
+  <a target="code" href="///C:/Users/Liuxj/.zcode/workspace/e0d847eb-665a-494b-8f2a-52c9c427e599/lifeos/memory/temporal.py" type="text/plain"><tt>lifeos.memory.temporal</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#datetime">datetime</a>
+ &#8226;   <a href="#lifeos.memory">lifeos.memory</a>
+ &#8226;   <a href="#re">re</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#lifeos.agent.chat.runtime">lifeos.agent.chat.runtime</a>
 
   </div>
 
@@ -22940,6 +22990,7 @@ imported by:
  &#8226;   <a href="#fractions">fractions</a>
  &#8226;   <a href="#httpx2._cookies">httpx2._cookies</a>
  &#8226;   <a href="#httpx2.websockets._transport">httpx2.websockets._transport</a>
+ &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
  &#8226;   <a href="#mcp.server.request_state">mcp.server.request_state</a>
  &#8226;   <a href="#mcp.server.streamable_http">mcp.server.streamable_http</a>
  &#8226;   <a href="#mcp.server.streamable_http_manager">mcp.server.streamable_http_manager</a>
@@ -41876,6 +41927,7 @@ imported by:
  &#8226;   <a href="#lifeos.llm.profiles">lifeos.llm.profiles</a>
  &#8226;   <a href="#lifeos.memory.export">lifeos.memory.export</a>
  &#8226;   <a href="#lifeos.memory.retriever">lifeos.memory.retriever</a>
+ &#8226;   <a href="#lifeos.memory.temporal">lifeos.memory.temporal</a>
  &#8226;   <a href="#lifeos.skills.metrics">lifeos.skills.metrics</a>
  &#8226;   <a href="#locale">locale</a>
  &#8226;   <a href="#logging">logging</a>

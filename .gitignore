@@ -39,11 +39,31 @@ venv/
 !dist/**/*.pyd
 !build/**/*.pyd
 
+# 捆绑的 claude CLI 运行时（约 230 MB）。GitHub 单文件硬上限 100 MB，
+# 推不上去；安装包也不含它，运行时由 `resolve_claude_runtime()` 沿 PATH 探测。
+dist/LifeOS/resources/node/
+
 # Temporary files
 *.tmp
 *.temp
 ~$*.pptx
 .lifeos/
+
+# 本机运行时数据。LIFEOS_HOME 默认落在 ./lifeos/，与 Python 包目录同名，
+# 于是个人笔记、记忆和会话历史散落在包目录里。**这些绝不入库**——
+# 仓库是公开的，推上去就撤不回来。
+lifeos/lifeos.db
+lifeos/memory.json
+lifeos/events.json
+lifeos/agent_evidence.json
+lifeos/models.json
+lifeos/skills.json
+tests/lifeOS/
+
+# 与项目无关的个人文件（课程作业与报告脚本）
+render/
+thevenin_step*.png
+modify_report.py
 
 # CodeGraph index
 .codegraph/
