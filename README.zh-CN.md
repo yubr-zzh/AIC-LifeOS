@@ -10,13 +10,13 @@
   <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
-  <img src="https://img.shields.io/badge/tests-985%20cases-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1093%20cases-brightgreen?style=flat-square" alt="Tests">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </div>
 
 ---
 
-**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入、反思引擎和技能进化闭环。v2.2.0 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
+**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入与治理（含时间版本）、反思引擎和技能进化闭环。v2.2.0 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
 
 ## 它解决什么问题
 
@@ -50,9 +50,9 @@ LifeOS软件版 想把助手从浏览器的标签页里搬出来，安顿在你�
 
 **进门。** 双击运行，首次启动创建本地账户。勾选记住密码，可 30 天免登录，凭据经系统级加密存放。
 
-**派活。** 选一个本机 Agent，指定一个文件夹。它在里面读文件、改代码、跑命令，每个动作先给你过目。进度显示在底部面板，保留最近 20 条，每 8 秒自动刷新。
+**派活。** Agent 页以卡片列出本机 Agent 的状态、版本和连接清单。选一个并指定文件夹，它在里面读文件、改代码、跑命令，每个动作先给你过目。详情抽屉显示 Bridge 健康状态，可随时重新检测。
 
-**对话。** 此前的聊天与 Agent 执行结果会沉淀为记忆，下次提问自动带上，不必从头交代。消息一键复制，会话可重命名，单条消息最多附 3 个文件，每个不超过 200 KB。
+**对话。** Agent 回复以普通消息气泡呈现，支持流式输出和可展开的执行详情。此前的聊天与 Agent 执行结果会沉淀为记忆，下次提问自动带上，不必从头交代。消息一键复制，会话可重命名，单条消息最多附 3 个文件，每个不超过 200 KB。
 
 **当日。** 今日工作台逐项打勾，20 组提醒每天准时到，Agent 的结果和待办汇进右上角 Inbox。侧栏可收起，对话区可拖拽调宽。
 
@@ -90,7 +90,7 @@ lifeos/
   api/              # 主服务：静态托管、登录闸、隧道网关、设备、用户
   bridge/           # 本地 Agent 进程：适配器、仲裁、脱敏、恢复
   agent/            # Chat Agent、Global Agent、规划、执行
-  memory/           # 两阶段记忆写入：检索、候选、生命周期
+  memory/           # 两阶段记忆写入：检索、候选、生命周期、治理、图谱与时间版本
   skills/           # 技能注册表、候选检测、效果评估
   reflection/       # 后台反思引擎
   event/            # 本地可靠事件队列
@@ -100,6 +100,7 @@ lifeos/
 frontend/           # React + TypeScript + Vite 控制台（npm run build 产 dist）
 tools/              # build_exe.ps1、lifeos.spec、lifeos-setup.iss、verify_*.py
 tests/              # 后端全量测试
+datasets/           # 记忆治理评测样本与 LongMemEval-S 模板
 docs/               # 架构与 API 文档
 ```
 
@@ -146,7 +147,7 @@ cd frontend && npm run dev
 ## 测试
 
 ```powershell
-# 后端，约 855 个用例
+# 后端，约 960 个用例
 .venv\Scripts\python -m pytest tests -q
 .venv\Scripts\python -m compileall lifeos
 
@@ -163,9 +164,12 @@ npm run typecheck
 - [docs/api-contract.md](docs/api-contract.md)，前后端 API 对齐
 - [docs/agent-memory-integration.md](docs/agent-memory-integration.md)，Agent 执行结果进入记忆的流程
 - [docs/memory-module-handoff.md](docs/memory-module-handoff.md)，记忆模块交接
+- [docs/memory-design-principles.md](docs/memory-design-principles.md)，记忆设计原则
 - [docs/memory-provider-boundaries.md](docs/memory-provider-boundaries.md)，记忆 Provider 边界
 - [docs/lifeos-workflow-and-memory-architecture.md](docs/lifeos-workflow-and-memory-architecture.md)，工作流与记忆架构
 - [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md)，团队模块集成方案
+- [docs/frontend-rewrite-issues.md](docs/frontend-rewrite-issues.md)，前端重构问题记录
+- [docs/tencentdb-approved-atomic-create-proposal.md](docs/tencentdb-approved-atomic-create-proposal.md)，TencentDB 原子创建方案
 
 ## 运行注意
 
