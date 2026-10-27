@@ -243,7 +243,7 @@ describe("AgentsSection 的凭据目录告警（credentialsReady）", () => {
     // 告警挪进卡片后 20 条测试全绿）。
     const gen = screen.getByRole("alert");
     expect(gen.closest(".ags-card")).toBeNull();
-    expect(gen.parentElement?.className).toBe("ags");
+    expect(gen.parentElement?.className).toContain("ags");
   });
 
   it("true 时不显示任何凭据告警——正常情况是常态，不该天天占屏", async () => {

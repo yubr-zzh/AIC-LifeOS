@@ -741,7 +741,8 @@ body:has(.chat-host) { overflow: hidden; height: 100dvh; }
 .chat-host > * { flex: 1 1 auto; min-height: 0; width: 100%; }
 
 /* Conversation: calm, content-first workspace; diagnostics stay in System. */
-.page-intro-chat { display: none; }
+.page-intro-chat,
+.page-intro.page-intro-chat { display: none; }
 /* Page intro: one functional title + one line of context. No eyebrow, no date block —
    面包屑和日期只在顶栏出现一次（craft-floor：每节标题前不加小标签）。 */
 .page-intro {

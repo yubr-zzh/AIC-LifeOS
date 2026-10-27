@@ -244,7 +244,7 @@ describe("credentialsReady 的真链路（真 fetch + 真 reducer）", () => {
     // 实测：挪进去之后 20 条全绿）。真链路的价值在数据来源，不在位置判据。
     const gen = screen.getByRole("alert");
     expect(gen.closest(".ags-card")).toBeNull();
-    expect(gen.parentElement?.className).toBe("ags");
+    expect(gen.parentElement?.className).toContain("ags");
   });
 
   it("线上回 credentialsReady:true 时没有告警", async () => {
