@@ -4,6 +4,7 @@ This adapter deliberately has no implicit default endpoint or identity. It is
 configured only when all isolation coordinates are supplied explicitly.
 """
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -26,6 +27,8 @@ class TencentDBConfig:
     user_id: str
     api_key: str | None = None
     timeout_seconds: float = 5.0
+    scope_map: dict | None = None
+    atomic_create_enabled: bool = False
 
     @classmethod
     def from_env(cls, environ=None):
@@ -38,17 +41,46 @@ class TencentDBConfig:
             "user_id": "LIFEOS_TDAI_USER_ID",
         }
         values = {field: env.get(name, "").strip() for field, name in names.items()}
-        configured = any(values.values())
+        raw_scope_map = env.get("LIFEOS_TDAI_SCOPE_MAP", "").strip()
+        raw_create = env.get("LIFEOS_TDAI_ALLOW_ATOMIC_CREATE", "").strip().lower()
+        if raw_create not in {"", "0", "1", "false", "true"}:
+            raise ValueError("LIFEOS_TDAI_ALLOW_ATOMIC_CREATE must be true or false")
+        configured = any(values.values()) or bool(raw_scope_map) or raw_create in {"1", "true"}
         if not configured:
             return None
         if not all(values.values()):
             missing = [name for field, name in names.items() if not values[field]]
             raise ValueError(f"incomplete TencentDB configuration; missing: {', '.join(missing)}")
+        scope_map = {}
+        if raw_scope_map:
+            try:
+                scope_map = json.loads(raw_scope_map)
+            except json.JSONDecodeError as exc:
+                raise ValueError("LIFEOS_TDAI_SCOPE_MAP must be valid JSON") from exc
+            if not isinstance(scope_map, dict) or "global" in scope_map:
+                raise ValueError("LIFEOS_TDAI_SCOPE_MAP must map only explicit scenario/project scopes")
+            required_coordinates = {"team_id", "agent_id", "user_id", "session_id"}
+            for scope_key, coordinates in scope_map.items():
+                if (
+                    not isinstance(scope_key, str)
+                    or not (scope_key.startswith("project:") or scope_key.startswith("scenario:"))
+                    or scope_key != scope_key.strip()
+                    or not scope_key.split(":", 1)[1].strip()
+                    or not isinstance(coordinates, dict)
+                    or set(coordinates) != required_coordinates
+                    or any(not isinstance(coordinates[key], str) or not coordinates[key].strip() for key in required_coordinates)
+                ):
+                    raise ValueError(
+                        "each TencentDB scope mapping requires team_id, agent_id, user_id, and session_id"
+                    )
+                scope_map[scope_key] = {key: coordinates[key].strip() for key in required_coordinates}
         parsed = urlparse(values["endpoint"])
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("LIFEOS_TDAI_ENDPOINT must be an http(s) URL")
         config = cls(
             **values,
+            scope_map=scope_map,
+            atomic_create_enabled=raw_create in {"1", "true"},
             api_key=env.get("LIFEOS_TDAI_API_KEY") or None,
             timeout_seconds=float(env.get("LIFEOS_TDAI_TIMEOUT_SECONDS", "5")),
         )
@@ -72,9 +104,53 @@ class TencentDBConfig:
 class TencentDBMemoryAdapter:
     """v3 atomic-memory writer and recall client; raw chat capture is separate."""
 
+    _ATOMIC_TYPES = {
+        "user": "persona",
+        "project": "work_fact",
+        "feedback": "episodic",
+        "reference": "work_artifact",
+    }
+
     def __init__(self, config: TencentDBConfig, transport=None):
         self.config = config
         self._transport = transport or self._http_post
+
+    @staticmethod
+    def _scope_key(scope):
+        if scope is None:
+            scope = {"kind": "global"}
+        if not isinstance(scope, dict):
+            return None
+        if scope.get("kind") == "global":
+            return "global"
+        if scope.get("kind") == "project" and isinstance(scope.get("project_id"), str) and scope["project_id"].strip():
+            return f"project:{scope['project_id'].strip()}"
+        if scope.get("kind") == "scenario" and isinstance(scope.get("scenario_type"), str) and scope["scenario_type"].strip():
+            return f"scenario:{scope['scenario_type'].strip()}"
+        return None
+
+    def coordinates_for_scope(self, scope, *, required=True):
+        """Resolve a LifeOS scope to explicit TencentDB identity coordinates."""
+        key = self._scope_key(scope)
+        if key == "global":
+            return {
+                "team_id": self.config.team_id,
+                "agent_id": self.config.agent_id,
+                "user_id": self.config.user_id,
+                "session_id": "lifeos-approved-memory",
+            }
+        coordinates = (self.config.scope_map or {}).get(key) if key else None
+        if coordinates:
+            return dict(coordinates)
+        if required:
+            raise TencentDBError(f"no explicit TencentDB identity mapping for LifeOS scope: {key or 'unassigned'}")
+        return None
+
+    def scope_key_for(self, scope):
+        coordinates = self.coordinates_for_scope(scope)
+        encoded = json.dumps(coordinates, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+        return f"{self._scope_key(scope)}@{digest}"
 
     def _http_post(self, path, payload):
         headers = {
@@ -99,56 +175,96 @@ class TencentDBMemoryAdapter:
         return result.get("data", result)
 
     def approved_memory_payload(self, item):
-        """Build an L1 write/update request for an approved LifeOS item.
-
-        This payload is only valid for an item already bound to the matching
-        TencentDB ID; the upstream update endpoint does not create missing IDs.
-        """
+        """Build an L1 write/update request for a user-approved LifeOS item."""
         if item.get("status") != "active":
             raise ValueError("only active, user-approved memories may be sent to TencentDB")
         memory_id = item.get("id")
         content = item.get("content")
-        if not isinstance(memory_id, str) or not memory_id or not isinstance(content, dict):
-            raise ValueError("approved memory requires an id and object content")
+        category = item.get("category")
+        if (
+            not isinstance(memory_id, str)
+            or not memory_id
+            or not isinstance(content, dict)
+            or category not in self._ATOMIC_TYPES
+        ):
+            raise ValueError("approved memory requires an id, supported category, and object content")
+        scope = item.get("scope")
+        if scope is None:
+            scope = {"kind": "global"}
+        elif not isinstance(scope, dict) or not scope:
+            raise ValueError("approved memory scope must be an object")
+        coordinates = self.coordinates_for_scope(scope)
         provenance = {
             "lifeos_memory_id": memory_id,
             "source": item.get("source"),
             "source_ref": item.get("source_ref"),
-            "scope": item.get("scope"),
+            "scope": scope,
             "category": item.get("category"),
             "confidence": item.get("confidence"),
             "occurred_at": item.get("occurred_at"),
+            "confirmed_at": item.get("confirmed_at"),
+            "valid_from": item.get("valid_from"),
+            "valid_until": item.get("valid_until"),
+            "promotion": item.get("promotion"),
+            "version_of": item.get("version_of"),
+            "superseded_by": item.get("superseded_by"),
         }
         return {
-            "team_id": self.config.team_id,
-            "agent_id": self.config.agent_id,
-            "user_id": self.config.user_id,
-            "session_id": "lifeos-approved-memory",
+            **coordinates,
             "id": f"lifeos-{memory_id}",
+            "type": self._ATOMIC_TYPES[category],
+            "priority": 50,
             "content": json.dumps(content, ensure_ascii=False, sort_keys=True),
             "background": json.dumps(provenance, ensure_ascii=False, sort_keys=True),
+            "metadata": {
+                "lifeos_memory_id": memory_id,
+                "lifeos_scope_kind": scope.get("kind", "unassigned"),
+            },
         }
 
     def write_approved_memory(self, item):
         payload = self.approved_memory_payload(item)
         expected_remote_id = f"lifeos-{item.get('id')}"
         sync = item.get("provider_sync") or {}
-        if sync.get("status") != "synced" or sync.get("remote_id") != expected_remote_id:
+        scope_key = self.scope_key_for(item.get("scope"))
+        bound_scope_key = sync.get("remote_scope_key")
+        if bound_scope_key is not None and bound_scope_key != scope_key:
+            raise TencentDBError("TencentDB remote memory scope binding does not match the LifeOS scope")
+        legacy_global_binding = (
+            bound_scope_key is None and self._scope_key(item.get("scope")) == "global"
+        )
+        if (
+            sync.get("status") == "synced"
+            and bound_scope_key != scope_key
+            and not legacy_global_binding
+        ):
+            raise TencentDBError("synced TencentDB memory is missing its matching scope binding")
+        remote_id = sync.get("remote_id")
+        if remote_id is not None and remote_id != expected_remote_id:
+            raise TencentDBError("TencentDB remote memory binding does not match the deterministic LifeOS ID")
+        if sync.get("status") == "synced" and remote_id != expected_remote_id:
+            raise TencentDBError("synced TencentDB memory is missing its matching remote ID")
+        if remote_id == expected_remote_id:
+            return self._transport("/v3/atomic/update", payload)
+        if not self.config.atomic_create_enabled:
             raise TencentDBError(
-                "TencentDB v3 atomic/update cannot create a new LifeOS memory; "
-                "an upstream atomic-create API is required"
+                "TencentDB cannot create this new memory while atomic create is disabled; "
+                "enable LIFEOS_TDAI_ALLOW_ATOMIC_CREATE "
+                "only when the configured Gateway supports POST /v3/atomic/create"
             )
-        return self._transport("/v3/atomic/update", payload)
+        return self._transport("/v3/atomic/create", payload)
 
-    def delete_approved_memory(self, memory_id):
+    def delete_approved_memory(self, memory_id, *, scope=None, remote_scope_key=None):
         if not isinstance(memory_id, str) or not memory_id:
             raise ValueError("memory id is required")
+        scope_key = self.scope_key_for(scope)
+        if remote_scope_key is not None and remote_scope_key != scope_key:
+            raise TencentDBError("TencentDB remote memory scope binding does not match the LifeOS scope")
+        coordinates = self.coordinates_for_scope(scope)
         return self._transport(
             "/v3/atomic/delete",
             {
-                "team_id": self.config.team_id,
-                "agent_id": self.config.agent_id,
-                "user_id": self.config.user_id,
+                **{key: coordinates[key] for key in ("team_id", "agent_id", "user_id")},
                 "ids": [f"lifeos-{memory_id}"],
             },
         )
@@ -156,10 +272,11 @@ class TencentDBMemoryAdapter:
     def search_memories(self, query, scope=None, limit=5):
         if not isinstance(query, str) or not query.strip():
             return []
+        coordinates = self.coordinates_for_scope(scope, required=False)
+        if coordinates is None:
+            return []
         payload = {
-            "team_id": self.config.team_id,
-            "agent_id": self.config.agent_id,
-            "user_id": self.config.user_id,
+            **coordinates,
             "query": query,
             "limit": max(1, min(int(limit), 50)),
         }
@@ -222,6 +339,12 @@ class TencentDBMemoryAdapter:
                     "scope": metadata.get("scope"),
                     "confidence": metadata.get("confidence"),
                     "occurred_at": metadata.get("occurred_at"),
+                    "confirmed_at": metadata.get("confirmed_at"),
+                    "valid_from": metadata.get("valid_from"),
+                    "valid_until": metadata.get("valid_until"),
+                    "promotion": metadata.get("promotion"),
+                    "version_of": metadata.get("version_of"),
+                    "superseded_by": metadata.get("superseded_by"),
                     "status": "active",
                     "provider": "tencentdb",
                 }

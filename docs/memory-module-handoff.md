@@ -30,7 +30,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 | 6. 动态画像视图 | 从有效 Memory 生成带溯源信息的核心/场景画像，不另造权威副本 | 完成（LifeOS 本地结构化只读 MVP；目标接 TencentDB L2/L3） | `/memory/profile` 按 scope 动态重建；仅 active；稳定版本 hash；来源与置信度可追溯 |
 | 7. API 与用户审核入口 | 让用户检查、修正、拒绝候选并理解画像依据 | 完成 | 画像 UI、来源可追溯、从日/阶段规划复盘显式提炼候选；浏览器端手工复核待做 |
 | 8. 外部记忆职责与权威边界 | 明确 LifeOS 如何组合实际要使用的 ai-memory 与 TencentDB，避免相互替代或重复权威 | 完成（已按用户纠正修订） | 两个后端均是目标能力；ai-memory 管项目连续性，TencentDB 管 L1-L3，LifeOS 管来源/审核/编排；明确本地 store 为迁移期实现 |
-| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 待开始 | 先验证 TencentDB approval gate 与身份映射，再做两条隔离纵向切片、一次性迁移/回滚；禁止长期双写 |
+| 9. 外部后端适配与切换 | 实际接入 TencentDB 认知链路和 ai-memory 项目连续性，并与 LifeOS Router 联通 | 进行中（适配器、受控召回和审批后同步已接入；真实 Gateway 生命周期与切换未验收） | 当前实现见“阶段 9 当前进度”；新建 L1、L2/L3、跨系统生命周期及迁移/回滚仍待真实环境验收 |
 | 10. 评估与效率 | 评估召回正确性、隔离性、可解释性；再量化成本与效率 | 待开始 | 小型评测集与基线；成本优化放在正确性之后 |
 
 ## 阶段 0 验收记录
@@ -244,6 +244,25 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 接口仍有明确待验收项：TencentDB v3 API 如何满足 LifeOS 用户审核后写入 L1；L0 原始内容复制/引用策略；LifeOS 用户/项目/场景到 TencentDB team/agent/user/session 的身份映射；跨系统纠正/撤回/删除与一次性迁移。
 - 阶段 8 现在只完成目标职责与权威边界设计，不代表任何外部后端已集成。阶段 9 改为实际适配与切换，阶段 10 才做评测、cost/efficiency。
 
+## 阶段 9 当前进度（2026-10-15）
+
+- 本地分支 `codex/tencentdb-scoped-identities` 基于最新 `origin/main`；必要的 scope 身份映射已推送到 `main`，提交 `6303578`。TencentDB 的 global 使用基础身份；project/scenario 必须显式配置独立坐标，映射缺失时 fail closed。已同步条目记录映射指纹，防止身份变更后误更新/删除其他远端范围。
+- `LifeOSAgent` 已按环境配置初始化 TencentDB 与 ai-memory 适配器。ChatRuntime 先读本地 Memory；TencentDB 召回只接纳本地仍为 active 的 ID，并受 scope 检查；provider 故障不会阻断本地对话。ai-memory 只在显式 project scope 且任务进入 Agent 执行路径时查询项目材料。
+- Memory 审核通过后会尝试同步 TencentDB；失败保留本地审核结果并标记 pending，可重试。更正/撤回会按原 scope 和远端绑定操作。`LIFEOS_TDAI_ALLOW_ATOMIC_CREATE` 默认关闭，故新 L1 暂不能确认写入；已同步记录的更新使用 `/v3/atomic/update`。
+- **尚未验收**：未配置/执行真实隔离 Gateway 的端到端生命周期；未验证当前部署是否支持 `/v3/atomic/create`；未跑通 TencentDB L1 到 L2/L3 的生成与 provenance；未定义 L0 原文保存策略；未做本地 active Memory 一次性迁移、权威切换和回滚。
+- 本地 `upstream/TencentDB-Agent-Memory` 的 `feat/atomic-create-approved-memory` 分支 HEAD `9979d4e`（2026-10-04）已实现 `POST /v3/atomic/create` 与 Python/TypeScript SDK：SQLite 普通 INSERT、Mongo standalone/replica set `insertOne`，基于存储唯一键处理并发；Mongo sharded 与不支持的存储 fail closed。TCVDB 当前明确不支持并返回 501。PR [#1604](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1604) 仍是待审草稿（截至 2026-10-15 的公开 PR 列表仍列为 open）；目标 Gateway 的部署版本仍未核实。
+- 这项上游实现还没有通过本机 Vitest/类型检查或真实 Gateway E2E；LifeOS create 开关继续默认关闭。本轮按用户要求跳过真实 Gateway 端到端验收。
+- 目前 29 项 Memory 核心回归通过。全量 312 项在已批准的本机运行环境中仍有 1 个 Bridge 启动失败和 28 个导入错误，主要报 `claude_agent_sdk` 缺失；这些不是本次 Memory 核心回归的失败，但全量套件尚未全绿。
+
+### 下一步顺序
+
+1. **核对 API 与部署能力**：已确认上游草稿 PR #1604 提供 create-only 路由，但 TCVDB 不支持；目标 Gateway 版本和 L2/L3 generation refs 仍需核实。LifeOS create 保持关闭。
+2. **真实 Gateway 纵向验收**：本轮按用户要求跳过；后续如需启用 create、迁移或切换权威，仍必须先用隔离租户完成候选 → 审核 → L1 → 召回 → 更正/撤回/删除和重试验收。
+3. **接通并验收 L2/L3**：先证明每个画像结果可追溯到 approved L1、scope 完全一致，再接入 Chat；失败或来源缺失时不注入。
+4. **完成 ai-memory 项目切片**：在单一测试项目中验证检索、handoff/page provenance、相邻项目隔离和服务不可用降级。
+5. **设计迁移/回滚**：统计本地 active/candidate、来源引用与 scope 映射，准备导入对照、单次切换和回滚演练；验收前本地仍为权威，不做长期双写。
+6. **阶段 10 评测**：建立小型固定查询集，测 scope 泄漏、Recall@k/相关性、来源完整率、时延；通过正确性门槛后再测成本与缓存收益。
+
 ## 风险与未决决策
 
 - 每日/阶段记录当前采用“用户手动撰写认知并提交候选”的显式触发方式；后续如增加 AI 辅助提炼，需单独设计授权、确认、错误更正和范围选择，不可静默自动写入。
@@ -251,7 +270,7 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 - 缺失 `project_id` 的候选必须使用 `unassigned` scope，且当前检索器排除该类记录。
 - 自动场景/项目识别尚未实现；在设计出可审计、可纠正的 resolver 与 fail-closed fallback 前，UI 未传 scope 时应保持 global-only。
 - `/memory` 当前返回整个内部 store；后续设计需要考虑 API 向用户暴露范围、候选和运行态存储的分离。
-- ai-memory 项目身份映射、TencentDB 业务身份映射和审批前置写入尚未实现；未通过隔离测试前不启用生产外部写入/召回。
+- 外部适配已有运行时接线，但 ai-memory 项目映射/真实服务验收、TencentDB 新建 L1 与 L2/L3 端到端验收仍未完成；不得把适配器接线等同于生产切换完成。
 - 成本和效率优化暂不作为当前实现阶段的目标；先建立召回正确性、隔离性和可追溯性基线。
 
 ## 本次最新验证记录（2026-10-03）
@@ -271,6 +290,6 @@ LifeOS 的定位是 **AI + 日记本式长期 Memory + 执行力**。Memory 模�
 
 1. 先读取仓库根目录的 `README.md`、本文和 `docs/lifeos-workflow-and-memory-architecture.md`。
 2. 重新运行 `python -m unittest discover -s tests -v`，确认测试基线仍成立。
-3. 阶段 2 至阶段 8（修订后目标边界设计）已完成；下一步阶段 9 是实际集成两者：先验证 TencentDB v3 身份/审批门，再做 TencentDB L1-L3 与 ai-memory 项目 continuity 两条隔离切片，规划本地 store 一次性迁移。阶段 10 再建立召回/隔离/可解释评测及成本效率基线。当前两个后端都尚未接入；不得把目标架构描述为已实现。
+3. 阶段 0–8 已完成；阶段 9 正在进行，运行时代码已有 TencentDB/ai-memory 适配与受控接线，TencentDB scope 映射已在 `main`。上游草稿 PR #1604 有 SQLite/Mongo 原子 create 实现，TCVDB 不支持；本轮按用户要求跳过真实 Gateway E2E，create 开关保持关闭。不要描述成两个后端均未接入，也不要描述成已完成生产切换。
 4. 每完成阶段后，更新本文中的阶段状态、验收证据、剩余风险和下一步 goal。
 5. 保护工作区已有未提交内容；不要清理或覆盖与本任务无关的图稿、上游仓库或交接文件。

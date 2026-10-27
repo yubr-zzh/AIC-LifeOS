@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -43,9 +43,9 @@ class MemoryManager:
             if migrated:
                 self._write(store)
 
-    async def retrieve(self, query, scope=None):
+    async def retrieve(self, query, scope=None, as_of=None, strategy="hybrid"):
         store = self._read()
-        return await MemoryRetriever(store).retrieve(query, scope=scope)
+        return await MemoryRetriever(store, strategy=strategy).retrieve(query, scope=scope, as_of=as_of)
 
     def profile_view(self):
         """Return a fresh, non-persisted profile view from the current store."""
@@ -68,18 +68,23 @@ class MemoryManager:
             for entry in store.get(category, [])
         ]
 
-    def set_provider_sync(self, memory_id, status, *, remote_id=None, error=None):
+    def set_provider_sync(self, memory_id, status, *, remote_id=None, remote_scope_key=None, error=None):
         if status not in {"synced", "pending", "deleted"}:
             raise ValueError("unsupported provider sync status")
         store = self._read()
         item = self._find_memory(store, memory_id)
-        item["provider_sync"] = {
+        previous_sync = item.get("provider_sync") or {}
+        provider_sync = {
             "provider": "tencentdb",
             "status": status,
-            "remote_id": remote_id,
+            "remote_id": remote_id if remote_id is not None else previous_sync.get("remote_id"),
             "error": error,
             "updated_at": datetime.utcnow().isoformat(),
         }
+        binding_key = remote_scope_key or previous_sync.get("remote_scope_key")
+        if binding_key is not None:
+            provider_sync["remote_scope_key"] = binding_key
+        item["provider_sync"] = provider_sync
         self._write(store)
         return item
 
@@ -95,6 +100,8 @@ class MemoryManager:
         confidence_method=None,
         category=None,
         occurred_at=None,
+        valid_from=None,
+        valid_until=None,
     ):
         store = self._read()
         normalized_ref = normalize_source_ref(source_ref)
@@ -123,6 +130,8 @@ class MemoryManager:
                     and normalize_scope(candidate.get("scope")) == normalized_scope
                     and candidate.get("confidence") == confidence
                     and candidate.get("confidence_method") == confidence_method
+                    and candidate.get("valid_from") == valid_from
+                    and candidate.get("valid_until") == valid_until
                 ):
                     return candidate
         candidate = await MemoryUpdater(store).propose(
@@ -135,6 +144,8 @@ class MemoryManager:
             confidence_method=confidence_method,
             category=category,
             occurred_at=occurred_at,
+            valid_from=valid_from,
+            valid_until=valid_until,
         )
         if source_event_id:
             candidate["source_event_id"] = source_event_id
@@ -177,6 +188,8 @@ class MemoryManager:
         """Create a user-confirmed replacement and retire the previous version."""
         if not isinstance(content, dict) or not content:
             raise ValueError("replacement memory content must be a non-empty object")
+        if reason is not None and not isinstance(reason, str):
+            raise ValueError("correction reason must be a string")
         store = self._read()
         old = self._find_memory(store, memory_id)
         if old.get("status", "active") != "active":
@@ -187,8 +200,26 @@ class MemoryManager:
                     return replacement
             raise ValueError(f"memory cannot be corrected from status: {old.get('status', 'active')}")
 
+        now = datetime.utcnow()
+        effective_at = now.replace(tzinfo=timezone.utc)
+        if old.get("valid_from"):
+            original_start = MemoryRetriever._parse_time(old["valid_from"])
+            if original_start and original_start > effective_at:
+                effective_at = original_start
+        boundary = effective_at - timedelta(microseconds=1)
+        original_end = (
+            MemoryRetriever._parse_time(old["valid_until"], end_of_day=True)
+            if old.get("valid_until") else None
+        )
+        if original_end is None or original_end > boundary:
+            old_valid_until = boundary.isoformat()
+        else:
+            # Preserve an earlier, explicitly configured expiry.
+            old_valid_until = old["valid_until"]
+
         await MemoryLifecycle(store).backup()
         replacement = deepcopy(old)
+        effective_at_text = effective_at.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
         replacement.update(
             {
                 "id": str(uuid4()),
@@ -199,17 +230,18 @@ class MemoryManager:
                 "confidence": None,
                 "confidence_method": None,
                 "version_of": memory_id,
+                "confirmed_at": now.isoformat(),
                 "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": now.isoformat(),
+                "valid_from": effective_at_text,
             }
         )
         if reason is not None:
-            if not isinstance(reason, str):
-                raise ValueError("correction reason must be a string")
             replacement["correction_reason"] = reason
         old["status"] = "superseded"
         old["superseded_by"] = replacement["id"]
-        old["superseded_at"] = datetime.utcnow().isoformat()
+        old["superseded_at"] = now.isoformat()
+        old["valid_until"] = old_valid_until
         store[old["category"]].append(replacement)
         store.setdefault("vector_index", {}).pop(memory_id, None)
         store["vector_index"][replacement["id"]] = replacement["content"]

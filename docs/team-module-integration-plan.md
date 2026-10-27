@@ -2,6 +2,8 @@
 
 目标分支：`feat/agent-memory-integration`。只做小切片选择性移植，不整支合并；每个切片单独验证、单独提交。遇到删除现有能力、改变记忆权威来源、身份映射或安全边界等取舍时，先停下来与用户确认。
 
+> 当前状态更新（2026-10-15）：本文件记录的早期分支比较仍作为历史验收；Memory 外部适配已经进入当前 main。TencentDB scope 身份映射随 `6303578` 推送；TencentDB/ai-memory 适配器已接到受控召回和审批后同步路径。本地仍是运行时权威，atomic create 默认关闭。上游 TencentDB PR #1604 已实现 SQLite/Mongo create-only 路径，但 TCVDB 不支持；用户本轮要求跳过真实 Gateway E2E，因此不能启用该写入，也不能把阶段 D 标成生产验收完成。
+
 ## 召回清单
 
 | 来源 | 已确认内容 | 处理方式 |
@@ -37,11 +39,12 @@
 - 源码参考：`origin/zhang-memory` 的 `ecdac8f feat(memory): verify external adapters with local HTTP mocks`，适配到当前 ChatRuntime / Executor，不移植其不同的 planner 架构。
 - 提交：`ac037b4 feat(memory): add scoped ai-memory project retrieval`。
 
-### 阶段 D：TencentDB 适配差异与审批写入 — 等待用户确认范围
+### 阶段 D：TencentDB 适配差异与审批写入 — 接线完成，真实服务验收未完成
 
-- 对照当前 TencentDB adapter 与 `origin/zhang-memory` 的修改，先核验 v3 创建/更新能力、外部 ID 对应关系、scope 身份映射及审批后写入语义。
-- 不启用新的外部写入路径，不切换 Memory 权威来源；若候选创建或身份映射依赖上游未提供的能力，先与用户讨论。
-- 更正：`origin/zhang-memory` 上这部分是用户自己的实现，不是队友代码。提交 `448ace7` 与 `ecdac8f` 的 author/committer 均为 `yubr-zzh <3255904958@qq.com>`。该版本加入 scope 身份映射，并对未绑定记忆调用 `/v3/atomic/create`；当前集成分支仍保留此前的 fail-closed 行为。是否启用创建写入需结合用户已有验证再决定，mock 本身不能代表真实服务联调。
+- 当前 main 已实现 TencentDB v3 scope 身份映射、远端绑定指纹、审批后同步/重试，以及按本地 active-ID allowlist 过滤召回；ai-memory 项目只读召回也已接入 Agent 项目路径。
+- 上游 draft PR [#1604](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1604) 的提交实现 SQLite/Mongo 原子 create；TCVDB 返回 501。目标部署版本尚未核实，LifeOS 的 create 开关保持关闭。
+- 用户本轮明确跳过真实 Gateway 端到端验收；本文件不把 mock 或上游单测替代为 LifeOS 服务验收，也不把本地 store 权威切换标成完成。
+- 历史来源说明：`origin/zhang-memory` 上 scope 映射相关提交是用户自己的实现，不是队友代码。当前必要补齐已由 `6303578` 推到 main。
 
 ### 阶段 E：Liu Bridge 能力契约补齐 — 部分完成
 
@@ -52,7 +55,7 @@
 
 ## 后续顺序
 
-1. 等待用户确定 TencentDB 此轮接入范围；在此之前不引入 `/v3/atomic/create` 写入。
+1. 用户已确定继续推进其余工作，并跳过本轮真实 Gateway E2E；atomic create 继续默认关闭，除非未来明确完成目标部署验收。
 2. 完成 Liu Bridge 能力契约剩余审查并独立提交；版本门禁范围先按用户意见处理。
 3. 对照 `origin/liu` 的 Bridge 和适配器逐项找缺口；禁止以整分支合并代替兼容审查。
 4. 最后审阅 `origin/api&nonAgent` 其余页面和存储功能，仅接入明确缺失且与当前路由/存储架构兼容的项。

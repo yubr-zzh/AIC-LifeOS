@@ -1,0 +1,23 @@
+{
+  "dataset_id": "lifeos-governance-mini-set",
+  "version": "1.0.0",
+  "created": "2026-10-18",
+  "language": "zh-CN",
+  "license": "CC0-1.0",
+  "synthetic_only": true,
+  "case_count": 20,
+  "files": ["cases.jsonl"],
+  "purpose": "评测 LifeOS 长程记忆中的 scope 隔离、有效期、版本纠错、撤回传播、晋升授权、来源追溯和拒答行为。",
+  "schema": {
+    "required_case_fields": [
+      "case_id", "category", "as_of", "memories", "request_scope", "conversation", "question",
+      "expected_action", "expected_answer", "expected_evidence_ids", "must_not_use_ids"
+    ],
+    "memory_required_fields": ["id", "text", "scope", "status", "source_ref"],
+    "expected_action_enum": ["answer", "abstain", "clarify", "deny_promotion"],
+    "scope_shape": {"type": "global | project", "project_id": "project scope only"},
+    "memory_status_enum": ["active", "superseded", "retracted", "expired", "candidate"]
+  },
+  "sources": [],
+  "notes": "No third-party dataset content is included. Public benchmark adapters and dataset manifests will be tracked separately."
+}

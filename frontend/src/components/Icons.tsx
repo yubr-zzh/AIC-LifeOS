@@ -141,3 +141,16 @@ export const IconSettings = (p: IconProps) =>
     "0 0 24 24",
     p,
   );
+
+export const IconArrowRight = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M5 12h14" />
+      <path d="M13 5l7 7-7 7" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconCheck = (p: IconProps) =>
+  wrap(<path d="M4 12l5 5L20 6" />, "0 0 24 24", p);

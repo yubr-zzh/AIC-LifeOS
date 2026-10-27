@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from lifeos.memory.schema import normalize_scope
+from lifeos.memory.retriever import MemoryRetriever
 
 
 PROFILE_SCHEMA_VERSION = 1
@@ -26,10 +27,15 @@ PROFILE_FIELDS = (
     "confidence",
     "confidence_method",
     "occurred_at",
+    "confirmed_at",
+    "valid_from",
+    "valid_until",
+    "promotion",
     "content",
     "trace_id",
     "status",
     "version_of",
+    "superseded_by",
     "created_at",
     "committed_at",
 )
@@ -38,10 +44,27 @@ PROFILE_FIELDS = (
 def build_memory_profile(store: Dict[str, Any]) -> Dict[str, Any]:
     """Derive global, scenario, and project profiles from active entries only."""
     grouped = {"core_profiles": {}, "scenario_profiles": {}, "project_profiles": {}}
+    now = datetime.now().astimezone()
+    entries_by_id = {
+        entry.get("id"): entry
+        for category in MEMORY_CATEGORIES
+        for entry in store.get(category, []) or []
+        if entry.get("id")
+    }
 
     for category in MEMORY_CATEGORIES:
         for entry in store.get(category, []) or []:
             if entry.get("status", "active") != "active":
+                continue
+            # A derived profile claim is only as current as every source that
+            # supports it. Retrieval already applies this guard; applying it
+            # here prevents stale claims from leaking through profile_view().
+            if entry.get("source_ids") and not MemoryRetriever._lifecycle_matches(
+                entry,
+                now,
+                entries_by_id,
+                historical=False,
+            ):
                 continue
             try:
                 scope = normalize_scope(entry.get("scope"))

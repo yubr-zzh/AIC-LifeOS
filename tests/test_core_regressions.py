@@ -47,6 +47,85 @@ class CoreRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "loopback Gateway"):
             TencentDBConfig.from_env(complete)
 
+    def test_tencentdb_scope_mapping_and_atomic_create_are_explicitly_gated(self):
+        calls = []
+        coordinates = {
+            "team_id": "project-team",
+            "agent_id": "project-agent",
+            "user_id": "project-user",
+            "session_id": "lifeos-project-lifeos",
+        }
+        env = {
+            "LIFEOS_TDAI_ENDPOINT": "http://127.0.0.1:8420",
+            "LIFEOS_TDAI_SERVICE_ID": "test-instance",
+            "LIFEOS_TDAI_TEAM_ID": "global-team",
+            "LIFEOS_TDAI_AGENT_ID": "global-agent",
+            "LIFEOS_TDAI_USER_ID": "global-user",
+            "LIFEOS_TDAI_SCOPE_MAP": json.dumps({"project:lifeos": coordinates}),
+        }
+        config = TencentDBConfig.from_env(env)
+        self.assertFalse(config.atomic_create_enabled)
+        self.assertEqual(
+            TencentDBMemoryAdapter(config).coordinates_for_scope(
+                {"kind": "project", "project_id": "lifeos"}
+            ),
+            coordinates,
+        )
+
+        adapter = TencentDBMemoryAdapter(config, transport=lambda path, payload: calls.append((path, payload)) or {})
+        with self.assertRaisesRegex(TencentDBError, "no explicit TencentDB identity mapping"):
+            adapter.approved_memory_payload({
+                "id": "unmapped",
+                "status": "active",
+                "category": "project",
+                "content": {"claim": "synthetic"},
+                "scope": {"kind": "project", "project_id": "other"},
+            })
+        self.assertEqual(adapter.search_memories("synthetic", {"kind": "project", "project_id": "other"}), [])
+        self.assertEqual(calls, [])
+
+        env["LIFEOS_TDAI_ALLOW_ATOMIC_CREATE"] = "true"
+        enabled = TencentDBMemoryAdapter(
+            TencentDBConfig.from_env(env),
+            transport=lambda path, payload: calls.append((path, payload)) or {"id": payload.get("id")},
+        )
+        scope = {"kind": "project", "project_id": "lifeos"}
+        binding = enabled.scope_key_for(scope)
+        memory = {
+            "id": "memory-1",
+            "status": "active",
+            "category": "project",
+            "content": {"claim": "approved synthetic fact"},
+            "scope": scope,
+            "provider_sync": {"status": "pending", "remote_scope_key": binding},
+        }
+        enabled.write_approved_memory(memory)
+        self.assertEqual(calls[-1][0], "/v3/atomic/create")
+        self.assertEqual({key: calls[-1][1][key] for key in coordinates}, coordinates)
+        self.assertEqual(calls[-1][1]["type"], "work_fact")
+        self.assertNotIn("raw transcript", json.dumps(calls[-1][1]))
+
+        memory["provider_sync"] = {
+            "status": "synced",
+            "remote_id": "lifeos-memory-1",
+            "remote_scope_key": binding,
+        }
+        enabled.write_approved_memory(memory)
+        enabled.delete_approved_memory("memory-1", scope=scope, remote_scope_key=binding)
+        self.assertEqual(calls[-2][0], "/v3/atomic/update")
+        self.assertEqual(calls[-1][0], "/v3/atomic/delete")
+        self.assertEqual(
+            {key: calls[-1][1][key] for key in ("team_id", "agent_id", "user_id")},
+            {key: coordinates[key] for key in ("team_id", "agent_id", "user_id")},
+        )
+
+        with self.assertRaisesRegex(TencentDBError, "binding does not match"):
+            enabled.delete_approved_memory("memory-1", scope=scope, remote_scope_key="stale-scope")
+        self.assertEqual(len(calls), 3)
+
+        with self.assertRaisesRegex(ValueError, "must be true or false"):
+            TencentDBConfig.from_env({**env, "LIFEOS_TDAI_ALLOW_ATOMIC_CREATE": "sometimes"})
+
     def test_tencentdb_adapter_writes_approved_only_and_fail_closed_filters_scope(self):
         calls = []
 
@@ -81,6 +160,14 @@ class CoreRegressionTests(unittest.TestCase):
             team_id="test-team",
             agent_id="test-agent",
             user_id="test-user",
+            scope_map={
+                "project:lifeos": {
+                    "team_id": "project-team",
+                    "agent_id": "project-agent",
+                    "user_id": "project-user",
+                    "session_id": "lifeos-project-lifeos",
+                },
+            },
         )
         adapter = TencentDBMemoryAdapter(config, transport=fake_transport)
         unapproved = {"id": "pending", "content": {"claim": "x"}, "status": "candidate"}
@@ -91,6 +178,7 @@ class CoreRegressionTests(unittest.TestCase):
         first_write = {
             "id": "new-memory",
             "status": "active",
+            "category": "user",
             "content": {"claim": "approved but not remotely bound"},
         }
         with self.assertRaisesRegex(TencentDBError, "cannot create"):
@@ -100,7 +188,11 @@ class CoreRegressionTests(unittest.TestCase):
         approved = {
             "id": "memory-1",
             "status": "active",
-            "provider_sync": {"status": "synced", "remote_id": "lifeos-memory-1"},
+            "provider_sync": {
+                "status": "synced",
+                "remote_id": "lifeos-memory-1",
+                "remote_scope_key": adapter.scope_key_for({"kind": "project", "project_id": "lifeos"}),
+            },
             "category": "project",
             "content": {"claim": "approved fact"},
             "source": "structured_entry",
@@ -109,8 +201,8 @@ class CoreRegressionTests(unittest.TestCase):
         }
         adapter.write_approved_memory(approved)
         self.assertEqual(calls[-1][0], "/v3/atomic/update")
-        self.assertEqual(calls[-1][1]["team_id"], "test-team")
-        self.assertEqual(calls[-1][1]["session_id"], "lifeos-approved-memory")
+        self.assertEqual(calls[-1][1]["team_id"], "project-team")
+        self.assertEqual(calls[-1][1]["session_id"], "lifeos-project-lifeos")
         self.assertIn("review-1", calls[-1][1]["background"])
 
         grouped = adapter.retrieve(
@@ -337,6 +429,40 @@ class CoreRegressionTests(unittest.TestCase):
             run(memory.retract_memory(original["id"]))
         self.assertEqual(memory._find_memory(memory._read(), original["id"])["superseded_by"], corrected["id"])
 
+    def test_memory_correction_splits_validity_at_correction_time(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        memory = MemoryManager(self.path)
+        candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "old wording"},
+            valid_from="2026-01-01T00:00:00+00:00",
+        ))
+        original = run(memory.commit_candidate(candidate["id"]))
+        correction_time = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
+
+        class FrozenDateTime(datetime):
+            @classmethod
+            def utcnow(cls):
+                return correction_time.replace(tzinfo=None)
+
+        with patch("lifeos.memory.manager.datetime", FrozenDateTime):
+            corrected = run(memory.correct_memory(original["id"], {"preference": "new wording"}))
+
+        boundary = correction_time - timedelta(microseconds=1)
+        self.assertEqual(
+            MemoryManager._find_memory(memory._read(), original["id"])["valid_until"],
+            boundary.isoformat(),
+        )
+        self.assertEqual(corrected["valid_from"], correction_time.replace(tzinfo=None).isoformat())
+        before = run(memory.retrieve("old wording", as_of="2026-05-01T00:00:00+00:00"))
+        at_boundary = run(memory.retrieve("old wording", as_of=boundary))
+        at_correction = run(memory.retrieve("new wording", as_of=correction_time))
+        self.assertEqual([item["id"] for item in before["user"]], [original["id"]])
+        self.assertEqual([item["id"] for item in at_boundary["user"]], [original["id"]])
+        self.assertEqual([item["id"] for item in at_correction["user"]], [corrected["id"]])
+
     def test_explicit_memory_retraction_is_idempotent_and_not_recallable(self):
         memory = MemoryManager(self.path)
         candidate = run(memory.propose_update("direct", {"preference": "quiet"}))
@@ -389,6 +515,7 @@ class CoreRegressionTests(unittest.TestCase):
             "kind": "structured_entry",
             "record_id": "daily-review-1",
             "record_kind": "daily_review",
+            "revision": "rev-7",
         }
         scope = {
             "kind": "scenario",
@@ -407,6 +534,8 @@ class CoreRegressionTests(unittest.TestCase):
                 confidence=0.8,
                 confidence_method="user_confirmed",
                 occurred_at="2026-10-01T00:00:00+08:00",
+                valid_from="2026-10-01T00:00:00+08:00",
+                valid_until="2027-01-01T00:00:00+08:00",
             )
         )
         committed = run(memory.commit_candidate(candidate["id"]))
@@ -418,6 +547,10 @@ class CoreRegressionTests(unittest.TestCase):
         self.assertEqual(committed["scope"], scope)
         self.assertEqual(committed["confidence_method"], "user_confirmed")
         self.assertEqual(committed["occurred_at"], "2026-10-01T00:00:00+08:00")
+        self.assertEqual(committed["valid_from"], "2026-10-01T00:00:00+08:00")
+        self.assertEqual(committed["valid_until"], "2027-01-01T00:00:00+08:00")
+        self.assertTrue(committed["confirmed_at"])
+        self.assertEqual(committed["source_ref"]["revision"], "rev-7")
         self.assertEqual(run(memory.retrieve("small runnable examples"))["user"], [])
         learning_hits = run(
             memory.retrieve(
@@ -669,6 +802,62 @@ class CoreRegressionTests(unittest.TestCase):
         }
         self.assertEqual(active_learning_ids, {learning_candidates[1]["id"], bob_candidate["id"]})
 
+    def test_memory_profile_excludes_derived_claim_when_source_is_retracted(self):
+        memory = MemoryManager(self.path)
+        source_candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "source wording"},
+            source_ref={"kind": "manual", "record_id": "source-1"},
+        ))
+        source = run(memory.commit_candidate(source_candidate["id"]))
+        store = memory._read()
+        store["user"].append({
+            "id": "derived-1",
+            "source": "reflection",
+            "category": "user",
+            "scope": source["scope"],
+            "source_ids": [source["id"]],
+            "content": {"summary": "derived wording"},
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00",
+        })
+        memory._write(store)
+        profile_ids = {
+            item["id"]
+            for profile in memory.profile_view()["core_profiles"]
+            for item in profile["memories"]
+        }
+        self.assertEqual(profile_ids, {source["id"], "derived-1"})
+
+        run(memory.retract_memory(source["id"], "source withdrawn"))
+        self.assertEqual(memory.profile_view()["core_profiles"], [])
+
+        source_candidate = run(memory.propose_update(
+            "direct",
+            {"preference": "another source wording"},
+            source_ref={"kind": "manual", "record_id": "source-2"},
+        ))
+        source = run(memory.commit_candidate(source_candidate["id"]))
+        store = memory._read()
+        store["user"].append({
+            "id": "derived-2",
+            "source": "reflection",
+            "category": "user",
+            "scope": source["scope"],
+            "source_ids": [source["id"]],
+            "content": {"summary": "second derived wording"},
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00",
+        })
+        memory._write(store)
+        run(memory.correct_memory(source["id"], {"preference": "corrected wording"}))
+        profile_ids = {
+            item["id"]
+            for profile in memory.profile_view()["core_profiles"]
+            for item in profile["memories"]
+        }
+        self.assertNotIn("derived-2", profile_ids)
+
     def test_legacy_memory_store_is_upgraded_once_with_backup(self):
         legacy_store = {
             "user": [{"id": "old-user", "source": "direct", "content": {"preference": "short"}}],
@@ -689,13 +878,16 @@ class CoreRegressionTests(unittest.TestCase):
         MemoryManager(self.path)
         reopened = memory._read()
 
-        self.assertEqual(migrated["schema_version"], 3)
+        self.assertEqual(migrated["schema_version"], 4)
         self.assertEqual(migrated["user"][0]["scope"]["kind"], "global")
         self.assertEqual(migrated["user"][0]["source_ref"], None)
         self.assertEqual(migrated["user"][0]["content"], {"preference": "short"})
         self.assertEqual(migrated["user"][0]["status"], "active")
         self.assertEqual(first_backup_count, 1)
-        self.assertEqual(reopened["schema_version"], 3)
+        self.assertEqual(reopened["schema_version"], 4)
+        self.assertIsNone(reopened["user"][0]["confirmed_at"])
+        self.assertIsNone(reopened["user"][0]["valid_from"])
+        self.assertIsNone(reopened["user"][0]["promotion"])
         self.assertEqual(len(reopened["backups"]), first_backup_count)
 
     def test_schema_v2_memory_store_migrates_lifecycle_status_once(self):
@@ -718,7 +910,7 @@ class CoreRegressionTests(unittest.TestCase):
         MemoryManager(self.path)
         reopened = memory._read()
 
-        self.assertEqual(first["schema_version"], 3)
+        self.assertEqual(first["schema_version"], 4)
         self.assertEqual(first["user"][0]["status"], "active")
         self.assertEqual(first["backups"][0]["store"]["schema_version"], 2)
         self.assertEqual(len(reopened["backups"]), backup_count)
@@ -768,15 +960,24 @@ class CoreRegressionTests(unittest.TestCase):
             def __init__(self):
                 self.writes = []
                 self.deletes = []
+                self.write_bindings = []
                 self.fail_next_write = False
+                self.fail_next_delete = False
+
+            def scope_key_for(self, scope):
+                return scope.get("kind", "global")
 
             def write_approved_memory(self, item):
+                self.write_bindings.append(item.get("provider_sync", {}).get("remote_scope_key"))
                 if self.fail_next_write:
                     self.fail_next_write = False
                     raise RuntimeError("simulated provider outage")
                 self.writes.append(item["id"])
 
-            def delete_approved_memory(self, memory_id):
+            def delete_approved_memory(self, memory_id, *, scope=None, remote_scope_key=None):
+                if self.fail_next_delete:
+                    self.fail_next_delete = False
+                    raise RuntimeError("simulated provider delete outage")
                 self.deletes.append(memory_id)
 
         provider = FakeMemoryProvider()
@@ -810,6 +1011,7 @@ class CoreRegressionTests(unittest.TestCase):
         approved = fetch(f"/memory/candidates/{candidate['id']}/commit", "POST")
         self.assertEqual(approved["status"], "committed")
         self.assertEqual(approved["item"]["provider_sync"]["status"], "synced")
+        self.assertEqual(approved["item"]["provider_sync"]["remote_scope_key"], "global")
         self.assertEqual(provider.writes, [candidate["id"]])
         self.assertEqual(fetch("/memory")["user"][0]["id"], candidate["id"])
         profile = fetch("/memory/profile")
@@ -846,10 +1048,26 @@ class CoreRegressionTests(unittest.TestCase):
         provider.fail_next_write = True
         failed_sync = fetch(f"/memory/candidates/{pending['id']}/commit", "POST")
         self.assertEqual(failed_sync["item"]["provider_sync"]["status"], "pending")
+        self.assertEqual(failed_sync["item"]["provider_sync"]["remote_scope_key"], "global")
         retried_sync = fetch("/memory/providers/tencentdb/sync-pending", "POST")
         self.assertEqual(
             retried_sync["results"],
             [{"memory_id": pending["id"], "status": "synced"}],
+        )
+        self.assertEqual(
+            agent.memory._find_memory(agent.memory._read(), pending["id"])["provider_sync"]["remote_scope_key"],
+            "global",
+        )
+        pending_delete = run(agent.memory.propose_update("direct", {"preference": "delete retry"}))
+        fetch(f"/memory/candidates/{pending_delete['id']}/commit", "POST")
+        provider.fail_next_delete = True
+        failed_retract = fetch(f"/memory/{pending_delete['id']}/retract", "POST")
+        self.assertEqual(failed_retract["memory"]["status"], "retracted")
+        self.assertEqual(failed_retract["memory"]["provider_sync"]["status"], "pending")
+        retried_delete = fetch("/memory/providers/tencentdb/sync-pending", "POST")
+        self.assertEqual(
+            retried_delete["results"],
+            [{"memory_id": pending_delete["id"], "status": "deleted"}],
         )
         self.assertEqual(fetch("/skills/pending/skill-1/approve", "POST")["status"], "approved")
         self.assertEqual(fetch("/skills")["approved"][0]["id"], "skill-1")
@@ -877,7 +1095,7 @@ class CoreRegressionTests(unittest.TestCase):
             def write_approved_memory(self, item):
                 self.items.append(item)
 
-            def delete_approved_memory(self, _memory_id):
+            def delete_approved_memory(self, _memory_id, *, scope=None, remote_scope_key=None):
                 pass
 
         provider = FakeMemoryProvider()

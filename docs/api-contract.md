@@ -213,6 +213,8 @@ type MemoryCandidate = {
   source_ref: MemorySourceRef | null;
   scope: MemoryScope;
   occurred_at: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
   confidence: number | null;
   confidence_method: string | null;
   content: Record<string, unknown>;
@@ -220,6 +222,14 @@ type MemoryCandidate = {
   status: "candidate" | "committed" | "rejected";
   created_at: string;
   committed_at?: string;
+};
+
+type MemoryPromotion = {
+  source_memory_id: string;
+  source_scope: MemoryScope;
+  target_scope: MemoryScope;
+  reason: string;
+  authorized_at: string;
 };
 
 type MemorySourceRef = {
@@ -238,8 +248,14 @@ type MemoryScope = {
 };
 ```
 
-Memory entries carry the same provenance, scope, occurrence-time, and optional
-confidence fields as candidates. New stores use schema version 3. Existing
+Memory entries carry the same provenance, scope, occurrence-time, validity-time,
+and optional confidence fields as candidates, plus `confirmed_at` and optional
+promotion metadata. `source_ref.revision` identifies the source revision when
+available; `version_of` / `superseded_by` link corrected memory versions.
+`valid_from` and `valid_until` are optional ISO-8601 effective-time bounds;
+`confirmed_at` records the explicit candidate commit time. `promotion` records
+the source memory and scope, target scope, reason, and authorization time when a
+cross-scope promotion is implemented. New stores use schema version 4. Existing
 stores are upgraded once and retain a pre-upgrade snapshot in `backups`; legacy
 `user/direct` records become `global`, other legacy records without a scope are
 marked `unassigned`, and existing accepted memories become `active`. Unknown

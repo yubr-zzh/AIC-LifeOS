@@ -16,7 +16,7 @@ MEMORY_SOURCES = {
     "agent_execution",
 }
 SCOPE_KINDS = {"global", "scenario", "project", "unassigned"}
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 def migrate_store(store: Dict[str, Any], source_category) -> tuple[Dict[str, Any], bool]:
@@ -45,6 +45,10 @@ def migrate_store(store: Dict[str, Any], source_category) -> tuple[Dict[str, Any
             entry.setdefault("confidence", None)
             entry.setdefault("confidence_method", None)
             entry.setdefault("occurred_at", None)
+            entry.setdefault("confirmed_at", entry.get("committed_at"))
+            entry.setdefault("valid_from", None)
+            entry.setdefault("valid_until", None)
+            entry.setdefault("promotion", None)
             entry.setdefault("status", "active")
 
     migrated.setdefault("candidates", [])
@@ -71,6 +75,8 @@ def migrate_store(store: Dict[str, Any], source_category) -> tuple[Dict[str, Any
         candidate.setdefault("confidence", None)
         candidate.setdefault("confidence_method", None)
         candidate.setdefault("occurred_at", None)
+        candidate.setdefault("valid_from", None)
+        candidate.setdefault("valid_until", None)
 
     migrated.setdefault("backups", [])
     migrated.setdefault("vector_index", {})
@@ -149,3 +155,22 @@ def validate_confidence(confidence: float | None, method: str | None) -> None:
         raise ValueError("confidence must be a number between 0 and 1")
     if not isinstance(method, str) or not method.strip():
         raise ValueError("confidence requires confidence_method")
+
+
+def validate_validity(valid_from: str | None, valid_until: str | None) -> None:
+    """Validate optional effective-time bounds as ISO-8601 timestamps."""
+    for field, value in (("valid_from", valid_from), ("valid_until", valid_until)):
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field} must be an ISO-8601 timestamp or null")
+            try:
+                datetime.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError(f"{field} must be an ISO-8601 timestamp or null") from exc
+    if valid_from and valid_until:
+        start = datetime.fromisoformat(valid_from)
+        end = datetime.fromisoformat(valid_until)
+        if start.tzinfo != end.tzinfo:
+            raise ValueError("validity timestamps must use compatible timezone information")
+        if end <= start:
+            raise ValueError("valid_until must be later than valid_from")
