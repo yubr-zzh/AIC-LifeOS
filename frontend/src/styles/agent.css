@@ -1012,3 +1012,112 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 @media (hover: none) {
   .turn-foot { visibility: visible; }
 }
+
+/* ---- 轮次底部：已使用的上下文（§7）----
+   折叠条而不是常驻 chip 墙：一轮可能读 20 个文件，常驻会把回答挤没。 */
+.turn-context {
+  margin-top: 2px;
+  font: 11px/1.6 var(--font-ui);
+}
+.turn-context > summary {
+  width: fit-content;
+  padding: 1px 4px 1px 0;
+  color: var(--fg-4);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.turn-context > summary::-webkit-details-marker { display: none; }
+.turn-context > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 5px;
+  border-left: 3.5px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  vertical-align: 1px;
+  transition: transform 100ms ease-in-out;
+}
+.turn-context[open] > summary::before { transform: rotate(90deg); }
+.turn-context > summary:hover { color: var(--fg-2); }
+.turn-context > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.turn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  color: var(--fg-3);
+}
+.turn-chip-kind {
+  flex: none;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-3);
+  color: var(--fg-4);
+  font-size: 10px;
+}
+.turn-chip.is-write { border-color: color-mix(in srgb, var(--mint-6) 45%, var(--bd-2)); }
+.turn-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;      /* 长路径省略时保留文件名，丢掉前面的目录 */
+  text-align: left;
+}
+
+/* ---- Composer 里的排队区（Steering）---- */
+.agc-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.agc-queue > li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px dashed var(--bd-2);
+  border-radius: var(--r-1);
+  color: var(--fg-3);
+  font: 11px/1.5 var(--font-ui);
+}
+.agc-queue-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fg-4);
+}
+.agc-queue-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agc-queue-x {
+  flex: none;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.agc-queue-x:hover { color: var(--fg-1); }

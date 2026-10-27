@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTurns, flowItems, isTurnStart, toolTier } from "./agentFlow";
+import { buildTurns, contextItems, flowItems, isTurnStart, toolTier } from "./agentFlow";
 import type { AgentMessage, AgentToolCall } from "../api/agentTypes";
 
 const m = (a: Partial<AgentMessage> & { messageId: string; seq: number }): AgentMessage => ({
@@ -85,6 +85,29 @@ describe("agentFlow", () => {
     expect(toolTier("Bash")).toBe("expandable");
     expect(toolTier("Write")).toBe("expandable");
     expect(toolTier("UnknownThing")).toBe("expandable");
+  });
+
+  it("上下文条只取工具输入里的路径与模式，同名同类型去重", () => {
+    const items = contextItems([
+      call({ toolUseId: "a", seq: 1, name: "Read", input: { file_path: "src/App.tsx" } }),
+      call({ toolUseId: "b", seq: 2, name: "Read", input: { file_path: "src/App.tsx" } }),
+      call({ toolUseId: "c", seq: 3, name: "Edit", input: { file_path: "src/App.tsx" } }),
+      call({ toolUseId: "d", seq: 4, name: "Grep", input: { pattern: "useAgentStream" } }),
+      call({ toolUseId: "e", seq: 5, name: "Bash", input: { command: "npm test" } }),
+    ]);
+    expect(items).toEqual([
+      { label: "src/App.tsx", kind: "read" },
+      { label: "src/App.tsx", kind: "write" },
+      { label: "useAgentStream", kind: "search" },
+    ]);
+  });
+
+  it("输入结构异常的调用不会造出空 chip", () => {
+    const items = contextItems([
+      call({ toolUseId: "a", seq: 1, name: "Read", input: null }),
+      call({ toolUseId: "b", seq: 2, name: "Read", input: { file_path: 42 } }),
+    ]);
+    expect(items).toEqual([]);
   });
 
   it("没有用户消息的历史也能成轮（user 为 null）", () => {

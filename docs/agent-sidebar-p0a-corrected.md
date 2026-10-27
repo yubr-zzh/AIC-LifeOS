@@ -325,3 +325,63 @@ type LiuItem = { t: "msg"; m: AgentMessage } | { t: "tool"; call: AgentToolCall 
 - 后端：`test_*bridge*.py` **211 项通过**
 - 构建：`vite build` 1.78s
 - 预览模式截图：`frontend/.shots/agent-sidebar-p0a-v2.png`
+
+## 11. P0-B 实施记录（2026-10-27）
+
+在 P0-A 之上补齐 VSCode 侧栏的结构层，共四项：
+
+### 11.1 turn 分组
+
+- 新增 `frontend/src/panels/agentFlow.ts`（纯函数，无 React 依赖）：
+  `buildTurns()` / `flowItems()` / `contextItems()` / `toolTier()`。
+- **轮次边界 = `role === "user" && kind === "text"`**。只判 `role === "user"`
+  会把每条 `tool_result` 都切成新一轮（SDK 里 tool_result 的角色也是 user）。
+- turns 是 messages 的**派生视图**，不进 reducer。放进 reducer 要在快照、
+  补拉、去重三条路径各维护一次，漂移风险高于收益。
+- 工具调用按 seq 落到「最后一个 `start <= call.seq`」的轮次；只有调用、
+  没有消息时补一个 `user: null` 的轮作为兜底。
+
+### 11.2 三档可见度
+
+- `toolTier()`：`Read / Grep / Glob / WebFetch / WebSearch / TodoWrite /
+  BashOutput` 为 `progress` 档，成功时渲染成**不可交互的一行**——不是
+  `<button>`，不进 Tab 序，无 hover 反馈。
+- `Bash / Write / Edit / MultiEdit` 等为 `expandable`，保持可展开。
+- **失败与等待审批无视档位**，一律展开可见。
+
+### 11.3 轮次 footer 工具栏
+
+- hover 出现「复制 / 重试」，用 `visibility` 而非 `display` 切换，避免 hover
+  时布局跳动；`@media (hover: none)` 下回退常显。
+- 「重试」复用 `api.act.send`，不是新接口。
+
+### 11.4 已使用的上下文（§7）
+
+- `contextItems()` 只读工具输入里的 `file_path` / `notebook_path` /
+  `pattern`，按 `(kind,label)` 去重，**不拼任何 Agent 文本**。
+- 渲染成轮次底部的 `<details>` 折叠条：一轮可能读 20 个文件，常驻 chip 墙
+  会把回答挤没。
+
+### 11.5 Steering 队列（P2 提前做）
+
+- Agent 执行中（`state ∉ {idle, ended}`）Enter 只入队，不直接发。
+  直接发会让 Bridge 同时起两条 `paichu`，两串工具调用交错。
+- `flushing` ref 保证**一次只放行一条**：发出去的瞬间状态还没翻成
+  `thinking`，不拦住的话第二条会在同一帧被连带发出。
+- 状态回到 `idle` / `ended` 时自动放行队首；发送失败留在队里等下次状态变迁，
+  不静默丢弃。排队项可单独取消。
+
+### 未做（有意）
+
+- **审批卡不按 `.chat-confirmation-widget2` 重写**：现有 `.apr` 已包含可信/
+  不可信分区、超时进度、截断保护、危险命令二次确认，信息量高于 VSCode 的
+  widget，照抄是降级。
+- 虚拟列表：会话超过 300 行再考虑。
+- **Agent 输出仍未渲染 Markdown**（纯文本 + `white-space: pre-wrap`）。
+  需要 `react-markdown` + `remark-gfm`，属于新增依赖，待确认。
+
+### 验证
+
+- 前端：typecheck 干净；15 个测试文件 **126 通过 + 12 skipped**
+- 后端：`test_*bridge*.py` **211 项通过**
+- 预览模式截图：`frontend/.shots/agent-sidebar-p0b2.png`

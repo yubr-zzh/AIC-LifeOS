@@ -30,6 +30,45 @@ export type FlowItem =
   | { t: "tool"; call: AgentToolCall }
   | { t: "group"; calls: AgentToolCall[] };
 
+/** 本轮碰过的上下文（文件 / 搜索模式），用于轮次底部的折叠条。 */
+export interface ContextItem {
+  label: string;
+  kind: "read" | "write" | "search";
+}
+
+function str(v: unknown, key: string): string {
+  if (!v || typeof v !== "object") return "";
+  const x = (v as Record<string, unknown>)[key];
+  return typeof x === "string" ? x : "";
+}
+
+/**
+ * 汇总一轮里用到的上下文。
+ *
+ * 只取工具输入里的路径/模式，不拼任何 Agent 文本；同名去重后按首次出现排序。
+ */
+export function contextItems(calls: AgentToolCall[]): ContextItem[] {
+  const out: ContextItem[] = [];
+  const seen = new Set<string>();
+  const push = (label: string, kind: ContextItem["kind"]) => {
+    const key = `${kind}:${label}`;
+    if (!label || seen.has(key)) return;
+    seen.add(key);
+    out.push({ label, kind });
+  };
+
+  for (const c of calls) {
+    const p = str(c.input, "file_path") || str(c.input, "notebook_path");
+    if (c.name === "Read" && p) push(p, "read");
+    else if ((c.name === "Write" || c.name === "Edit" || c.name === "MultiEdit") && p) push(p, "write");
+    else if (c.name === "Glob" || c.name === "Grep") {
+      const q = str(c.input, "pattern");
+      if (q) push(q, "search");
+    }
+  }
+  return out;
+}
+
 /**
  * 一轮对话 = 一次用户输入 + 它触发的全部 assistant / tool / 系统消息。
  *
