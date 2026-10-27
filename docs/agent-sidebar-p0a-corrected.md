@@ -385,3 +385,42 @@ type LiuItem = { t: "msg"; m: AgentMessage } | { t: "tool"; call: AgentToolCall 
 - 前端：typecheck 干净；15 个测试文件 **126 通过 + 12 skipped**
 - 后端：`test_*bridge*.py` **211 项通过**
 - 预览模式截图：`frontend/.shots/agent-sidebar-p0b2.png`
+
+## 12. Markdown + 公式渲染（2026-10-27）
+
+Agent 正文和 LifeOS 对话回答此前是纯文本（`white-space: pre-wrap`），
+`**加粗**`、代码块、表格、`$x^2$` 全部原样显示。本轮补上：
+
+### 12.1 依赖
+
+`react-markdown` + `remark-gfm`（表格 / 任务列表）+ `remark-math` +
+`rehype-katex`（公式）+ `rehype-highlight`（代码高亮）+ `katex`。
+
+### 12.2 安全边界
+
+- **不挂 `rehype-raw`**：Agent 输出是不可信内容，原文 HTML 一律按字面
+  文本渲染，不走 `innerHTML`，没有注入面（有测试守着）。
+- 链接强制 `target="_blank" rel="noopener noreferrer"`。
+- 图片加 `loading="lazy" referrerPolicy="no-referrer"`，避免 Agent 输出
+  变成追踪信标。
+- **工具产出不走 Markdown**：`ToolStep` / `agb-io` 仍是 `<pre>`，原始
+  字节不该被当成文档解释。
+
+### 12.3 落点
+
+| 位置 | 改动 |
+|---|---|
+| `components/Markdown.tsx` | 新增，统一封装 remark/rehype 插件与组件替换 |
+| `AgentPanel` 助手正文 | `Bubble` 的 assistant 分支换成 `<Markdown>` |
+| `AgentPanel` 流式正文 | `streaming.kind === "text"` 时用 `<Markdown>`，thinking 保持纯文本 |
+| `ChatPanel` 助手回答 | `.assistant-content` 内换成 `<Markdown>` |
+| `global.css` | `.md` 样式（标题/列表/代码/表格/引用/公式/hljs 配色），颜色全走令牌 |
+| `main.tsx` | 引入 `katex/dist/katex.min.css` |
+
+### 12.4 已知代价
+
+- 产物 JS 1.32 MB（gzip 416 KB），主要是 highlight.js 的 common 语言包
+  （37 种）与 KaTeX 字体。本地桌面应用可接受；若要压，得换成按需语言集
+  或把 Markdown 组件做成异步 chunk。
+- 行内公式用 `$...$`，而 shell 片段里的两个 `$`（如 `$HOME` 与 `$PATH`
+  同段）可能被误判成公式。这是 remark-math 的固有取舍，暂不处理。

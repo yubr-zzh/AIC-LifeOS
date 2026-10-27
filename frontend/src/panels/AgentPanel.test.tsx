@@ -233,6 +233,23 @@ describe("AgentPanel 的工具调用合并", () => {
     );
     expect(screen.queryByText(/已使用的上下文/)).toBeNull();
   });
+
+  it("助手正文走 Markdown 渲染，不是纯文本", () => {
+    zhuang([msg({ messageId: "a", seq: 1, kind: "text", text: "**加粗** 与 `code`" })], {});
+    expect(document.querySelector(".md strong")?.textContent).toBe("加粗");
+    expect(document.querySelector(".md code")?.textContent).toBe("code");
+  });
+
+  it("工具产出仍是 <pre>，不被当成 Markdown 解释", () => {
+    zhuang(
+      [msg({ messageId: "t", seq: 1, kind: "tool_use", toolUseId: "ghost", toolName: "Read",
+             toolInput: { file_path: "a.ts" } })],
+      {},
+    );
+    const pre = document.querySelector(".agb-io");
+    expect(pre?.tagName).toBe("PRE");
+    expect(document.querySelector(".agb-io .md")).toBeNull();
+  });
 });
 
 /**

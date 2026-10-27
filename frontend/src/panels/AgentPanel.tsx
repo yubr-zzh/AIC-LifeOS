@@ -16,6 +16,7 @@ import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { CopyTextButton } from "../components/CopyTextButton";
 import { ToolGroup, ToolStep } from "./ToolStep";
 import { buildTurns, contextItems, type FlowItem, type Turn } from "./agentFlow";
+import { Markdown } from "../components/Markdown";
 import { groupLabel } from "./toolSummary";
 
 interface Props {
@@ -286,6 +287,10 @@ function TurnBlock({
                 <span className="agts-text">生成工具参数中…</span>
               </div>
             </div>
+          ) : streaming.kind === "text" ? (
+            <div className="agb agb-text-stream">
+              <Markdown text={streaming.text} />
+            </div>
           ) : (
             <div className={`agb agb-${streaming.kind}`}>
               {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
@@ -486,7 +491,11 @@ export function Bubble({ m }: { m: AgentMessage }) {
   return (
     <div className={`agb ${cls}`}>
       <CopyTextButton text={m.text} className="agb-copy" />
-      <div className="agb-text">{m.text}</div>
+      {m.role === "assistant" ? (
+        <Markdown text={m.text} />
+      ) : (
+        <div className="agb-text">{m.text}</div>
+      )}
     </div>
   );
 }
