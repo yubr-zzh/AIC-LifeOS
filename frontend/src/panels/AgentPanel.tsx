@@ -192,7 +192,53 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
 function StatusBar({ session, store }: { session: AgentSession | null; store: AgentStore }) {
   const { state } = store;
   const lei = state.lastResult[session?.sessionId ?? ""];
-  const yong = session ? Math.max(0, Math.round((Date.now() - session.createdAt) / 1000)) : 0;
+  const st = session?.state ?? null;
+  const sid = session?.sessionId ?? null;
+
+  // 本次对话计时（整批口径）：第一批指令开始跑（进入运行态）起算，整批结束
+  // （ended / error）或被中断才冻结；多条指令之间经过的瞬间 idle 按暂停处理，
+  // 恢复后接着走；等审批、等回答也算对话进行中，照常计时。
+  // 旧口径从 session.createdAt 起算——会话建好没发指令也在走，且结束后不停。
+  const [, setXin] = useState(0);
+  const ji = useRef({ sid: null as string | null, qi: 0, leiJi: 0, ticking: false, tingAt: 0, prev: null as string | null });
+  const m = ji.current;
+  const pao = st === "thinking" || st === "working" || st === "attention" || st === "waiting_input" || st === "backoff";
+
+  if (sid !== m.sid) {
+    // 换会话：计时清零重来。
+    m.sid = sid; m.qi = 0; m.leiJi = 0; m.ticking = false; m.tingAt = 0; m.prev = null;
+  }
+  if (st !== m.prev) {
+    const xianzai = Date.now();
+    if (pao) {
+      if (!m.ticking) {
+        // 结束/出错之后、或停下来超过 3 秒之后再跑，算新一轮，归零重计；
+        // 批内指令之间的 idle 只有几毫秒，不算新一轮。
+        const xinYiLun = m.prev === null || m.prev === "ended" || m.prev === "error"
+          || (m.prev === "idle" && m.tingAt > 0 && xianzai - m.tingAt > 3000);
+        if (xinYiLun) m.leiJi = 0;
+        m.qi = xianzai;
+        m.ticking = true;
+      }
+    } else {
+      if (m.ticking) {
+        m.leiJi += xianzai - m.qi;
+        m.ticking = false;
+      }
+      m.tingAt = xianzai;
+    }
+    m.prev = st;
+  }
+
+  // 对话进行中每秒走一格；停了就不刷，冻结在最后一格。
+  const ticking = m.ticking;
+  useEffect(() => {
+    if (!ticking) return;
+    const jia = setInterval(() => setXin((x) => x + 1), 1000);
+    return () => clearInterval(jia);
+  }, [ticking]);
+
+  const yong = Math.max(0, Math.round((m.leiJi + (m.ticking ? Date.now() - m.qi : 0)) / 1000));
   return (
     <div className="agp-bar">
       <span className={`pill ${session ? STATE_TONE[session.state] : "idle"} sm`}>
@@ -203,7 +249,7 @@ function StatusBar({ session, store }: { session: AgentSession | null; store: Ag
       {session && session.batchTotal > 0 ? (
         <span className="mono">第 {session.batchDone}/{session.batchTotal} 条指令</span>
       ) : null}
-      {yong > 0 ? <span className="mono">已用 {yong}s</span> : null}
+      {yong > 0 ? <span className="mono">{m.ticking ? `已用 ${yong}s` : `用时 ${yong}s`}</span> : null}
       {lei?.totalCostUsd ? <span className="mono">{money(lei.totalCostUsd)}</span> : null}
       {session && session.pendingPermissions.length + session.pendingQuestions.length > 0 ? (
         <span className="pill confirm sm"><span className="dot" />挂起 {session.pendingPermissions.length + session.pendingQuestions.length}</span>

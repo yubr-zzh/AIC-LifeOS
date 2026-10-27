@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { AgentPanel, Bubble } from "./AgentPanel";
 import { initialAgentState, type AgentStore } from "../state/agentStore";
 import type { AgentActions } from "../hooks/useAgentStream";
@@ -135,5 +135,77 @@ describe("AgentPanel 的结束态与工作指示", () => {
     expect(screen.getByText("Agent 回复")).toBeTruthy();
     expect(screen.queryByText("从执行结果提炼记忆")).toBeNull();
     await waitFor(() => expect(loadHistory).toHaveBeenCalledWith("s-1"));
+  });
+});
+
+/**
+ * 对话计时器（整批口径）：第一批指令开始跑起算，整批结束（ended/error/中断）
+ * 冻结；等审批、等回答算对话进行中，照常走。旧口径从 session.createdAt 起算、
+ * 结束后也不停，这两个行为都在这里钉死防止回退。
+ */
+describe("AgentPanel 的对话计时器", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const session = (a: Partial<AgentSession> = {}): AgentSession => ({
+    sessionId: "s-1", agentId: "claude-code", agentLabel: "Claude Code", cwd: "/tmp",
+    permissionMode: "manual", effectiveMode: "manual", state: "idle", title: "任务",
+    claudeSessionId: null, ownerId: "local", deviceId: "dev-1", planId: null, traceId: null,
+    batchTotal: 0, batchDone: 0, createdAt: 1, updatedAt: 2, turnCount: 0,
+    pendingPermissions: [], pendingQuestions: [], alive: false, streamEpoch: 1,
+    ...a,
+  });
+
+  const hua = (current: AgentSession) => {
+    const store = {
+      state: {
+        ...initialAgentState,
+        sessions: { [current.sessionId]: current },
+        messages: {},
+        activeSessionId: current.sessionId,
+      },
+      dispatch: () => undefined,
+      loadHistory: vi.fn(),
+      active: current,
+      streaming: null,
+      todo: 0,
+    } as unknown as AgentStore;
+    const api = { preview: false, busy: null, act: {} } as unknown as AgentActions;
+    return <AgentPanel store={store} api={api} onCollapse={() => undefined} />;
+  };
+
+  it("空闲时（还没开始对话）不计时", () => {
+    vi.useFakeTimers();
+    render(hua(session({ state: "idle" })));
+    expect(screen.queryByText(/已用|用时/)).toBeNull();
+  });
+
+  it("对话开始计时，等审批接着走，结束后冻结不动", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const { rerender } = render(hua(session({ state: "idle" })));
+    rerender(hua(session({ state: "working" })));
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(screen.getByText("已用 5s")).toBeTruthy();
+    // 等你决定也是对话进行中，继续走。
+    rerender(hua(session({ state: "attention" })));
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.getByText("已用 8s")).toBeTruthy();
+    // 整批结束：冻结在最后一格，时间再久也不动。
+    rerender(hua(session({ state: "ended" })));
+    expect(screen.getByText("用时 8s")).toBeTruthy();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(screen.queryByText("已用 68s")).toBeNull();
+    expect(screen.getByText("用时 8s")).toBeTruthy();
+  });
+
+  it("结束后再发新指令，计时归零重计", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const { rerender } = render(hua(session({ state: "ended" })));
+    rerender(hua(session({ state: "working" })));
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(screen.getByText("已用 2s")).toBeTruthy();
   });
 });
