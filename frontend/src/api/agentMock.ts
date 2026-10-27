@@ -117,6 +117,8 @@ const script: DownFrame[] = [
       msg({ role: "user", kind: "text", text: "指令 1/3：跑一遍测试并修掉失败项" }),
       msg({ role: "assistant", kind: "thinking", text: "先看测试目录的结构，再决定跑哪一条。" }),
       msg({ role: "assistant", kind: "text", text: "我先跑一遍完整测试。" }),
+      msg({ role: "assistant", kind: "tool_use", toolName: "Read", toolUseId: "t-mock0",
+            toolInput: { file_path: "src/panels/AgentPanel.tsx" }, state: "executing" }),
       msg({ role: "assistant", kind: "tool_use", toolName: "Bash", toolUseId: "t-mock1",
             toolInput: { command: "pytest -q tests/" }, state: "executing" }),
     ],
@@ -134,6 +136,11 @@ const script: DownFrame[] = [
   frame({ type: "state", state: "attention", lastEvent: "permission_requested" } as never),
   frame({ type: "permission_resolved", requestId: approval.requestId, decision: "user_allow", autoDecided: false, autoReason: null, replayed: false } as never),
   frame({ type: "state", state: "working", lastEvent: "permission_resolved" } as never),
+  frame({
+    type: "message",
+    message: msg({ role: "user", kind: "tool_result", toolName: "Read", toolUseId: "t-mock0",
+                   text: "1.2 KB", state: "completed" }),
+  } as never),
   frame({
     type: "message",
     message: msg({ role: "user", kind: "tool_result", toolName: "Bash", toolUseId: "t-mock1",

@@ -14,7 +14,7 @@ import { AgentComposer } from "./AgentComposer";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { ToolGroup, ToolStep } from "./ToolStep";
-import { buildTurns, type FlowItem, type Turn } from "./agentFlow";
+import { buildTurns, contextItems, type FlowItem, type Turn } from "./agentFlow";
 import { groupLabel } from "./toolSummary";
 
 interface Props {
@@ -44,6 +44,31 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
     () => (active ? buildTurns(lie, state.toolCalls, active.sessionId) : []),
     [lie, state.toolCalls, active],
   );
+
+  // ---- Steering 队列 ----
+  // Agent 执行中 Enter 先排队，回到 idle/ended 再发。直接发会让 Bridge
+  // 同时起两条 paichu，指令与工具调用交错。
+  const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
+  const steering = Boolean(active) && active!.state !== "idle" && active!.state !== "ended";
+  const idleReady = Boolean(active) && (active!.state === "idle" || active!.state === "ended");
+  // 一次只发一条：发出去的瞬间状态还没翻成 thinking，若不拦住，
+  // 第二条会在同一帧被连带发出，两条 paichu 就在 Bridge 里撞车了。
+  const flushing = useRef(false);
+
+  useEffect(() => {
+    if (!idleReady) {
+      flushing.current = false;
+      return;
+    }
+    if (flushing.current || !queue.length || !active) return;
+    flushing.current = true;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    void api.act.send(active.sessionId, { text: next.text }).catch(() => {
+      // 失败就留在队里，等下一次状态变迁再试——不要吞掉。
+      setQueue((q) => [next, ...q]);
+    });
+  }, [queue, idleReady, active, api.act]);
 
   const locateApproval = (rid: string) => {
     const el = document.getElementById(`apr-${rid}`);
@@ -178,7 +203,11 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         disabled={!kai || !active}
         busy={api.busy}
         canInterrupt={Boolean(active) && !["idle", "ended", "attention", "waiting_input"].includes(active!.state)}
+        steering={steering}
+        queued={queue}
         onSend={(t) => active && void api.act.send(active.sessionId, { text: t }).catch(() => undefined)}
+        onQueue={(t) => setQueue((q) => [...q, { id: `q-${Date.now()}-${q.length}`, text: t }])}
+        onUnqueue={(id) => setQueue((q) => q.filter((x) => x.id !== id))}
         onInterrupt={() => active && void api.act.interrupt(active.sessionId)}
       />
     </section>
@@ -205,6 +234,11 @@ function TurnBlock({
   onLocateApproval: (requestId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+
+  // 本轮碰过的文件 / 搜索模式，折叠在轮次底部。
+  const ctx = contextItems(
+    turn.items.flatMap((i) => (i.t === "tool" ? [i.call] : i.t === "group" ? i.calls : [])),
+  );
 
   const copy = async () => {
     const parts: string[] = [];
@@ -252,6 +286,20 @@ function TurnBlock({
           )
         ) : null}
       </div>
+
+      {ctx.length > 0 ? (
+        <details className="turn-context">
+          <summary>已使用的上下文 ({ctx.length})</summary>
+          <ul>
+            {ctx.map((c) => (
+              <li key={`${c.kind}:${c.label}`} className={`turn-chip is-${c.kind}`} title={c.label}>
+                <span className="turn-chip-kind">{c.kind === "read" ? "读" : c.kind === "write" ? "写" : "搜"}</span>
+                <span className="turn-chip-label mono">{c.label}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <div className="turn-foot">
         <button type="button" className="turn-act" onClick={() => void copy()}>
