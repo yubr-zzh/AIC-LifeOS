@@ -41,7 +41,10 @@ function MarkdownPreview({ value }: { value: string }) {
 
     const flushList = () => {
       if (!list) return;
-      const items = list.items.map((item, index) => <li key={index}>{inlineNodes(item)}</li>);
+      const items = list.items.map((item, index) => {
+        const task = /^\[([ xX])\]\s+/.exec(item);
+        return <li key={index} className={task ? "markdown-task" : undefined}>{task ? <><input type="checkbox" checked={task[1].toLowerCase() === "x"} readOnly />{inlineNodes(item.slice(task[0].length))}</> : inlineNodes(item)}</li>;
+      });
       result.push(list.type === "ul" ? <ul key={`list-${result.length}`}>{items}</ul> : <ol key={`list-${result.length}`}>{items}</ol>);
       list = null;
     };
@@ -98,6 +101,8 @@ function MarkdownPreview({ value }: { value: string }) {
 export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, className, minHeight = 280 }: Props) {
   const area = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [hasSelection, setHasSelection] = useState(false);
 
   const surround = (before: string, after: string, fallback: string) => {
     const element = area.current;
@@ -129,6 +134,60 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
     });
   };
 
+  const applySlash = (command: string) => {
+    const element = area.current;
+    if (!element) return;
+    const cursor = element.selectionStart;
+    const lineStart = value.lastIndexOf("\n", cursor - 1) + 1;
+    const before = value.slice(lineStart, cursor);
+    const match = /^\/([^\s]*)$/.exec(before);
+    if (!match) return;
+    const replacement = command === "task" ? "- [ ] " : command === "bullet" ? "- " : command === "number" ? "1. " : command === "quote" ? "> " : "## ";
+    const next = `${value.slice(0, lineStart)}${replacement}${value.slice(cursor)}`;
+    onChange(next);
+    setSlashQuery(null);
+    requestAnimationFrame(() => {
+      element.focus();
+      element.setSelectionRange(lineStart + replacement.length, lineStart + replacement.length);
+    });
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const element = area.current;
+    if (!element) return;
+    const cursor = element.selectionStart;
+    const lineStart = value.lastIndexOf("\n", cursor - 1) + 1;
+    const line = value.slice(lineStart, cursor);
+    if (event.key === "Escape" && slashQuery !== null) {
+      event.preventDefault();
+      setSlashQuery(null);
+      return;
+    }
+    if (event.key === "Enter" && slashQuery !== null) {
+      event.preventDefault();
+      applySlash(slashQuery || "task");
+      return;
+    }
+    if (event.key === "Enter") {
+      const list = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
+      if (list && !list[3].trim()) {
+        event.preventDefault();
+        onChange(`${value.slice(0, lineStart)}${value.slice(cursor)}`);
+        return;
+      }
+      if (list) {
+        event.preventDefault();
+        const marker = /^\d+\./.test(list[2]) ? `${Number.parseInt(list[2], 10) + 1}. ` : `${list[2]} `;
+        onChange(`${value.slice(0, cursor)}\n${list[1]}${marker}${value.slice(cursor)}`);
+        requestAnimationFrame(() => element.setSelectionRange(cursor + marker.length + 1, cursor + marker.length + 1));
+        return;
+      }
+    }
+    const slash = /^\/([^\s]*)$/.exec(line);
+    if (slash) setSlashQuery(slash[1]);
+    else if (slashQuery !== null) setSlashQuery(null);
+  };
+
   const tools = [
     { label: "H2", title: "二级标题", action: () => prefixLine("## ") },
     { label: "B", title: "粗体", action: () => surround("**", "**", "粗体文本") },
@@ -156,9 +215,31 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
         </button>
       </div>
       {preview ? <MarkdownPreview value={value} /> : (
-        <textarea ref={area} className="markdown-input" value={value} onChange={(event) => onChange(event.target.value)}
+        <textarea ref={area} className="markdown-input" value={value} onChange={(event) => {
+          const next = event.target.value;
+          onChange(next);
+          const cursor = event.target.selectionStart;
+          const lineStart = next.lastIndexOf("\n", cursor - 1) + 1;
+          const line = next.slice(lineStart, cursor);
+          const slash = /^\/([^\s]*)$/.exec(line);
+          setSlashQuery(slash ? slash[1] : null);
+        }}
+          onKeyDown={handleKeyDown}
+          onSelect={(event) => setHasSelection(event.currentTarget.selectionStart !== event.currentTarget.selectionEnd)}
           placeholder={placeholder} aria-label={ariaLabel ?? "Markdown 编辑器"} style={{ minHeight }} />
       )}
+      {!preview && hasSelection ? <div className="markdown-selection-tools" role="toolbar" aria-label="选中文本格式">
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => surround("**", "**", "粗体文本")}><strong>B</strong></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => surround("_", "_", "斜体文本")}><em>I</em></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => surround("`", "`", "代码")}>Code</button>
+      </div> : null}
+      {!preview && slashQuery !== null ? (
+        <div className="markdown-slash-menu" role="listbox" aria-label="格式命令">
+          {[['task', '任务清单', '待办事项'], ['bullet', '无序列表', '- item'], ['number', '有序列表', '1. item'], ['heading', '标题', '## 标题'], ['quote', '引用', '> 引用']]
+            .filter(([, label]) => !slashQuery || label.includes(slashQuery))
+            .map(([command, label, hint]) => <button type="button" key={command} onMouseDown={(event) => event.preventDefault()} onClick={() => applySlash(command)}><strong>{label}</strong><span>{hint}</span></button>)}
+        </div>
+      ) : null}
       <div className="markdown-status">
         <span>支持 Markdown · 标题、列表、引用与代码块</span>
         <span>{value.length} 字符</span>

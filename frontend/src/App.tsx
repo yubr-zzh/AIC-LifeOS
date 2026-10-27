@@ -69,10 +69,10 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
 const sectionMeta = {
   calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
   home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
-  "daily-plan": { eyebrow: "计划 · 每日", title: "给今天一个清晰的起点", description: "不追求塞满日程，只选择真正值得推进的三件事。" },
-  "daily-review": { eyebrow: "复盘 · 每日", title: "把今天温柔地收好", description: "记录发生过什么，也看见自己做得好的地方。" },
-  "phase-plan": { eyebrow: "计划 · 阶段", title: "把远方拆成下一步", description: "阶段性目标不必宏大，但需要可以被看见、被推进。" },
-  "phase-review": { eyebrow: "复盘 · 阶段", title: "重新校准你的方向", description: "回看过去一段时间，判断什么值得继续，什么应该放下。" },
+  "daily-plan": { eyebrow: "计划 · 每日", title: "每日规划", description: "今天要推进的事情。" },
+  "daily-review": { eyebrow: "复盘 · 每日", title: "每日复盘", description: "完成情况与今天的记录。" },
+  "phase-plan": { eyebrow: "计划 · 阶段", title: "阶段规划", description: "这一阶段要推进的方向。" },
+  "phase-review": { eyebrow: "复盘 · 阶段", title: "阶段复盘", description: "回看进展，决定下一步。" },
   chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
   agents: { eyebrow: "协作 · 本机 Agent", title: "让本机 Agent 帮你完成工作", description: "LifeOS 负责规划，Agent 负责执行，关键操作始终由你确认。" },
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
@@ -404,16 +404,18 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
   const kindLabel = phase ? "阶段规划" : "每日规划";
   return <div className="planning-layout">
     <section className="content-card editor-card">
-      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "未来 90 天，我想靠近什么？" : "今天最值得推进的事项"}</h2></div><span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span></div>
+      <div className="entry-editor-heading">
+        <div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "未来 90 天" : new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</h2></div>
+        <span className="soft-count">{draft.loaded ? (draft.id ? "已保存" : "新规划") : "读取中"}</span>
+      </div>
       <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300}
         ariaLabel={phase ? "阶段规划编辑器" : "每日规划编辑器"}
-        placeholder={phase ? "写下这个阶段最想完成、体验或改变的事情…" : "用列表写下今天要做的事，每行一条；每日复盘会自动读取这些事项。"} />
+        placeholder={phase ? "写下目标、关键结果和边界…输入 / 查看格式命令" : "输入今天要做的事；每行一个任务，输入 / 查看格式命令"} />
       <div className="editor-footer actions-only"><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存规划"} <span>→</span></button></div>
       {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
     <div className="entry-side-rail">
-      <aside className="content-card side-tip"><span className="card-kicker">一个小提示</span><h3>{phase ? "目标需要方向，也需要边界。" : "计划不是待办事项的堆叠。"}</h3><p>{phase ? "写清楚：这件事为什么现在重要？完成之后，你希望自己处于什么状态？" : "如果今天只能做一件事，它会是什么？把它放在第一行，复盘时会自动成为检查项。"}</p></aside>
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
         kicker="历史规划 · SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
         newLabel={phase ? "＋ 新建阶段规划" : "＋ 新建每日规划"} />
@@ -494,7 +496,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
   const kindLabel = phase ? "阶段性复盘" : "每日复盘";
   return <div className="review-layout">
     <section className="content-card review-prompts">
-      <div className="card-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "回看这段路，哪些目标真正完成了？" : "对照今天的计划，收好这一天。"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
+      <div className="entry-editor-heading"><div><span className="card-kicker">{kindLabel}</span><h2>{phase ? "回看这一阶段" : new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</h2></div><span className="soft-count">{draft.id ? "已保存" : "未完成"}</span></div>
       <div className="review-plan-panel">
         <div className="review-plan-heading"><div><span className="card-kicker">{phase ? "阶段计划承接" : "每日计划承接"}</span><strong>{planLoading ? "正在读取计划…" : planEntries.length ? `已读取 ${planEntries.length} 份计划 · ${checkedCount}/${totalCount} 条已完成` : "还没有可读取的计划"}</strong></div>{planEntries.length ? <span className="review-plan-source">{planEntries.length} 份</span> : null}</div>
         {planLoading ? <p className="state-empty">正在读取计划事项…</p> : planItems.length === 0 ? <p className="review-empty">还没有可读取的计划条目。可以先在规划页写下计划，也可以直接在下面补充。</p> : (
@@ -517,13 +519,12 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
           </div>)}
         </div> : null}
       </div>
-      <div className="review-editor-section"><span className="card-kicker">自由复盘</span><MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={240} ariaLabel={phase ? "阶段复盘编辑器" : "每日复盘编辑器"} placeholder="写下今天发生了什么、有什么发现，以及明天想怎样继续…" /></div>
+      <div className="review-editor-section"><span className="card-kicker">复盘正文</span><MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={240} ariaLabel={phase ? "阶段复盘编辑器" : "每日复盘编辑器"} placeholder={phase ? "记录进展、阻碍、判断和下一步…输入 / 查看格式命令" : "记录完成了什么、遇到什么、明天继续什么…输入 / 查看格式命令"} /></div>
       <div className="review-actions actions-only"><button className="green-button" onClick={save} disabled={draft.saving}>{draft.saving ? "保存中…" : "完成复盘"} <span>→</span></button></div>
       {draft.saveFeedback ? <p className={`save-feedback ${draft.saveFeedback.tone}`} role="status">{draft.saveFeedback.text}</p> : null}
       {draft.id ? <MemoryCaptureForm entryId={draft.id} phase={phase} store={store} /> : null}
     </section>
     <div className="entry-side-rail">
-      <aside className="content-card side-tip"><span className="card-kicker">复盘不是审判</span><h3>诚实，但不要苛刻。</h3><p>记录不是为了证明自己做得够不够好，而是让下一次选择多一点依据。</p></aside>
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
         kicker="历史复盘 · SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
         newLabel={phase ? "＋ 新建阶段复盘" : "＋ 新建每日复盘"} />
