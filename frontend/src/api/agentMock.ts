@@ -151,6 +151,12 @@ const script: DownFrame[] = [
     type: "message",
     message: msg({ role: "assistant", kind: "text", text: "测试正在跑…预计 40 秒。" }),
   } as never),
+  // Bridge 会把 result 帧也落成一条消息（文本与上面正文相同）。预览里保留这一条，
+  // 用来盯住「同一段答案被渲染两次」的回归。
+  frame({
+    type: "message",
+    message: msg({ role: "system", kind: "result", text: "测试正在跑…预计 40 秒。" }),
+  } as never),
   frame({ type: "permission", request: approval } as never),
   frame({ type: "state", state: "attention", lastEvent: "permission_requested" } as never),
   frame({ type: "permission_resolved", requestId: approval.requestId, decision: "user_allow", autoDecided: false, autoReason: null, replayed: false } as never),

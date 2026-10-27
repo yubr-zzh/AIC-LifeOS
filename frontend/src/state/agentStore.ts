@@ -173,6 +173,15 @@ function chong(a: AgentStoreState, sid: string, done: number): boolean {
   return done >= 1 && done > (a.reported[sid] ?? 0);
 }
 
+/** 丢掉某会话的正文流式缓冲（tool_use 的 partial_json 不在此列）。 */
+function qingLiu(p: Record<string, Partial1>, sid: string): Record<string, Partial1> {
+  const next: Record<string, Partial1> = { ...p };
+  for (const [id, v] of Object.entries(next)) {
+    if (v.sessionId === sid && (v.kind === "text" || v.kind === "thinking")) delete next[id];
+  }
+  return next;
+}
+
 // ── 工具调用表（P0-A）────────────────────────────────────────────
 //
 // 设计原则：tool 相关帧只更新 toolCalls；messages 仍照常写（它是补拉
@@ -455,6 +464,21 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
       delete partial[m.messageId];
 
       const hui = base.sessions[m.sessionId];
+      // 同会话里「内容已经被这条完整消息覆盖」的流式缓冲一并丢掉。
+      // chunk 的 messageId 与最终 messageId 不一致时（adapter 没抓到
+      // message_start 会退回 stream 的 uuid），那份缓冲永远等不到
+      // `delete partial[id]`，界面上就会多出一条永远在输出的重复正文。
+      if (m.kind === "text" || m.kind === "thinking") {
+        const wan = m.text.trim();
+        if (wan) {
+          for (const [id, p] of Object.entries(partial)) {
+            if (p.sessionId !== m.sessionId) continue;
+            if (p.kind !== "text" && p.kind !== "thinking") continue;
+            const s = p.text.trim();
+            if (s && wan.includes(s)) delete partial[id];
+          }
+        }
+      }
       return {
         ...base,
         partial,
@@ -472,8 +496,14 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
     case "state": {
       const hui = base.sessions[f.sessionId];
       if (!hui) return base;
+      // 这一轮已经落定，流式缓冲没有存在意义了。留着的唯一后果是
+      // 界面上多一条永远「正在输出」的重复正文。
+      const partial = ["idle", "ended", "error"].includes(f.state)
+        ? qingLiu(base.partial, f.sessionId)
+        : base.partial;
       return {
         ...base,
+        partial,
         sessions: {
           ...base.sessions,
           [f.sessionId]: {
@@ -599,7 +629,11 @@ function gen(a: AgentStoreState, f: DownFrame): AgentStoreState {
       return { ...base, questionClosed: { ...base.questionClosed, [f.questionId]: { state: f.state, at: Date.now() } } };
 
     case "result": {
-      const next: AgentStoreState = { ...base, lastResult: { ...base.lastResult, [f.sessionId]: f } };
+      const next: AgentStoreState = {
+        ...base,
+        partial: qingLiu(base.partial, f.sessionId),
+        lastResult: { ...base.lastResult, [f.sessionId]: f },
+      };
       const hui = next.sessions[f.sessionId];
       if (hui) {
         next.sessions = {

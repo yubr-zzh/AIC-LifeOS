@@ -110,6 +110,31 @@ describe("agentFlow", () => {
     expect(items).toEqual([]);
   });
 
+  it("result 与最后一段正文重复时不进时间线（Bridge 会把它落成一条消息）", () => {
+    const turns = buildTurns(
+      [
+        m({ messageId: "u", seq: 1, role: "user", kind: "text", text: "问" }),
+        m({ messageId: "a", seq: 2, kind: "text", text: "答案是 **42**。" }),
+        m({ messageId: "r", seq: 3, role: "system", kind: "result", text: "答案是 **42**。" }),
+      ],
+      {},
+      "s-1",
+    );
+    expect(turns[0].items.map((i) => (i.t === "msg" ? i.m.kind : i.t))).toEqual(["text"]);
+  });
+
+  it("result 与正文不同时保留（只跑了工具、没有正文的回合靠它兜底）", () => {
+    const turns = buildTurns(
+      [
+        m({ messageId: "u", seq: 1, role: "user", kind: "text", text: "问" }),
+        m({ messageId: "r", seq: 2, role: "system", kind: "result", text: "已完成 3 项改动。" }),
+      ],
+      {},
+      "s-1",
+    );
+    expect(turns[0].items.map((i) => (i.t === "msg" ? i.m.kind : i.t))).toEqual(["result"]);
+  });
+
   it("没有用户消息的历史也能成轮（user 为 null）", () => {
     const turns = buildTurns(
       [m({ messageId: "a", seq: 1, kind: "text", text: "续写的回答" })],
