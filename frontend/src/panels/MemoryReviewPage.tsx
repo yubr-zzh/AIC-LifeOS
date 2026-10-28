@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { MemoryCandidate, MemoryScope } from "../api/types";
+import type { MemoryCandidate } from "../api/types";
 import type { Store } from "../state/store";
 import { commitMemoryCandidate } from "../api/client";
 import { MarkdownEditor } from "../components/MarkdownEditor";
@@ -11,14 +11,6 @@ function claimOf(candidate: MemoryCandidate): string {
 
 function firstLine(text: string): string {
   return text.split("\n").find((line) => line.trim())?.replace(/^[#>*\-\d.\s]+/, "").slice(0, 36) || "未命名记忆";
-}
-
-function scopeLabel(scope?: MemoryScope): string {
-  if (!scope) return "范围未标注";
-  if (scope.kind === "global") return "全局";
-  if (scope.kind === "scenario") return `场景 · ${scope.scenario_type ?? "未命名"}`;
-  if (scope.kind === "project") return `项目 · ${scope.project_id ?? "未命名"}`;
-  return "未分配";
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -72,15 +64,14 @@ export function MemoryReviewPage({ store }: { store: Store }) {
       <h2>{active ? "这条结论值得长期记住吗？" : "还没有待审核的记忆候选"}</h2>
       {active ? <>
         <p className="memory-meta">
-          {STATUS_LABEL[active.status] ?? active.status} · {active.source} · {scopeLabel(active.scope)}
+          {STATUS_LABEL[active.status] ?? active.status}
           {active.confidence != null ? ` · 置信度 ${active.confidence}` : ""}
           {` · ${new Date(active.created_at).toLocaleString()}`}
         </p>
         <MarkdownEditor value={draft} onChange={setDraft} minHeight={280}
           ariaLabel="记忆候选正文编辑器"
           placeholder="写下你希望 LifeOS 长期记住的结论…支持 Markdown。" />
-        <div className="editor-footer">
-          <span>确认后写入长期记忆，原始来源记录仍留在 SQLite。</span>
+        <div className="editor-footer actions-only">
           <button className="green-button" onClick={() => void commit()}
             disabled={busy || !backend || active.status !== "candidate"}>
             {busy ? "并入中…" : "确认并入记忆"} <span>→</span>
@@ -104,7 +95,7 @@ export function MemoryReviewPage({ store }: { store: Store }) {
             return <button key={candidate.id} type="button"
               className={`entry-history-item ${candidate.id === active?.id ? "active" : ""}`}
               onClick={() => setActiveId(candidate.id)}>
-              <span className="entry-history-date">{STATUS_LABEL[candidate.status] ?? candidate.status} · {candidate.source}</span>
+              <span className="entry-history-date">{STATUS_LABEL[candidate.status] ?? candidate.status}</span>
               <strong>{firstLine(text)}</strong>
               <small>{text.replace(/\s+/g, " ").slice(0, 64) || "暂无正文"}</small>
             </button>;

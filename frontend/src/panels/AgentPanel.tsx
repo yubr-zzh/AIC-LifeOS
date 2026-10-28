@@ -123,7 +123,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
       <header className="agp-head">
         <div className="agp-title">
           {working ? <span className="agent-spinner" aria-label="Agent 正在工作" /> : null}
-          <strong>Agent 交互</strong>
+          <strong>后端 Agent</strong>
           {active ? <span className="agp-mode mono">{active.effectiveMode}</span> : null}
         </div>
         <div className="agp-head-btns">
@@ -142,7 +142,6 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         </div>
       </header>
 
-      <StatusBar session={active} store={store} />
       <DeviceBanner store={store} />
 
       {state.notices.length > 0 ? (
@@ -230,6 +229,8 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
 
       {active && memoryOpen ? <AgentMemoryCapture sessionId={active.sessionId}
         onCandidateCreated={onCandidateCreated} onClose={() => setMemoryOpen(false)} /> : null}
+
+      <StatusBar session={active} store={store} />
 
       <AgentComposer
         canSend={Boolean(kai && active)}
