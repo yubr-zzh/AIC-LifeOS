@@ -7,7 +7,7 @@
   <p><b>本地优先的个人智能体操作系统，运行在你的 Windows 电脑上。</b></p>
   <p><a href="README.md">English</a> · 简体中文</p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
-  <img src="https://img.shields.io/badge/version-2.2.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
   <img src="https://img.shields.io/badge/tests-1100%2B%20cases-brightgreen?style=flat-square" alt="Tests">
@@ -16,7 +16,7 @@
 
 ---
 
-**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入与治理（含时间版本）、反思引擎和技能进化闭环。v2.2.1 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
+**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入与治理（含时间版本）、反思引擎和技能进化闭环。v2.2.3 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
 
 ## 它解决什么问题
 
@@ -69,7 +69,7 @@ LifeOS软件版 想把助手从浏览器的标签页里搬出来，安顿在你�
 
 安装步骤：
 
-1. 运行 `LifeOS-Setup-2.2.1.exe`。
+1. 运行 `LifeOS-Setup-2.2.3.exe`。
 2. 按向导操作。保留默认选项。
 3. 从开始菜单或桌面快捷方式启动 LifeOS。
 4. 首次启动时创建本地账户。
@@ -129,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-产物：`dist\LifeOS\LifeOS.exe`（onedir）和 `dist\LifeOS-Setup-2.2.1.exe`（安装器）。
+产物：`dist\LifeOS\LifeOS.exe`（onedir）和 `dist\LifeOS-Setup-2.2.3.exe`（安装器）。
 
 ## 开发调试
 

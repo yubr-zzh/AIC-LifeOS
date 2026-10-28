@@ -59,6 +59,8 @@ lifeos/agent_evidence.json
 lifeos/models.json
 lifeos/skills.json
 tests/lifeOS/
+# WebView2 用户数据目录：桌面壳按 LIFEOS_HOME/webview 创建，默认落在包目录内
+lifeos/webview/
 
 # 与项目无关的个人文件（课程作业与报告脚本）
 render/
