@@ -1252,41 +1252,58 @@ class BridgeServer(ThreadingHTTPServer):
     def _hui_zhuan(self, a1: str):
         """把适配器发来的事件翻译成协议帧（6.3 的 kind 与 7.3 的帧）。
 
-        **只把三类东西送到界面：正文、选择框、权限请求框。**
+        工具调用与思考过程**照发**：前端按 turn 设计渲染——成功的只读调用
+        折成一行，命令/写入可展开，失败与等待审批的一律可见。这条链路是
+        Final_Integration 的消费契约：`agentStore` 用 tool_use / tool_result /
+        tool_cancelled 三种消息维护 `toolCalls` 表，`buildTurns` 负责折叠。
 
         | 事件 | 处理 |
         |---|---|
         | `text` | 上屏。过长按 `FEN_PI` 分批，每批一条消息，拼起来是全文 |
-        | `chunk` | 只转发正文增量（打字机效果）；thinking / tool_use 的增量不上屏 |
+        | `thinking` | 上屏但不落盘（`LUO_PAN` 不含它），前端渲染成 thinking 行 |
+        | `tool_use` / `tool_result` | 上屏并落盘；前端吸收进 `toolCalls` 表 |
+        | `chunk` | 各 kind 的增量照发（打字机/生成工具参数中）；`huo_dong()` 先记活动 |
+        | `result` | 落成一条消息 + 发 result 帧（批次进度/费用/7.7.1 回报），同时进决策回路 |
         | `error` / `rate_limit` / `context_reset` | 上屏。它们是状态提示，不是 Agent 的内部过程 |
-        | `thinking` / `tool_use` / `tool_result` / `result` | 不上屏 |
+
+        result 的文本通常就是最后一段 assistant 正文，前端 `dropResultEcho`
+        会把重复的那条去掉。
 
         选择框与权限请求框**不经过这里**：它们由 `arbiter.py` 直接发
         `question` / `permission` 帧（`arbiter.py:239`、`428`）。所以本条过滤
         不碰审批与提问的交互链路。
-
-        **`huo_dong()` 对每一种 chunk 都要调**：它是 8.7 停滞看门狗的活动信号。
-        只在正文 chunk 上刷新的话，一个长时间思考的 Agent 会被判成卡死。
         """
         def fa(a2: str, a3: dict) -> None:
             if a2 == "chunk":
                 # 活动信号先记，不管这一片会不会上屏。
                 self.hua.huo_dong(a1)
-                if a3.get("messageKind", "text") != "text":
-                    return
+                # 各 kind 的增量照发：正文增量进打字机，thinking / tool_use
+                # 的增量由前端渲染成「正在思考 / 生成工具参数中」。
                 # chunk 不是真相，只是打字机效果；丢了不影响正确性。
                 self.zong.fa("chunk", a1, messageId=a3.get("messageId", ""),
-                             delta=a3.get("delta", ""), messageKind="text")
+                             delta=a3.get("delta", ""),
+                             messageKind=a3.get("messageKind", "text"))
                 return
             if a2 == "result":
-                # 结果帧不上屏（用户只要正文），但决策回路照旧：
-                # 3.8 要求每条指令的结果回到 LifeOS 对话上下文。
+                s = self.hua.du(a1)
+                # 3.2：result 也落成一条消息。只发帧的话，恢复后的历史里
+                # 看不到「这次跑完的结果是什么」。
+                self.hua.tian_jia(a1, "system", "result",
+                                  text=a3.get("resultText", ""),
+                                  isError=bool(a3.get("isError")))
+                self.zong.fa("result", a1,
+                             subtype=a3.get("subtype", ""), durationMs=a3.get("durationMs", 0),
+                             numTurns=a3.get("numTurns", 0), totalCostUsd=a3.get("totalCostUsd", 0.0),
+                             isError=bool(a3.get("isError")), resultText=a3.get("resultText", ""),
+                             # 这一帧本身就是「一条指令跑完了」，
+                             # 而 paichu 是在收到结果之后才自增，所以这里要 +1。
+                             batchDone=(s.batchDone + 1) if s else 0,
+                             batchTotal=s.batchTotal if s else 0)
+                # 3.8 决策回路：每条指令的 result 都要回到 LifeOS 对话上下文。
+                # **原样送出，不截断**——主服务的大模型要读到 Agent 的完整
+                # 回复，总量由主服务侧的 `AgentContextStore` 预算兜底。
                 if self.lu_dao is not None:
                     self.lu_dao.jie_guo(a1, {
-                        # **原样送出，不截断。** 主服务的大模型要读到 Agent
-                        # 的完整回复；以前这里过 `tui_mian`（脱敏 + 截 2000 字），
-                        # 长回答的结论部分永远到不了模型。总量由主服务侧的
-                        # `AgentContextStore` 预算兜底。
                         "resultText": a3.get("resultText", ""),
                         "isError": bool(a3.get("isError")),
                         "durationMs": a3.get("durationMs", 0),
@@ -1306,20 +1323,33 @@ class BridgeServer(ThreadingHTTPServer):
                 if s is not None:
                     s.claudeSessionId = a3.get("claudeSessionId") or None
                 return
-            if a2 == "text":
+            if a2 in ("text", "thinking"):
                 wen = a3.get("text", "")
                 if not wen:
                     return
                 mid = a3.get("messageId") or None
-                # 分批：每一批都是一条独立消息，前端按 seq 顺序渲染。
-                # **必须全部发出**——切开的每一段都要上屏，拼起来才是完整正文。
-                for duan in qie_wen(wen):
-                    self.hua.tian_jia(a1, "assistant", "text", mid, text=duan)
+                if a2 == "text":
+                    # 分批：每一批都是一条独立消息，前端按 seq 顺序渲染。
+                    # **必须全部发出**——切开的每一段都要上屏，拼起来才是完整正文。
+                    for duan in qie_wen(wen):
+                        self.hua.tian_jia(a1, "assistant", "text", mid, text=duan)
+                else:
+                    self.hua.tian_jia(a1, "assistant", "thinking", mid, text=wen)
+                return
+            if a2 == "tool_use":
+                self.hua.tian_jia(a1, "assistant", "tool_use", a3.get("messageId") or None,
+                                  toolName=a3.get("toolName", ""),
+                                  toolInput=a3.get("toolInput"), toolUseId=a3.get("toolUseId"))
+                return
+            if a2 == "tool_result":
+                self.hua.tian_jia(a1, "user", "tool_result", toolUseId=a3.get("toolUseId"),
+                                  toolName=a3.get("toolName") or None,
+                                  text=a3.get("text", ""), isError=bool(a3.get("isError")))
                 return
             if a2 in ("rate_limit", "context_reset"):
                 self.hua.tian_jia(a1, "system", a2, text=a3.get("text", ""))
                 return
-            # thinking / tool_use / tool_result 到此为止：不上屏，不落盘。
+            # 其余事件（将来可能新增的 kind）按 6.3 保持沉默。
         return fa
 
     def _cheng_bu(self, a1: str):

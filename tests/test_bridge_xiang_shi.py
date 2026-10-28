@@ -40,25 +40,39 @@ class XiangShiTests(unittest.TestCase):
     def _lei(self, a1):
         return [m.kind for m in self.h._xiang["s-1"]]
 
-    def test_result_bu_shang_ping(self):
-        """`result` 帧不上屏：界面只收正文、选择框、权限框。
+    def test_result_shang_ping_qie_lu_pan(self):
+        """`result` 落成一条消息并上屏：恢复后的历史看得到这次跑完的结果。
 
-        结果仍然要回决策回路（`lu_dao.jie_guo`），但那条路不走消息存储。
+        它同时发 result 帧（批次进度/费用/7.7.1 回报），并回决策回路。
+        result 文本与最后一段正文相同时，由前端 `dropResultEcho` 去重。
         """
         fa = self.fu._hui_zhuan("s-1")
         fa("result", {"subtype": "success", "resultText": "算完了", "isError": False,
                       "durationMs": 10, "numTurns": 1, "totalCostUsd": 0.01})
-        self.assertNotIn("result", self._lei("s-1"))
+        self.assertIn("result", self._lei("s-1"))
+        xiao = [m for m in self.h._xiang["s-1"] if m.kind == "result"][0]
+        self.assertEqual(xiao.text, "算完了")
+        self.assertFalse(xiao.isError)
 
-    def test_zhi_you_zheng_wen_shang_ping(self):
-        """thinking / tool_use / tool_result 一律不上屏。"""
+    def test_gong_ju_yu_si_kao_shang_ping(self):
+        """thinking / tool_use / tool_result 照发：前端靠它们渲染工具状态机。
+
+        thinking 不落盘（`LUO_PAN` 不含它），tool 两类落盘。
+        """
         fa = self.fu._hui_zhuan("s-1")
         fa("thinking", {"text": "想一下", "messageId": "m1"})
         fa("tool_use", {"toolUseId": "t1", "toolName": "Bash", "toolInput": {"command": "ls"}})
         fa("tool_result", {"toolUseId": "t1", "toolName": "Bash", "text": "a.txt"})
-        self.assertEqual(self._lei("s-1"), [], "只有正文该上屏")
+        self.assertEqual(self._lei("s-1"), ["thinking", "tool_use", "tool_result"])
+        yong = [m for m in self.h._xiang["s-1"] if m.kind == "tool_use"][0]
+        self.assertEqual(yong.toolName, "Bash")
+        self.assertEqual(yong.toolUseId, "t1")
+        self.assertEqual(yong.toolInput, {"command": "ls"})
+        guo = [m for m in self.h._xiang["s-1"] if m.kind == "tool_result"][0]
+        self.assertEqual(guo.text, "a.txt")
+        self.assertFalse(guo.isError)
         fa("text", {"text": "答案", "messageId": "m1"})
-        self.assertEqual(self._lei("s-1"), ["text"])
+        self.assertIn("text", self._lei("s-1"))
 
     def test_chang_zheng_wen_fen_pi_er_bu_diu_zi(self):
         """超过 FEN_PI 的正文分批上屏，**拼起来必须等于原文**。"""
