@@ -1341,6 +1341,9 @@ button.activity-day { cursor: pointer; }
 .feedback-tags button.selected, .diary-mood button.selected { border-color: var(--accent); background: #f6ebe2; color: var(--accent-dim); box-shadow: 0 0 0 3px rgba(217, 119, 87, .12); }
 .feedback-history { min-height: 270px; }
 .feedback-note > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #f0eee6; color: #788c5d; }
+.memory-meta { margin: 14px 0 18px; color: #9a978a; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.memory-note { margin: 12px 0 0; color: #9a978a; font-size: 11px; line-height: 1.6; }
+.theme-night .memory-meta, .theme-night .memory-note { color: #a29d8f; }
 .theme-night {
   --bg-0: #171614;
   --bg-1: #1e1c1a;

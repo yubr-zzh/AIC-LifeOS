@@ -314,14 +314,15 @@
 .qst-head { display: flex; align-items: center; gap: 8px; }
 .qst-badge { font-size: 10px; font-weight: 700; color: var(--st-confirm); }
 .qst-timer { margin-left: auto; font-size: 10px; color: var(--fg-3); }
-.qst-item { display: flex; flex-direction: column; gap: 5px; }
+.qst-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .qst-header { font-size: 10px; color: var(--fg-3); }
-.qst-text { margin: 0; font-size: 12px; line-height: 1.6; }
-.qst-opts { display: flex; flex-direction: column; gap: 4px; }
+.qst-text { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.qst-opts { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .qst-opt {
   display: flex; align-items: flex-start; gap: 7px; text-align: left;
   padding: 6px 8px; border: 1px solid var(--bd-2); border-radius: var(--r-0);
   background: var(--bg-2); cursor: pointer; font: inherit; color: var(--fg-1);
+  min-width: 0; max-width: 100%; overflow-wrap: anywhere;
 }
 .qst-opt:hover:not(:disabled) { border-color: var(--bd-4); background: var(--bg-3); }
 .qst-opt.on { border-color: var(--accent-dim); background: var(--accent-soft); }
@@ -333,9 +334,11 @@
   font-size: 9px; color: #fff; background: transparent;
 }
 .qst-opt.on .qst-box { background: var(--accent-dim); border-color: var(--accent-dim); }
-.qst-opt-main { display: flex; flex-direction: column; }
+.qst-opt-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.qst-opt-main strong,
+.qst-opt-main small { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .qst-opt-main strong { font-size: 12px; font-weight: 600; }
-.qst-opt-main small { font-size: 11px; color: var(--fg-3); line-height: 1.5; }
+.qst-opt-main small { display: block; font-size: 11px; color: var(--fg-3); line-height: 1.5; }
 
 /* ---- 按钮 ---- */
 .btn-allow, .btn-reject, .btn-ghost {
@@ -368,12 +371,17 @@
   background: var(--bg-1);
   transition: border-color 120ms ease-in-out, box-shadow 120ms ease-in-out;
 }
-.agc-box:focus-within { border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
+/* 输入区只保留一只盒子：聚焦只改盒子边框。再给 textarea 加光圈会在
+   大圆角边框里叠出第二只小圆角绿框，看着像两个框重在一起。 */
+.agc-box:focus-within { border-color: var(--accent-dim); }
 .agc textarea {
   width: 100%; resize: none; min-height: 44px; max-height: 180px; font: 12.5px/1.6 var(--font-ui);
   padding: 9px 10px 2px; border: 0; border-radius: 0; background: transparent; color: var(--fg-1);
 }
-.agc textarea:focus { outline: none; }
+.agc textarea:focus,
+.agc textarea:focus-visible {
+  outline: none; box-shadow: none; border-color: transparent; background: transparent;
+}
 .agc-btns { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 7px 7px; }
 
 /* ---- 濮旀淳璁″垝鍗?---- */

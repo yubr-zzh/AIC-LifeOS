@@ -101,10 +101,8 @@ export function AgentComposer({
           placeholder={
             disabled
               ? "当前无法输入"
-              : canSend === false
-                ? "可以先输入内容；连接 Agent 后再发送"
-                : placeholder ??
-                  (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发消息，Enter 发送")
+              : placeholder ??
+                (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发消息，Enter 发送")
           }
           onChange={(e) => { setSendError(""); setText(e.target.value); }}
           onKeyDown={onKey}

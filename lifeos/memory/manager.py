@@ -152,9 +152,12 @@ class MemoryManager:
         self._write(store)
         return candidate
 
-    async def commit_candidate(self, candidate_id):
+    async def commit_candidate(self, candidate_id, content=None):
+        """content：用户在审核界面改过的正文；不给就原样采纳候选内容。"""
         store = self._read()
         candidate = self._find_candidate(store, candidate_id)
+        if content is not None and (not isinstance(content, dict) or not content):
+            raise ValueError("edited memory content must be a non-empty object")
         if candidate.get("status") == "committed":
             for category in ("user", "project", "feedback", "reference"):
                 for entry in store.get(category, []):
@@ -163,6 +166,8 @@ class MemoryManager:
             raise ValueError("committed candidate has no memory entry")
         if candidate.get("status") != "candidate":
             raise ValueError(f"candidate cannot be committed from status: {candidate.get('status')}")
+        if content is not None:
+            candidate["content"] = content
         lifecycle = MemoryLifecycle(store)
         await lifecycle.validate(candidate)
         await lifecycle.backup()

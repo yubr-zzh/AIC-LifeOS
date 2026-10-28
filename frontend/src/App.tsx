@@ -15,6 +15,7 @@ import { DailyReminderCard } from "./components/DailyReminderCard";
 import { EntryHistory } from "./components/EntryHistory";
 import { InboxButton } from "./components/InboxButton";
 import { MarkdownEditor } from "./components/MarkdownEditor";
+import { MemoryReviewPage } from "./panels/MemoryReviewPage";
 import { ResizableChatSplit } from "./components/ResizableChatSplit";
 import { extractPlanItems, localDateKey } from "./utils/planItems";
 import { AccountMenu, AuthGate } from "./components/AuthGate";
@@ -31,6 +32,7 @@ type SectionId =
   | "chat"
   | "agents"
   | "feedback"
+  | "memory"
   | "diary"
   | "insight"
   | "settings";
@@ -58,7 +60,10 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
   },
   {
     group: "反馈与记忆",
-    items: [{ id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" }],
+    items: [
+      { id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" },
+      { id: "memory", label: "记忆", icon: "book", hint: "审核并修改要长期记住的事" },
+    ],
   },
 ];
 
@@ -72,6 +77,7 @@ const sectionMeta = {
   chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
   agents: { eyebrow: "协作 · 本机 Agent", title: "让本机 Agent 帮你完成工作", description: "LifeOS 负责规划，Agent 负责执行，关键操作始终由你确认。" },
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
+  memory: { eyebrow: "系统 · 记忆", title: "把值得记住的结论留下来", description: "审核 Agent 提炼的候选，改到你认可的说法，再并入长期记忆。" },
   diary: { eyebrow: "记录 · 日记", title: "给今天留一页空白", description: "不必写得完整，想到什么就从哪里开始。" },
   insight: { eyebrow: "沉淀 · 心得 / 体验", title: "把经历变成自己的东西", description: "记录一个念头、一种感受，或者一次值得记住的体验。" },
 } as Record<SectionId, { eyebrow: string; title: string; description: string }>;
@@ -259,6 +265,7 @@ function SectionContent({
   }
   if (active === "agents") return <AgentsSection store={agent} api={api} onGoChat={() => onNavigate("chat")} />;
   if (active === "feedback") return <FeedbackPage />;
+  if (active === "memory") return <MemoryReviewPage store={store} />;
   if (active === "diary") return <DiaryPage />;
   if (active === "calendar") return <WorkCalendar onNavigate={onNavigate} />;
   if (active === "insight") return <InsightPage />;

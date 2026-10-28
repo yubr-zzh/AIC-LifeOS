@@ -1510,7 +1510,9 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
     def _handle_memory_candidate(self, candidate_id, action):
         try:
             if action == "commit":
-                item = asyncio.run(self.agent.memory.commit_candidate(candidate_id))
+                body = self._read_json()
+                edited = body.get("content") if isinstance(body, dict) else None
+                item = asyncio.run(self.agent.memory.commit_candidate(candidate_id, edited))
                 item = self._sync_approved_memory(item)
             else:
                 item = asyncio.run(self.agent.memory.reject_candidate(candidate_id))

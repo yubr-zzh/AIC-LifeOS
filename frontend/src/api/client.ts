@@ -332,18 +332,23 @@ export async function retractMemory(
   return data.memory;
 }
 
-async function postAction<T>(path: string, opts?: ApiOptions): Promise<T> {
+async function postAction<T>(path: string, opts?: ApiOptions, body?: unknown): Promise<T> {
   const res = await f(opts)(`${getBase(opts)}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: "{}",
+    body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as T;
 }
 
-export function commitMemoryCandidate(id: string, opts?: ApiOptions) {
-  return postAction<{ status: "committed" }>(`/memory/candidates/${encodeURIComponent(id)}/commit`, opts);
+/** content 传了就按用户改过的正文入库，不传就原样采纳候选内容。 */
+export function commitMemoryCandidate(id: string, content?: Record<string, unknown>, opts?: ApiOptions) {
+  return postAction<{ status: "committed" }>(
+    `/memory/candidates/${encodeURIComponent(id)}/commit`,
+    opts,
+    content ? { content } : undefined,
+  );
 }
 
 export function rejectMemoryCandidate(id: string, opts?: ApiOptions) {
