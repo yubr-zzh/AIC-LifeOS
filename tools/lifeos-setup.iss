@@ -36,7 +36,9 @@ Name: "chinesesimplified"; MessagesFile: "{#SourcePath}\Languages\ChineseSimplif
 Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加任务："; Flags: checkedonce
 
 [Files]
-Source: "..\dist\LifeOS\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs replacesameversion
+; resources\node\ 里是约 245 MB 的捆绑 claude.exe，只给免安装版用。
+; 安装包不含它，运行时由 resolve_claude_runtime() 沿 PATH 探测。
+Source: "..\dist\LifeOS\*"; DestDir: "{app}"; Excludes: "resources\node\*,resources\node"; Flags: recursesubdirs createallsubdirs replacesameversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"
