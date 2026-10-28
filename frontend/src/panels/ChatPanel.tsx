@@ -7,6 +7,7 @@ import { IconSend, IconCopy, IconMessage, IconPaperclip, IconPencil, IconPanelLe
 import { CopyId } from "../components/CopyId";
 import { CopyTextButton } from "../components/CopyTextButton";
 import { DelegationCard } from "./DelegationCard";
+import { Markdown } from "../components/Markdown";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
 
@@ -182,7 +183,8 @@ export function ChatPanel({ store, agent, api }: Props) {
       : scopeKind === "scenario"
         ? { kind: "scenario", scenario_type: scenarioType }
         : { kind: "global" };
-    void sendMessage(t, memoryScope, agent?.active?.sessionId, routingPolicy, sentAttachments);
+    void sendMessage(t, memoryScope, activeId, routingPolicy, sentAttachments,
+      agent?.active?.sessionId);
   };
 
   const startNew = () => {
@@ -430,7 +432,13 @@ function Bubble({ msg, store, agent, api }: { msg: ChatMessage; store: Store; ag
           {errored ? <span className="chat-error">暂时遇到问题</span> : null}
         </div>
         <div className={`assistant-content ${errored ? "has-error" : ""}`}>
-          {pending ? <span className="muted">正在整理思路…</span> : msg.content || <span className="muted">没有生成文字回复</span>}
+          {pending ? (
+            <span className="muted">正在整理思路…</span>
+          ) : msg.content ? (
+            <Markdown text={msg.content} />
+          ) : (
+            <span className="muted">没有生成文字回复</span>
+          )}
         </div>
         {msg.tool_calls && msg.tool_calls.length > 0 ? (
           <details className="chat-execution-details">

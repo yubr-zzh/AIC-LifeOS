@@ -413,6 +413,9 @@ class ClaudeCodeAdapter(AgentAdapter):
                         "toolName": self.gong_ju.get(tid, ""),
                         "text": self._wen_lu(_qu(b, "content")),
                         "isError": bool(_qu(b, "is_error")),
+                        # 前端据此把调用推进到 completed。老版本没有这个键，
+                        # 前端 guiState(undefined) 走默认分支，不会崩。
+                        "state": "completed",
                     })
                 return
             if isinstance(a1, ResultMessage):
@@ -452,6 +455,11 @@ class ClaudeCodeAdapter(AgentAdapter):
             return
         if d["kind"] == "tool_use":
             self.gong_ju[d["toolUseId"]] = d["toolName"]
+            # 走到 _kuai 说明这里是**完整** AssistantMessage 的内容块，
+            # 参数已经成型（partial_json 走的是 _liu 的 chunk 帧）。
+            # 因此这里标 executing 而不是 streaming；需要审批时，
+            # 随后的 permission 帧会把它改成 awaiting_confirmation。
+            d["state"] = "executing"
         if a2:
             d["messageId"] = a2
         self._fa(d["kind"], d)

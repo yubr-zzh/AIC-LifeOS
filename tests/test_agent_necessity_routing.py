@@ -163,6 +163,15 @@ class AgentNecessityRoutingTests(unittest.TestCase):
         self.assertEqual(len(executor.calls), 1)
         self.assertEqual(llm.calls, 0)
 
+    def test_agent_route_always_produces_a_delegation_plan(self):
+        llm = FakeLLM()
+        runtime, _ = self.make_runtime(llm)
+
+        result = run(runtime.handle_message("删除旧数据库", routing_policy="force_agent"))
+
+        self.assertEqual(result["decision"], "agent")
+        self.assertEqual(result["delegation"]["items"][0]["instruction"], "删除旧数据库")
+
     def test_model_failure_uses_conservative_self_plan_fallback(self):
         llm = FakeLLM(error=RuntimeError("model unavailable"))
         runtime, executor = self.make_runtime(llm)

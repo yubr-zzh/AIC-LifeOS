@@ -2,7 +2,7 @@ export function extractPlanItems(markdown: string): string[] {
   const lines = markdown.split("\n").map((line) => line.trim()).filter(Boolean);
   const bullets = lines
     .filter((line) => /^([-*]|\d+\.)\s+/.test(line))
-    .map((line) => line.replace(/^([-*]|\d+\.)\s+/, "").replace(/^#{1,3}\s+/, "").trim())
+    .map((line) => line.replace(/^([-*]|\d+\.)\s+/, "").replace(/^\[[ xX]\]\s+/, "").replace(/^#{1,3}\s+/, "").trim())
     .filter(Boolean);
   if (bullets.length > 0) return bullets.slice(0, 40);
   return lines

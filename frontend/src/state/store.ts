@@ -391,7 +391,8 @@ export function useStore() {
 
   const sendMessage = useCallback(
     async (text: string, memoryScope?: MemoryScope, sessionId?: string,
-      routingPolicy: AgentRoutingPolicy = "auto", attachments: ChatAttachment[] = []) => {
+      routingPolicy: AgentRoutingPolicy = "auto", attachments: ChatAttachment[] = [],
+      agentSessionId?: string) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
 
@@ -438,7 +439,8 @@ export function useStore() {
         const attachmentContext = attachments.length
           ? `\n\n附件内容：\n${attachments.map((file) => `--- ${file.name} ---\n${file.content}`).join("\n\n")}`
           : "";
-        chatRes = await sendChat(`${trimmed}${attachmentContext}`.trim(), undefined, memoryScope, sessionId, routingPolicy);
+        chatRes = await sendChat(`${trimmed}${attachmentContext}`.trim(), undefined, memoryScope,
+          sessionId, routingPolicy, agentSessionId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`chat failed: ${msg}`);

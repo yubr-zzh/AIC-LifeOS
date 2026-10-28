@@ -12,7 +12,8 @@ import type {
   PermissionRequest,
 } from "./agentTypes";
 
-const T0 = Date.parse("2026-09-27T09:00:00Z");
+// 会话起始时间取「刚刚」，否则状态栏的「会话 N 天」在预览里永远是 30 天。
+const T0 = Date.now() - 4 * 60 * 1000;
 
 let seq = 0;
 const nextSeq = () => ++seq;
@@ -89,6 +90,8 @@ const approval: PermissionRequest = {
   requestId: "r-mock01",
   sessionId: session.sessionId,
   toolName: "Bash",
+  // 指向快照里那条 tool_use，预览模式才能看到审批卡与 ToolStep 互链
+  toolUseId: "t-mock1",
   toolInput: { command: "pytest -q tests/", description: "跑一遍测试" },
   title: "运行测试",
   displayName: "Bash",
@@ -115,7 +118,29 @@ const script: DownFrame[] = [
       msg({ role: "user", kind: "text", text: "指令 1/3：跑一遍测试并修掉失败项" }),
       msg({ role: "assistant", kind: "thinking", text: "先看测试目录的结构，再决定跑哪一条。" }),
       msg({ role: "assistant", kind: "text", text: "我先跑一遍完整测试。" }),
-      msg({ role: "assistant", kind: "tool_use", toolName: "Bash", toolUseId: "t-mock1", toolInput: { command: "pytest -q tests/" } }),
+      msg({ role: "assistant", kind: "text", text: [
+        "按 **单元 / 集成** 分两批跑，避免一次失败掩盖另一处：",
+        "",
+        "| 批次 | 命令 | 用例数 |",
+        "| --- | --- | --- |",
+        "| 单元 | `pytest -q tests/unit` | 118 |",
+        "| 集成 | `pytest -q tests/integration` | 14 |",
+        "",
+        "覆盖率 $\\text{cov} = \\frac{hit}{total}$，这一轮跑到：",
+        "",
+        "$$",
+        "\\frac{132}{135} \\approx 97.8\\%",
+        "$$",
+        "",
+        "```python",
+        "def coverage(hit: int, total: int) -> float:",
+        "    return hit / total",
+        "```",
+      ].join("\n") }),
+      msg({ role: "assistant", kind: "tool_use", toolName: "Read", toolUseId: "t-mock0",
+            toolInput: { file_path: "src/panels/AgentPanel.tsx" }, state: "executing" }),
+      msg({ role: "assistant", kind: "tool_use", toolName: "Bash", toolUseId: "t-mock1",
+            toolInput: { command: "pytest -q tests/" }, state: "executing" }),
     ],
     pending: [],
     questions: [],
@@ -127,13 +152,25 @@ const script: DownFrame[] = [
     type: "message",
     message: msg({ role: "assistant", kind: "text", text: "测试正在跑…预计 40 秒。" }),
   } as never),
+  // Bridge 会把 result 帧也落成一条消息（文本与上面正文相同）。预览里保留这一条，
+  // 用来盯住「同一段答案被渲染两次」的回归。
+  frame({
+    type: "message",
+    message: msg({ role: "system", kind: "result", text: "测试正在跑…预计 40 秒。" }),
+  } as never),
   frame({ type: "permission", request: approval } as never),
   frame({ type: "state", state: "attention", lastEvent: "permission_requested" } as never),
   frame({ type: "permission_resolved", requestId: approval.requestId, decision: "user_allow", autoDecided: false, autoReason: null, replayed: false } as never),
   frame({ type: "state", state: "working", lastEvent: "permission_resolved" } as never),
   frame({
     type: "message",
-    message: msg({ role: "user", kind: "tool_result", toolName: "Bash", toolUseId: "t-mock1", text: "132 passed in 38.21s" }),
+    message: msg({ role: "user", kind: "tool_result", toolName: "Read", toolUseId: "t-mock0",
+                   text: "1.2 KB", state: "completed" }),
+  } as never),
+  frame({
+    type: "message",
+    message: msg({ role: "user", kind: "tool_result", toolName: "Bash", toolUseId: "t-mock1",
+                   text: "132 passed in 38.21s", state: "completed" }),
   } as never),
   frame({
     type: "question",

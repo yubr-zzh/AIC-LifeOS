@@ -105,6 +105,21 @@ class AgentSession:
         return asdict(self)
 
 
+# 工具调用的生命周期状态。与前端 `ToolCallState.type` 逐字对齐——
+# 两边拼错一个字，前端会静默走 `default` 分支（显示成 completed）。
+#
+# 边界：P0 只有 claude_code.py 会写这些值；其他 adapter 不写，
+# 前端 `guiState(undefined)` 走 completed 降级，界面可用但不区分执行中。
+TOOL_STATE = {
+    "streaming",              # 参数还在流（partial_json）
+    "awaiting_confirmation",  # 等用户批准
+    "executing",              # 已批准，正在执行
+    "awaiting_post_approval", # 执行完，等用户确认结果（P0 未使用，留位）
+    "completed",              # 正常结束
+    "cancelled",              # 被拒绝 / 跳过 / 中断 / 超时
+}
+
+
 @dataclass
 class AgentMessage:
     """一条完整消息（方案 6.3）。注意 seq 是会话内的消息序号，不做续传游标。"""
@@ -126,6 +141,10 @@ class AgentMessage:
     # 于是补拉恒定返回空数组，界面停在断线那一刻而 Agent 还在跑。
     # 放在最后是为了不打乱既有字段顺序（asdict() 的全等断言按它比）。
     xuhao: int = 0
+    # 仅 tool_use / tool_cancelled 有意义：该调用的生命周期状态。
+    # 空串 = 老 Bridge / 不知道，前端按 completed 处理。
+    # 必须留在默认值区末尾：插到中间会改变 asdict() 的字段顺序。
+    state: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -143,6 +162,16 @@ class PermissionRequest:
     sessionId: str
     toolName: str
     toolInput: dict[str, Any]
+    # SDK 的 tool_use_id。空串 = 老 Bridge，前端降级为独立卡片。
+    #
+    # 注意：Claude 路径下 `requestId` 目前恒等于 `toolUseId`
+    # （`http.py` 的 `_cheng_bu` 把 `toolUseId` 直接当 requestId 传），
+    # 所以这不是「从无到有」的能力；显式化的理由是：
+    #   1. 契约清晰，前端不必依赖隐式相等；
+    #   2. 其他 adapter 的 requestId 不保证同构；
+    #   3. `t-unknown` 兜底会破坏唯一性，需要能识别。
+    # 必须带默认值：所有既有构造点不传也不能炸。
+    toolUseId: str = ""
     title: str = ""
     displayName: str = ""
     description: str = ""

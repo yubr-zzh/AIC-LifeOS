@@ -1,10 +1,11 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CONNECTION_LABEL,
   STATE_LABEL,
   STATE_TONE,
   type AgentMessage,
   type AgentSession,
+  type AgentToolCall,
 } from "../api/agentTypes";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
@@ -13,6 +14,10 @@ import { AgentComposer } from "./AgentComposer";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import { AgentMemoryCapture } from "./AgentMemoryCapture";
 import { CopyTextButton } from "../components/CopyTextButton";
+import { ToolGroup, ToolStep } from "./ToolStep";
+import { buildTurns, contextItems, type FlowItem, type Turn } from "./agentFlow";
+import { Markdown } from "../components/Markdown";
+import { groupLabel } from "./toolSummary";
 
 interface Props {
   store: AgentStore;
@@ -40,6 +45,41 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   useEffect(() => { setMemoryOpen(false); }, [active?.sessionId]);
 
   const lie = active ? state.messages[active.sessionId] ?? [] : [];
+  const turns = useMemo(
+    () => (active ? buildTurns(lie, state.toolCalls, active.sessionId) : []),
+    [lie, state.toolCalls, active],
+  );
+
+  // ---- Steering 队列 ----
+  // Agent 执行中 Enter 先排队，回到 idle/ended 再发。直接发会让 Bridge
+  // 同时起两条 paichu，指令与工具调用交错。
+  const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
+  const steering = Boolean(active) && active!.state !== "idle" && active!.state !== "ended";
+  const idleReady = Boolean(active) && (active!.state === "idle" || active!.state === "ended");
+  // 一次只发一条：发出去的瞬间状态还没翻成 thinking，若不拦住，
+  // 第二条会在同一帧被连带发出，两条 paichu 就在 Bridge 里撞车了。
+  const flushing = useRef(false);
+
+  useEffect(() => {
+    if (!idleReady) {
+      flushing.current = false;
+      return;
+    }
+    if (flushing.current || !queue.length || !active) return;
+    flushing.current = true;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    void api.act.send(active.sessionId, { text: next.text }).catch(() => {
+      // 失败就留在队里，等下一次状态变迁再试——不要吞掉。
+      setQueue((q) => [next, ...q]);
+    });
+  }, [queue, idleReady, active, api.act]);
+
+  const locateApproval = (rid: string) => {
+    const el = document.getElementById(`apr-${rid}`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el?.focus?.();
+  };
 
   // 新会话只靠 session_added 进入前端时不会再有 snapshot。打开面板及每次
   // 状态推进都补拉一次 transcript，避免“执行证据有内容、对话正文为空”。
@@ -121,23 +161,30 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           <p className="agp-hint">还没有内容。从左侧的委派计划里勾选指令发过来，或直接在下面输入。</p>
         ) : null}
 
-        {visibleLie.map((m) => (
-          // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
-          // 的多个内容块共用它，拿它当 key React 会报 duplicate key，
-          // 并且重渲染时会错认组件身份。
-          <Bubble key={`${m.sessionId}:${m.seq}`} m={m} />
+        {turns.map((turn, i) => (
+          <TurnBlock
+            key={turn.key}
+            turn={turn}
+            streaming={
+              // showStreaming 已经含 sessionId 比对与「流式文本和已落库正文
+              // 相同就不重复显示」的去重，比只比 sessionId 多一层保护。
+              i === turns.length - 1 && showStreaming
+                ? streaming
+                : null
+            }
+            canRetry={kai && active?.state !== "ended"}
+            onRetry={(text) => active && void api.act.send(active.sessionId, { text }).catch(() => undefined)}
+            onLocateApproval={locateApproval}
+          />
         ))}
 
-        {showStreaming && streaming ? (
-          <StreamingBubble text={streaming.text} kind={streaming.kind} />
-        ) : null}
 
         {dai.length > 0 || wen.length > 0 ? (
           <div className="agp-decide">
             <div className="agp-decide-head">需要你决定 · {dai.length + wen.length}</div>
             {dai.map((p) => (
+              <div key={p.requestId} id={`apr-${p.requestId}`} tabIndex={-1}>
               <AgentApprovalCard
-                key={p.requestId}
                 req={p}
                 resolution={state.resolved[p.requestId]}
                 onDecide={(fen, opts) => {
@@ -155,6 +202,7 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
                     .catch(() => undefined);
                 }}
               />
+              </div>
             ))}
             {wen.map((q) => (
               <AgentQuestionCard
@@ -167,8 +215,12 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
           </div>
         ) : null}
 
-        {active && active.state === "ended" && active.batchTotal > 0 && active.batchDone >= active.batchTotal && todo === 0 ? (
-          <div className="agp-end">本次委派已结束</div>
+        {active &&
+        active.state === "ended" &&
+        active.batchTotal > 0 &&
+        active.batchDone >= active.batchTotal &&
+        todo === 0 ? (
+          <div className="agp-end" aria-hidden="true" />
         ) : null}
       </div>
 
@@ -179,14 +231,154 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
         canSend={Boolean(kai && active)}
         busy={api.busy}
         canInterrupt={Boolean(active) && !["idle", "ended", "attention", "waiting_input"].includes(active!.state)}
+        steering={steering}
+        queued={queue}
         onSend={async (t) => {
           if (!active) throw new Error("还没有可用的 Agent 会话");
           await api.act.send(active.sessionId, { text: t });
         }}
+        onQueue={(t) => setQueue((q) => [...q, { id: `q-${Date.now()}-${q.length}`, text: t }])}
+        onUnqueue={(id) => setQueue((q) => q.filter((x) => x.id !== id))}
         onInterrupt={() => active && void api.act.interrupt(active.sessionId)}
       />
     </section>
   );
+}
+
+/**
+ * 一轮对话的容器（对齐 VSCode 的 `.interactive-item-container`）。
+ *
+ * 用户消息有浅底，回答正文完全裸，工具调用折叠成行；hover 才出现
+ * 「复制 / 重试」，避免每轮都挂一排按钮。
+ */
+function TurnBlock({
+  turn,
+  streaming,
+  canRetry,
+  onRetry,
+  onLocateApproval,
+}: {
+  turn: Turn;
+  streaming: { kind: string; text: string } | null;
+  canRetry: boolean;
+  onRetry: (text: string) => void;
+  onLocateApproval: (requestId: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  // 本轮碰过的文件 / 搜索模式，折叠在轮次底部。
+  const ctx = contextItems(
+    turn.items.flatMap((i) => (i.t === "tool" ? [i.call] : i.t === "group" ? i.calls : [])),
+  );
+
+  const copy = async () => {
+    const parts: string[] = [];
+    if (turn.user?.text) parts.push(turn.user.text);
+    for (const item of turn.items) {
+      if (item.t === "msg" && item.m.text) parts.push(item.m.text);
+      else if (item.t === "tool") parts.push(item.call.summary);
+      else if (item.t === "group") parts.push(groupLabel(item.calls.map((c) => c.name), item.calls.length));
+    }
+    try {
+      await navigator.clipboard.writeText(parts.join("\n\n"));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // 剪贴板被拒（非安全上下文）：静默失败，不弹假成功。
+    }
+  };
+
+  return (
+    <section className="turn">
+      {turn.user?.text ? (
+        <div className="turn-ask">
+          <div className="turn-ask-label">你</div>
+          <div className="turn-ask-text">{turn.user.text}</div>
+        </div>
+      ) : null}
+
+      <div className="turn-body">
+        {turn.items.map((item) => (
+          <FlowRow key={itemKey(item)} item={item} onLocateApproval={onLocateApproval} />
+        ))}
+
+        {streaming ? (
+          streaming.kind === "tool_use" ? (
+            <div className="agts agts-busy">
+              <div className="agts-row agts-static" aria-hidden="true">
+                <span className="agts-chevron" />
+                <span className="agts-icon" />
+                <span className="agts-text">生成工具参数中…</span>
+              </div>
+            </div>
+          ) : streaming.kind === "text" ? (
+            <div className="agb agb-text-stream">
+              <Markdown text={streaming.text} />
+            </div>
+          ) : (
+            <div className={`agb agb-${streaming.kind}`}>
+              {streaming.text ? <CopyTextButton text={streaming.text} className="agb-copy" /> : null}
+              <div className="agb-text">{streaming.text}</div>
+            </div>
+          )
+        ) : null}
+      </div>
+
+      {ctx.length > 0 ? (
+        <details className="turn-context">
+          <summary>已使用的上下文 ({ctx.length})</summary>
+          <ul>
+            {ctx.map((c) => (
+              <li key={`${c.kind}:${c.label}`} className={`turn-chip is-${c.kind}`} title={c.label}>
+                <span className="turn-chip-kind">{c.kind === "read" ? "读" : c.kind === "write" ? "写" : "搜"}</span>
+                <span className="turn-chip-label mono">{c.label}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      <div className="turn-foot">
+        <button type="button" className="turn-act" onClick={() => void copy()}>
+          {copied ? "已复制" : "复制"}
+        </button>
+        {canRetry && turn.user?.text ? (
+          <button type="button" className="turn-act" onClick={() => onRetry(turn.user!.text)}>
+            重试
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function itemKey(item: FlowItem): string {
+  if (item.t === "msg") return `${item.m.sessionId}:${item.m.seq}`;
+  if (item.t === "tool") return item.call.toolUseId;
+  return `g-${item.calls[0].toolUseId}`;
+}
+
+function FlowRow({
+  item,
+  onLocateApproval,
+}: {
+  item: FlowItem;
+  onLocateApproval: (requestId: string) => void;
+}) {
+  if (item.t === "group") {
+    return (
+      <ToolGroup
+        calls={item.calls}
+        label={groupLabel(item.calls.map((c) => c.name), item.calls.length)}
+      />
+    );
+  }
+  if (item.t === "tool") {
+    return <ToolStep call={item.call} onLocateApproval={onLocateApproval} />;
+  }
+  // key 用 (sessionId, seq)：messageId 不唯一，一条 AssistantMessage
+  // 的多个内容块共用它，拿它当 key React 会报 duplicate key。
+  return <Bubble m={item.m} />;
 }
 
 function StatusBar({ session, store }: { session: AgentSession | null; store: AgentStore }) {
@@ -247,7 +439,9 @@ function StatusBar({ session, store }: { session: AgentSession | null; store: Ag
         {session ? STATE_LABEL[session.state] : CONNECTION_LABEL[state.conn]}
       </span>
       {session && session.batchTotal > 0 ? (
-        <span className="mono">第 {session.batchDone}/{session.batchTotal} 条指令</span>
+        <span className="mono">
+          {session.batchDone}/{session.batchTotal} 条
+        </span>
       ) : null}
       {yong > 0 ? <span className="mono">{m.ticking ? `已用 ${yong}s` : `用时 ${yong}s`}</span> : null}
       {lei?.totalCostUsd ? <span className="mono">{money(lei.totalCostUsd)}</span> : null}
@@ -304,13 +498,6 @@ function Disconnected({ conn, msg, preview }: { conn: string; msg: string | null
   );
 }
 
-function timeText(createdAt: number): string {
-  if (!createdAt) return "";
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.valueOf())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 /** 结果帧经常与最后一条 assistant 文本完全相同；只保留一条，避免正文重复。 */
 export function conversationMessages(messages: AgentMessage[]): AgentMessage[] {
   const assistantTexts = new Set<string>();
@@ -322,80 +509,76 @@ export function conversationMessages(messages: AgentMessage[]): AgentMessage[] {
   });
 }
 
-function MessageFooter({ text, createdAt }: { text: string; createdAt: number }) {
-  return (
-    <footer className="agent-exchange-footer">
-      <time>{timeText(createdAt)}</time>
-      {text ? <CopyTextButton text={text} /> : null}
-    </footer>
-  );
-}
-
-export function StreamingBubble({ text, kind }: { text: string; kind: "text" | "thinking" | "tool_use" }) {
-  return (
-    <article className="agent-exchange assistant streaming" aria-live="polite">
-      <div className="agent-exchange-avatar" aria-hidden="true">A</div>
-      <div className="agent-exchange-main">
-        <div className="agent-exchange-meta">
-          <strong>Agent</strong>
-          <span>{kind === "thinking" ? "正在思考" : "正在回复"}</span>
-          <span className="agent-typing-dot" aria-hidden="true" />
-        </div>
-        <div className="agent-exchange-bubble agent-streaming-bubble">
-          <div className="agent-exchange-text">{text || "…"}</div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 export function Bubble({ m }: { m: AgentMessage }) {
-  if (m.kind === "tool_use" || m.kind === "tool_result" || m.kind === "thinking" || m.kind === "permission_resolved") {
-    const title = m.kind === "tool_use"
-      ? `调用工具 · ${m.toolName ?? "工具"}`
-      : m.kind === "tool_result"
-        ? `工具返回${m.isError ? " · 失败" : ""}`
-        : m.kind === "thinking"
-          ? "思考过程"
-          : "权限决定";
-    const text = m.kind === "tool_use" ? toolInputText(m.toolInput) : m.text;
+  if (m.kind === "tool_use") {
     return (
-      <details className={`agent-execution-detail ${m.isError ? "bad" : ""}`}>
-        <summary>
-          <span>{title}</span>
-          <span className="mono">{m.kind}</span>
-        </summary>
-        {text ? <CopyTextButton text={text} /> : null}
-        <pre>{text || "无内容"}</pre>
-      </details>
+      <div className="agb agb-tool">
+        <div className="agb-role mono">
+          tool_use · {m.toolName}
+        </div>
+        <CopyTextButton text={toolInputText(m.toolInput)} className="agb-copy" />
+        <pre className="agb-io mono">{toolInputText(m.toolInput)}</pre>
+      </div>
     );
   }
-
+  if (m.kind === "tool_result") {
+    return (
+      <div className={`agb agb-result ${m.isError ? "bad" : ""}`}>
+        <div className="agb-role mono">tool_result{m.isError ? " · 失败" : ""}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
+        <pre className="agb-io mono">{m.text}</pre>
+      </div>
+    );
+  }
+  if (m.kind === "thinking") {
+    return (
+      <div className="agb agb-thinking">
+        <div className="agb-role mono">thinking</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
+        <div className="agb-text">{m.text}</div>
+      </div>
+    );
+  }
+  if (m.kind === "result") {
+    return (
+      <div className={`agb agb-sys ${m.isError ? "bad" : ""}`}>
+        <div className="agb-role mono">result{m.isError ? " · 失败" : ""}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
+        {m.text ? <Markdown text={m.text} /> : null}
+      </div>
+    );
+  }
+  if (m.kind === "permission_resolved") {
+    return (
+      <div className="agb agb-sys">
+        <div className="agb-role mono">permission_resolved</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
+        <div className="agb-text">{m.text}</div>
+      </div>
+    );
+  }
   if (m.kind === "error" || m.kind === "rate_limit" || m.kind === "context_reset") {
     return (
-      <div className={`agent-system-note ${m.isError ? "bad" : ""}`} role="status">
-        <strong>Agent 提醒</strong>
-        <p>{m.text}</p>
+      <div className="agb agb-sys">
+        <div className="agb-role mono">{m.kind}</div>
+        <CopyTextButton text={m.text} className="agb-copy" />
+        <div className="agb-text">{m.text}</div>
       </div>
     );
   }
-
-  if (!m.text.trim()) return null;
-  const fromUser = m.role === "user";
-  const label = fromUser ? "你" : m.kind === "result" && m.isError ? "执行失败" : "Agent";
+  // tool_use / tool_result 没有对应调用时的兜底：用系统行的左侧色条，
+  // 不要 `agb-user`——tool_result 的 role 也是 user，给底色会看成一问一答。
+  // 走到这里时 tool_use / tool_result 已被上面的分支处理，只剩 tool_cancelled
+  // 这类系统事件，用左侧色条而不是用户气泡底色。
+  const cls = m.kind === "tool_cancelled" ? "agb-sys" : `agb-${m.role}`;
   return (
-    <article className={`agent-exchange ${fromUser ? "user" : "assistant"}`}>
-      {!fromUser ? <div className="agent-exchange-avatar" aria-hidden="true">A</div> : null}
-      <div className="agent-exchange-main">
-        <div className="agent-exchange-meta">
-          <strong>{label}</strong>
-          {m.isError ? <span>出错</span> : null}
-        </div>
-        <div className="agent-exchange-bubble">
-          <div className="agent-exchange-text">{m.text}</div>
-          <MessageFooter text={m.text} createdAt={m.createdAt} />
-        </div>
-      </div>
-    </article>
+    <div className={`agb ${cls}`}>
+      <CopyTextButton text={m.text} className="agb-copy" />
+      {m.role === "assistant" ? (
+        <Markdown text={m.text} />
+      ) : (
+        <div className="agb-text">{m.text}</div>
+      )}
+    </div>
   );
 }

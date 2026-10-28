@@ -154,3 +154,65 @@ export const IconArrowRight = (p: IconProps) =>
 
 export const IconCheck = (p: IconProps) =>
   wrap(<path d="M4 12l5 5L20 6" />, "0 0 24 24", p);
+
+export const IconPlus = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconTrash = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14" />
+      <path d="M10 11v6M14 11v6" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconLeaf = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M4 20c0-8 6-14 16-16-2 10-8 16-16 16z" />
+      <path d="M4 20l9-9" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconCircleDot = (p: IconProps) =>
+  wrap(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconPause = (p: IconProps) =>
+  wrap(
+    <>
+      <path d="M9 5v14" />
+      <path d="M15 5v14" />
+    </>,
+    "0 0 24 24",
+    p,
+  );
+
+export const IconSlash = (p: IconProps) =>
+  wrap(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M6.5 17.5l11-11" />
+    </>,
+    "0 0 24 24",
+    p,
+  );

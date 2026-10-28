@@ -902,6 +902,7 @@ class LifeOSRequestHandler(BaseHTTPRequestHandler):
                 memory_scope=scope,
                 model_profile_id=body.get("profile_id"),
                 routing_policy=routing_policy,
+                agent_session_id=body.get("agent_session_id"),
             ))
         except (ValueError, KeyError) as exc:
             self._send_json({"error": {"code": "invalid_request", "message": str(exc)}}, status=400)

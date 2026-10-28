@@ -24,7 +24,7 @@ class Executor:
         return similar[0]
 
     async def execute_chat_turn(self, user_input, memory, trace_id=None, context=None, plan=None,
-                                project_context=None, allow_tools=True):
+                                project_context=None, allow_tools=True, history=None):
         skill = await self._match_skill(user_input)
         if skill and self.trace and trace_id:
             self.trace.event(
@@ -92,8 +92,10 @@ class Executor:
                 "content": system_prompt,
             },
         ]
+        # 对话历史在前；本轮的执行记录发生在用户发言之前，按对话时序
+        # 夹在历史与这条输入之间。
+        messages.extend(history or [])
         if agent_record:
-            # 执行记录发生在本轮发言之前，按对话时序放在用户发言前面。
             messages.append({"role": "user", "content": agent_record})
         messages.append(
             {
@@ -152,7 +154,7 @@ class Executor:
         }
 
     async def answer_chat_turn(self, user_input, memory, trace_id=None, context=None,
-                              project_context=None):
+                              project_context=None, history=None):
         """Generate a normal conversational answer while keeping tools disabled."""
         return await self.execute_chat_turn(
             user_input=user_input,
@@ -160,6 +162,7 @@ class Executor:
             trace_id=trace_id,
             context=context,
             project_context=project_context,
+            history=history,
             allow_tools=False,
         )
 

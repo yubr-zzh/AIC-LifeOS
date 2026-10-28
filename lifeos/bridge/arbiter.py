@@ -231,6 +231,11 @@ class ShenQing:
             t.start()
         q = PermissionRequest(
             requestId=d.requestId, sessionId=a1, toolName=d.toolName, toolInput=ti,
+            # `a3` 是 requestId，Claude 路径下它同时就是 tool_use_id
+            # （见 `http.py: _cheng_bu`）。`t-unknown` 是缺 id 时的兜底，
+            # 把它当成真实 id 会让多张卡撞在同一个键上，所以落成空串，
+            # 前端据此降级为「独立卡片」而不是错误关联。
+            toolUseId="" if a3 == "t-unknown" else a3,
             title=a7, displayName=d.toolName, agentId=a2, suggestions=d.suggestions,
             inputTruncated=duan, originalByteSize=chang,
             createdAt=xianzai(), expiresAt=int(d.expiresAt * 1000),

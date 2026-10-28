@@ -1,4 +1,4 @@
-﻿/* LifeOS Agent Console 鈥?design tokens & global styles.
+/* LifeOS Agent Console 鈥?design tokens & global styles.
    Claude-style warm cream aesthetic: #faf9f5 surfaces, #141413 ink,
    #d97757 accent, Poppins display + Lora body, mono for operational labels. */
 
@@ -713,7 +713,8 @@ textarea { resize: vertical; }
 .chat-card { height: min(760px, calc(100dvh - 210px)); min-height: 580px; padding: 0; border-color: #e5e2d6; background: #fdfcf8; box-shadow: 0 14px 45px rgba(50, 46, 38, .08); }
 .page-intro-chat,
 .page-intro.page-intro-chat { display: none; }
-/* Page intro: one functional title + one line of context. No eyebrow, no date block 鈥?   闈㈠寘灞戝拰鏃ユ湡鍙湪椤舵爮鍑虹幇涓€娆★紙craft-floor锛氭瘡鑺傛爣棰樺墠涓嶅姞灏忔爣绛撅級銆?*/
+/* Page intro: one functional title + one line of context. No eyebrow, no date block —
+   面包屑和日期只在顶栏出现一次（craft-floor：每节标题前不加小标签）。 */
 .page-intro {
   display: flex;
   flex-direction: column;
@@ -801,7 +802,7 @@ textarea { resize: vertical; }
 }
 .lifeos-shell.is-nav-collapsed .dev-footer-link svg { margin: 0; }
 
-/* 鈹€鈹€ Chat history collapse toggle (瀵硅瘽鍘嗗彶鏍忔敹璧? 鈹€鈹€ */
+/* ── Chat history collapse toggle (对话历史栏收起) ── */
 .chat-history {
   display: flex;
   flex-direction: column;
@@ -1311,6 +1312,12 @@ button.activity-day { cursor: pointer; }
 .planning-layout, .review-layout, .feedback-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 .entry-side-rail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .editor-card, .review-prompts, .feedback-main { min-height: 520px; }
+.entry-editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 2px; }
+.entry-editor-heading h2 { margin-top: 7px; font-size: 24px; letter-spacing: -.04em; }
+.entry-editor-heading .soft-count { margin-top: 7px; }
+.planning-layout > .editor-card, .review-layout > .review-prompts { padding: 28px 30px 24px; }
+.planning-layout .entry-side-rail, .review-layout .entry-side-rail { padding-top: 0; }
+.planning-layout .entry-history-card, .review-layout .entry-history-card { position: sticky; top: 18px; }
 .save-feedback { margin: 10px 0 0; padding: 9px 11px; border: 1px solid #cad8b8; border-radius: 9px; background: #f2f7ea; color: #62734c; font-size: 11px; line-height: 1.45; }
 .save-feedback.error { border-color: #e3b7aa; background: #fbeee9; color: #a84f36; }
 .big-editor, .feedback-editor { width: 100%; min-height: 300px; margin: 34px 0 20px; padding: 19px; resize: vertical; border: 1px solid #e5e2d6; border-radius: 11px; outline: 0; background: #f9f8f2; color: #2a2a26; font-family: var(--font-display); font-size: 20px; line-height: 1.7; }
@@ -1527,7 +1534,7 @@ button.activity-day { cursor: pointer; }
 @media (max-width: 900px) { .settings-layout { grid-template-columns: 220px minmax(0, 1fr); } .provider-card { align-items: flex-start; flex-direction: column; } .provider-actions { justify-content: flex-start; } }
 @media (max-width: 680px) { .settings-layout { grid-template-columns: 1fr; } .settings-sidebar { position: static; padding: 15px; } .settings-sidebar-heading { padding-bottom: 12px; } .settings-sidebar > button { width: calc(50% - 4px); display: inline-flex; vertical-align: top; } .settings-sidebar-foot { display: none; } .settings-content { padding: 17px; } .settings-section-heading { align-items: flex-start; flex-direction: column; } .provider-form-grid { grid-template-columns: 1fr; gap: 0; } .provider-editor { padding: 18px; } .provider-editor-footer { align-items: flex-start; flex-direction: column; } }
 
-/* ---- 鐧诲綍浣撶郴锛堟柟妗?6.4锛?--- */
+/* ---- 登录体系（方案 6.4）---- */
 .auth-screen { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(160deg, #faf9f5, #efede4); padding: 24px; }
 .auth-card { width: min(400px, 100%); background: #fff; border: 1px solid var(--bd-1, #e0ddcf); border-radius: 14px; padding: 28px 26px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(40, 70, 40, 0.08); }
 .auth-brand { font-weight: 800; letter-spacing: 0.06em; color: #c15f3f; font-size: 15px; }
@@ -1560,7 +1567,7 @@ button.activity-day { cursor: pointer; }
 @media (max-width: 760px) { .account-menu { display: block; } }
 
 /* ---- Markdown editor (inspired by lightweight open-source markdown editors) ---- */
-.markdown-editor { margin: 22px 0; overflow: hidden; border: 1px solid #e5e2d6; border-radius: 14px; background: #f9f8f2; }
+.markdown-editor { position: relative; margin: 22px 0; overflow: hidden; border: 1px solid #e5e2d6; border-radius: 14px; background: #f9f8f2; }
 .markdown-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #e5e2d6; background: #f4f3ec; }
 .markdown-tools { display: flex; flex-wrap: wrap; gap: 4px; }
 .markdown-tools button, .markdown-mode { min-width: 30px; height: 30px; padding: 0 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #6e6c60; font: 11px/1 var(--font-ui); cursor: pointer; }
@@ -1568,6 +1575,15 @@ button.activity-day { cursor: pointer; }
 .markdown-tools button:disabled { opacity: .38; cursor: default; }
 .markdown-mode { flex: 0 0 auto; border-color: #ddd9cd; background: #fff; }
 .markdown-input { display: block; width: 100%; min-height: 280px; padding: 18px 20px; resize: vertical; border: 0; outline: 0; background: transparent; color: #2a2a26; font: 15px/1.85 var(--font-display); }
+.markdown-input:focus { box-shadow: inset 0 0 0 2px rgba(193,95,63,.10); }
+.markdown-selection-tools { position: absolute; z-index: 4; top: 48px; right: 12px; display: flex; gap: 3px; padding: 4px; border: 1px solid #ddd9cd; border-radius: 8px; background: #fffdf8; box-shadow: 0 7px 18px rgba(60,56,45,.12); }
+.markdown-selection-tools button { min-width: 28px; height: 26px; padding: 0 7px; border: 0; border-radius: 5px; background: transparent; color: #5f5b50; font-size: 11px; cursor: pointer; }
+.markdown-selection-tools button:hover { background: #f5eee7; color: #b65d3f; }
+.markdown-slash-menu { position: relative; z-index: 3; display: grid; gap: 2px; margin: -8px 12px 10px; padding: 6px; border: 1px solid #ddd9cd; border-radius: 10px; background: #fffdf8; box-shadow: 0 10px 28px rgba(60,56,45,.12); }
+.markdown-slash-menu button { display: grid; grid-template-columns: 110px 1fr; gap: 12px; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: #3e3d37; text-align: left; cursor: pointer; }
+.markdown-slash-menu button:hover { background: #f5eee7; color: #b65d3f; }
+.markdown-slash-menu strong { font-size: 12px; font-weight: 600; }
+.markdown-slash-menu span { color: #969184; font: 11px/1.4 var(--font-mono); }
 .markdown-input::placeholder { color: #aaa699; }
 .markdown-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 12px 9px; border-top: 1px solid #eceade; color: var(--fg-3); font-size: 11.5px; }
 .markdown-preview { min-height: 280px; padding: 18px 22px; color: #2a2a26; font-size: 14px; line-height: 1.8; }
@@ -1583,6 +1599,11 @@ button.activity-day { cursor: pointer; }
 .markdown-preview a { color: #c15f3f; text-decoration: underline; }
 .markdown-preview-empty { padding: 24px; color: #9a978a; }
 .theme-night .markdown-editor { background: #242220; border-color: #44403a; }
+.theme-night .markdown-slash-menu { border-color: #474239; background: #2e2b26; box-shadow: 0 12px 28px rgba(0,0,0,.28); }
+.theme-night .markdown-selection-tools { border-color: #474239; background: #2e2b26; }
+.theme-night .markdown-selection-tools button { color: #e3dfd4; }
+.theme-night .markdown-slash-menu button { color: #e3dfd4; }
+.theme-night .markdown-slash-menu button:hover { background: #403a32; color: #f0a078; }
 .theme-night .markdown-toolbar { background: #2e2b26; border-color: #44403a; }
 .theme-night .markdown-tools button, .theme-night .markdown-mode { color: #c6c1b4; }
 .theme-night .markdown-tools button:hover, .theme-night .markdown-mode:hover, .theme-night .markdown-mode.active { background: #3a3630; border-color: #4d483f; color: #e4a183; }
@@ -1783,3 +1804,150 @@ button.activity-day { cursor: pointer; }
 .ags-field input, .ags-field select { font-size: 13px; }
 .ags-field small { font-size: 12px; }
 .ags-toggle { font-size: 12.5px; }
+
+/* ==========================================================================
+   Markdown 正文（Agent 输出 / LifeOS 回答）
+   只作用于 .md：工具产出仍走 <pre class="agb-io">，不经过这里。
+   ========================================================================== */
+.md {
+  white-space: normal;      /* 父级 .assistant-content/.agb-text 是 pre-wrap */
+  overflow-wrap: anywhere;
+  line-height: 1.72;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+
+.md p { margin: 0 0 .62em; }
+.md p:last-child { margin-bottom: 0; }
+
+.md h1, .md h2, .md h3, .md h4 {
+  margin: 1.1em 0 .45em;
+  color: var(--fg-1);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -.01em;
+}
+.md h1 { font-size: 1.28em; }
+.md h2 { font-size: 1.14em; }
+.md h3 { font-size: 1.02em; }
+.md h4 { font-size: .96em; color: var(--fg-2); }
+
+.md ul, .md ol { margin: 0 0 .62em; padding-left: 1.35em; }
+.md li { margin: .18em 0; }
+.md li > p { margin: 0; }
+.md li::marker { color: var(--fg-4); }
+
+.md a {
+  color: var(--accent-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent-dim) 40%, transparent);
+}
+.md a:hover { text-decoration-color: currentColor; }
+
+.md strong { font-weight: 650; color: var(--fg-1); }
+.md em { font-style: italic; }
+.md del { color: var(--fg-4); }
+
+.md code {
+  padding: .1em .34em;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-0);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font: .88em/1.5 var(--font-mono);
+}
+
+.md pre {
+  margin: 0 0 .7em;
+  padding: 10px 12px;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.md pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-1);
+  font: 12px/1.65 var(--font-mono);
+  white-space: pre;
+}
+
+.md blockquote {
+  margin: 0 0 .7em;
+  padding: 2px 0 2px 11px;
+  border-left: 2px solid var(--bd-3);
+  color: var(--fg-2);
+}
+.md blockquote > :last-child { margin-bottom: 0; }
+
+.md hr {
+  height: 0;
+  margin: 1.1em 0;
+  border: 0;
+  border-top: 1px solid var(--bd-1);
+}
+
+/* 表格包一层横向滚动，窄侧栏里不把整列撑破 */
+.md-table {
+  margin: 0 0 .7em;
+  overflow-x: auto;
+  border: 1px solid var(--bd-1);
+  border-radius: var(--r-1);
+}
+.md table { border-collapse: collapse; width: 100%; font-size: .94em; }
+.md th, .md td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--bd-1);
+  border-right: 1px solid var(--bd-1);
+  text-align: left;
+  vertical-align: top;
+}
+.md th { background: var(--bg-2); color: var(--fg-2); font-weight: 600; white-space: nowrap; }
+.md tr:last-child td { border-bottom: 0; }
+.md th:last-child, .md td:last-child { border-right: 0; }
+
+.md input[type="checkbox"] { margin: 0 .4em 0 0; accent-color: var(--accent); }
+
+/* 公式：行内跟随行高，块级自己横滚（长公式不撑破侧栏） */
+.md .katex { font-size: 1.02em; }
+.md .katex-display {
+  margin: .6em 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 代码高亮：颜色走令牌，暗色主题自动跟随 */
+.md .hljs-comment,
+.md .hljs-quote { color: var(--fg-4); font-style: italic; }
+.md .hljs-keyword,
+.md .hljs-selector-tag,
+.md .hljs-literal,
+.md .hljs-doctag,
+.md .hljs-meta { color: var(--st-confirm); font-weight: 600; }
+.md .hljs-string,
+.md .hljs-regexp,
+.md .hljs-addition,
+.md .hljs-attribute { color: var(--st-done); }
+.md .hljs-number,
+.md .hljs-symbol,
+.md .hljs-bullet,
+.md .hljs-link { color: var(--st-pending); }
+.md .hljs-title,
+.md .hljs-section,
+.md .hljs-name,
+.md .hljs-selector-id,
+.md .hljs-selector-class { color: var(--accent-dim); font-weight: 600; }
+.md .hljs-built_in,
+.md .hljs-type,
+.md .hljs-variable,
+.md .hljs-template-variable,
+.md .hljs-params { color: var(--st-processing); }
+.md .hljs-deletion { color: var(--st-failed); }
+.md .hljs-emphasis { font-style: italic; }
+.md .hljs-strong { font-weight: 700; }

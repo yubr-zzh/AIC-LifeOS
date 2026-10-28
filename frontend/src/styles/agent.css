@@ -1,8 +1,11 @@
-﻿/* ==========================================================================
-   Agent 鍩燂紙闃舵 4锛夈€傛祬鑹插簳 + 鎺у埗鍙板瘑搴︼細娌跨敤 global.css 鐨勪护鐗岋紝
-   浣嗗崐寰勬敹鍒?--r-1銆佸瓧鍙峰帇鍒?10鈥?2px銆佺姸鎬佽壊鎵挎媴涓昏淇℃伅銆?   宸﹁竟鏄粰浜虹湅鐨勶紝鍙宠竟鏄粰鏈哄櫒鐪嬬殑鈥斺€斿瘑搴﹀樊鏈韩灏辨槸鍒嗗尯淇″彿銆?
-   鍗曠嫭涓€涓枃浠惰€屼笉鏄户缁爢杩?global.css锛歡lobal.css 宸茬粡 787 琛岋紝
-   娣峰湪涓€璧锋敼涓€澶勫鏄撶鍧忓彟涓€澶勶紙涓?agentStore 鐙珛浜?store.ts 鍚岀悊锛夈€?   ========================================================================== */
+/* ==========================================================================
+   Agent 域（阶段 4）。浅色底 + 控制台密度：沿用 global.css 的令牌，
+   但半径收到 --r-1、字号压到 10–12px、状态色承担主要信息。
+   左边是给人看的，右边是给机器看的——密度差本身就是分区信号。
+
+   单独一个文件而不是继续堆进 global.css：global.css 已经 787 行，
+   混在一起改一处容易碰坏另一处（与 agentStore 独立于 store.ts 同理）。
+   ========================================================================== */
 
 .nav-badge {
   margin-left: auto; min-width: 17px; height: 17px; padding: 0 5px;
@@ -11,19 +14,23 @@
   font: 600 10px/1 var(--font-mono);
 }
 
-/* ---- 7:3 鍒嗘爮锛堟柟妗?11.3锛?--- */
+/* ---- 对话 / Agent 分栏 ----
+   VSCode 的聊天面板是**窄而固定**的：正文一栏随窗口伸缩，面板只吃
+   360–460px。原来 7:3 的比例会让面板在宽屏上摊成 500+px，表格和代码
+   跟着变稀，中间对话区反而空着。 */
 .chat-split-grid {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 460px);
   gap: 16px;
   min-height: 600px;
 }
-/* 蹇呴』瑕嗙洊鐖剁骇鐨?600px锛屽惁鍒欏乏鏍艰鎾戠牬銆傜粍浠剁粨鏋勪竴瀛楁湭鏀癸紝鍙帇杩欎竴澶勩€?*/
+/* 必须覆盖父级的 600px，否则左格被撑破。组件结构一字未改，只压这一处。 */
 .chat-split-grid > .chat-page-grid { min-height: 0; }
-/* Agent 鍗′笌瀵硅瘽鍗″悓楂橈細涓嶉拤浣忕殑璇濓紝琛岄珮闅?Agent 娑堟伅娑紝闀夸細璇濇妸鏁撮〉寰€涓嬮《锛?   .agp-body 鐨勫唴婊氭案杩滆疆涓嶅埌鐢熸晥銆?*/
+/* Agent 卡与对话卡同高：不钉住的话，行高随 Agent 消息涨，长会话把整页往下顶，
+   .agp-body 的内滚永远轮不到生效。 */
 .chat-split-grid > .agp { max-height: min(760px, calc(100dvh - 210px)); }
 
-/* ---- 鎶樺彔鎬佸鎵规潯锛?1.7锛?--- */
+/* ---- 折叠态审批条（11.7）---- */
 .apb {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 12px; padding: 8px 12px;
@@ -42,19 +49,19 @@
 .apb-more { background: none; border: 0; color: var(--accent-dim); font-size: 11px; cursor: pointer; padding: 2px 4px; }
 .apb-more:hover { text-decoration: underline; }
 
-/* ---- Agent 闈㈡澘楠ㄦ灦 ---- */
+/* ---- Agent 面板骨架 ---- */
 .agp {
   display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--bd-2); border-radius: var(--r-1);
   background: var(--bg-1); box-shadow: var(--shadow-1);
-  font-size: 12px; line-height: 1.55;
+  font-size: 12.5px; line-height: 1.6;
 }
 .agp-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+  padding: 9px 12px; border-bottom: 1px solid var(--bd-1); background: var(--bg-1);
 }
-.agp-title { display: flex; align-items: center; gap: 8px; }
-.agp-title strong { font-size: 13px; letter-spacing: -.01em; }
+.agp-title { display: flex; align-items: center; gap: 7px; }
+.agp-title strong { font-size: 12.5px; font-weight: 650; letter-spacing: -.01em; }
 .agp-mode {
   font-size: 10px; color: var(--fg-2); background: var(--bg-1);
   border: 1px solid var(--bd-2); border-radius: var(--r-0); padding: 1px 5px;
@@ -65,7 +72,7 @@
   padding: 5px 10px; border-bottom: 1px solid var(--bd-1);
   background: var(--bg-1); font-size: 11px; color: var(--fg-2);
 }
-.agp-body { flex: 1; min-height: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent; scrollbar-gutter: stable; }
+.agp-body { flex: 1; min-height: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent; scrollbar-gutter: stable; }
 .agp-body::-webkit-scrollbar { width: 10px; }
 .agp-body::-webkit-scrollbar-track { background: transparent; }
 .agp-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--bd-3); background-clip: padding-box; }
@@ -78,11 +85,8 @@
 .agp-off strong { display: block; margin-bottom: 4px; font-size: 13px; }
 .agp-off p { margin: 0; color: var(--fg-2); font-size: 12px; line-height: 1.7; }
 .agp-off code { font-family: var(--font-mono); background: var(--bg-1); padding: 0 3px; border-radius: var(--r-0); }
-.agp-end {
-  align-self: center; margin-top: 4px; padding: 3px 12px;
-  border: 1px solid var(--bd-2); border-radius: var(--r-pill);
-  background: var(--bg-2); color: var(--fg-2); font-size: 11px;
-}
+/* .agp-end 的样式在文件末尾（折叠占位），这里不再重复定义。
+   见「轮次结束不再写字」。 */
 .agp-notices { display: flex; flex-direction: column; }
 .agp-notice {
   display: flex; align-items: center; gap: 8px; padding: 4px 10px;
@@ -94,37 +98,173 @@
 .agp-notice span:nth-child(2) { flex: 1; color: var(--fg-2); }
 .agp-notice button { background: none; border: 0; cursor: pointer; color: var(--fg-3); }
 
-/* ---- 娑堟伅姘旀场 ---- */
-.agb { position: relative; border: 1px solid var(--bd-1); border-radius: var(--r-1); background: var(--bg-1); }
-.agb-role {
-  font-size: 10px; letter-spacing: .04em; color: var(--fg-3);
-  padding: 3px 68px 3px 8px; border-bottom: 1px solid var(--bd-1); background: var(--bg-2);
+/* ---- 消息流 ----
+   边框只留给「需要区分 / 需要操作」的东西：用户消息有浅底，系统/错误有左侧
+   色条，assistant 正文完全裸。12 条消息 12 个框是视觉噪音，会盖过内容。 */
+.agb { position: relative; border: 0; background: transparent; padding: 0; margin: 0 0 10px; }
+/* 角色标签不再占一行（信息密度太低）；保留节点以保持 CopyTextButton 的锚点。 */
+.agb-role { display: none; }
+/* 复制按钮：hover / 聚焦才出现，避免长会话里每段文字都挂一个按钮。 */
+.agb-copy {
+  position: absolute; z-index: 2; top: 0; right: 0;
+  min-height: 19px; padding: 1px 5px; font-size: 9px;
+  opacity: 0; transition: opacity 100ms ease-in-out;
 }
-.agb-copy { position: absolute; z-index: 2; top: 2px; right: 4px; min-height: 19px; padding: 1px 5px; font-size: 9px; }
+.agb:hover .agb-copy, .agb:focus-within .agb-copy { opacity: 1; }
 .agb-copy span { display: none; }
-.agb-text { padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
-.agb-user { background: var(--bg-2); }
-.agb-user .agb-role { background: var(--bg-3); }
-.agb-thinking { border-style: dashed; }
-.agb-thinking .agb-text { color: var(--fg-2); font-style: italic; }
-.agb-tool, .agb-result { background: var(--bg-2); }
-.agb-result.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
-.agb-sys { border-color: var(--st-pending); background: var(--st-pending-bg); }
-.agb-sys .agb-role { background: transparent; color: var(--st-pending); }
+.agb-text {
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+  color: var(--fg-1);
+}
+.agb-user {
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+.agb-thinking .agb-text { color: var(--fg-3); font-style: italic; font-size: 12px; }
+.agb-result.bad .agb-text { color: var(--st-failed); }
+.agb-sys {
+  padding-left: 8px;
+  border-left: 2px solid var(--st-pending);
+}
+.agb-sys.bad { border-left-color: var(--st-failed); }
+.agb-sys .agb-text { color: var(--fg-2); font-size: 12px; }
 .agb-io {
   margin: 0; padding: 6px 8px; font-size: 11px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-all; color: var(--fg-2);
   max-height: 220px; overflow: auto;
 }
 
-/* ---- 瀹℃壒鍗★紙8.8 淇℃伅鍒嗗眰锛?--- */
+/* ---- 工具调用步骤（P0-A）----
+   参照 VSCode 的 .progress-container / .tool-input-output-part：
+   成功完成只占一行；等待审批/失败才展开并加重视觉。 */
+.agts { margin: 0 0 4px; }
+.agts-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg-2);
+  font: 12px/1.6 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease-in-out;
+}
+.agts-row:hover { background: var(--bg-2); }
+.agts-row:focus-visible { outline: 1px solid var(--bd-4); outline-offset: 1px; }
+
+.agts-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: opacity 100ms ease-in-out, transform 180ms cubic-bezier(.2, 0, 0, 1);
+  color: var(--fg-4);
+}
+.agts-row:hover .agts-chevron,
+.agts-row:focus-visible .agts-chevron,
+.agts.expanded .agts-chevron { opacity: 1; }
+.agts.expanded .agts-chevron > svg { transform: rotate(90deg); transition: transform 180ms cubic-bezier(.2, 0, 0, 1); }
+
+.agts-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agts-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agts-meta { flex: 0 0 auto; margin-left: auto; color: var(--fg-4); font-size: 11px; }
+
+.agts-done .agts-icon { color: var(--st-done); }
+.agts-bad .agts-icon { color: var(--st-failed); }
+.agts-bad .agts-text { color: var(--st-failed); }
+.agts-confirm .agts-icon { color: var(--st-confirm); }
+.agts-confirm .agts-text { color: var(--st-confirm); }
+.agts-busy .agts-icon { color: var(--st-processing); }
+.agts-busy .agts-icon svg { animation: agts-spin 1.1s linear infinite; }
+@keyframes agts-spin { to { transform: rotate(360deg); } }
+
+/* 进行中：文字 shimmer 而不是转圈；只给活跃那一行。 */
+.agts-busy .agts-text {
+  background: linear-gradient(90deg,
+    var(--fg-2) 0%, var(--fg-2) 30%, var(--st-processing) 50%,
+    var(--fg-2) 70%, var(--fg-2) 100%);
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: agts-shimmer 2s steps(60, end) infinite;
+}
+@keyframes agts-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agts-busy .agts-text {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+  .agts-busy .agts-icon svg { animation: none; }
+}
+
+.agts-io {
+  margin: 2px 0 6px 24px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--bd-2);
+  background: var(--bg-1);
+  border-radius: 0 var(--r-1) var(--r-1) 0;
+}
+.agts-io pre {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  max-height: 260px;
+  overflow: auto;
+}
+.agts-io pre:last-child { margin-bottom: 0; }
+.agts-warn {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--st-pending);
+}
+.agts-group-body {
+  margin: 2px 0 4px 24px;
+  padding-left: 8px;
+  border-left: 2px solid var(--bd-1);
+}
+
+/* ---- 审批卡（8.8 信息分层）---- */
 .apr {
   display: flex; gap: 0; border: 1px solid var(--st-confirm);
   border-radius: var(--r-1); background: var(--bg-1); overflow: hidden;
 }
 .apr:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
 .apr-done { border-color: var(--bd-2); opacity: .82; }
-/* 宸︿晶绔栨潯鏄秴鏃跺€掕鏃讹紝涓嶉潬鏂囧瓧璇荤銆?*/
+/* 左侧竖条是超时倒计时，不靠文字读秒。 */
 .apr-rail { width: 3px; background: var(--bg-3); flex: none; }
 .apr-rail-fill { display: block; width: 100%; background: var(--st-processing); transition: height 1s linear; }
 .apr-rail-fill.st-pending { background: var(--st-pending); }
@@ -139,7 +279,7 @@
 .apr-count.st-pending { color: var(--st-pending); }
 .apr-count.st-failed { color: var(--st-failed); font-weight: 600; }
 
-/* 鍙俊鍖猴細绯荤粺缁欑殑鍘熸枃锛屾渶澶ч潰绉紝绛夊 */
+/* 可信区：系统给的原文，最大面积，等宽 */
 .apr-trust { border: 1px solid var(--bd-2); border-radius: var(--r-0); background: var(--bg-2); }
 .apr-trust-tag { font-size: 10px; color: var(--fg-3); padding: 3px 8px 0; }
 .apr-cmd {
@@ -150,7 +290,7 @@
 .apr-cmd mark { background: var(--st-failed-soft); color: var(--st-failed); font-weight: 700; border-radius: 2px; padding: 0 2px; }
 .apr-note { margin: 0 8px 8px; font-size: 11px; line-height: 1.6; color: var(--st-pending); }
 
-/* 涓嶅彲淇″尯锛欰gent 鑷挵锛岄粯璁ゆ姌鍙狅紝鏉ユ簮鍐欐槑 */
+/* 不可信区：Agent 自撰，默认折叠，来源写明 */
 .apr-untrust { border-top: 1px dashed var(--bd-2); padding-top: 5px; }
 .apr-untrust summary { cursor: pointer; font-size: 10px; color: var(--fg-3); }
 .apr-untrust p { margin: 4px 0 0; font-size: 11px; color: var(--fg-2); }
@@ -197,7 +337,7 @@
 .qst-opt-main strong { font-size: 12px; font-weight: 600; }
 .qst-opt-main small { font-size: 11px; color: var(--fg-3); line-height: 1.5; }
 
-/* ---- 鎸夐挳 ---- */
+/* ---- 按钮 ---- */
 .btn-allow, .btn-reject, .btn-ghost {
   font: 600 11px/1 var(--font-ui); padding: 5px 10px; cursor: pointer;
   border-radius: var(--r-1); border: 1px solid transparent;
@@ -215,18 +355,26 @@
   outline: 2px solid var(--accent-dim); outline-offset: 1px;
 }
 
-/* ---- 杈撳叆 ---- */
+/* ---- 输入 ---- */
 .agc {
-  border-top: 1px solid var(--bd-1); background: var(--bg-2);
-  padding: 7px 8px; display: flex; flex-direction: column; gap: 6px;
+  border-top: 1px solid var(--bd-1); background: var(--bg-1);
+  padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 6px;
 }
+/* 输入框和按钮同一个边框（VSCode 的 composer 就是一只盒子 + 底部工具栏），
+   按钮挂在盒子外面会显得像是掉在面板上。 */
+.agc-box {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--bd-2); border-radius: var(--r-2);
+  background: var(--bg-1);
+  transition: border-color 120ms ease-in-out, box-shadow 120ms ease-in-out;
+}
+.agc-box:focus-within { border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
 .agc textarea {
-  width: 100%; resize: vertical; min-height: 44px; font: 12px/1.5 var(--font-ui);
-  padding: 6px 8px; border: 1px solid var(--bd-2); border-radius: var(--r-1);
-  background: var(--bg-1); color: var(--fg-1);
+  width: 100%; resize: none; min-height: 44px; max-height: 180px; font: 12.5px/1.6 var(--font-ui);
+  padding: 9px 10px 2px; border: 0; border-radius: 0; background: transparent; color: var(--fg-1);
 }
-.agc textarea:focus { outline: none; border-color: var(--accent-dim); box-shadow: var(--ring-accent); }
-.agc-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.agc textarea:focus { outline: none; }
+.agc-btns { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 7px 7px; }
 
 /* ---- 濮旀淳璁″垝鍗?---- */
 .dlg {
@@ -253,12 +401,14 @@
 .dlg-foot .mono { font-size: 10.5px; }
 .dlg-btns { display: flex; gap: 6px; }
 
-/* ---- 銆屾湰鍦?Agent銆嶉〉 ---- */
+/* ---- 「本地 Agent」页 ---- */
 .ags {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px; align-items: stretch;
 }
-/* 鍑嵁鐩綍寤轰笉鍑烘潵鏃剁殑閫氭爮鍛婅锛坰pec 11.2锛夈€傝蛋 `.agp-notice` 鐨勯厤鑹叉儻渚?   锛堢惀鐝€搴?= 寰呭姙锛岀孩搴?= 宸插潖锛夛紝浣嗚法鏁村睆瀹藉害涓斾笉閫氭爮鏀剁缉鈥斺€擿.ags` 鏄?   auto-fit 缃戞牸锛屼笉鍐?`grid-column` 瀹冨彧鍗犱竴鏍硷紙340px锛夛紝杩欎箞闀跨殑璇濊鎸ゆ柇琛屻€?*/
+/* 凭据目录建不出来时的通栏告警（spec 11.2）。走 `.agp-notice` 的配色惯例
+   （橙底 = 待办，红底 = 已坏），但跨整屏宽度且不通栏收缩——`.ags` 是
+   auto-fit 网格，不给 `grid-column` 它只占一格（340px），这么长的话被挤断行。 */
 .ags-alarm {
   grid-column: 1 / -1;
   display: flex; flex-direction: column; gap: 4px; padding: 10px 13px;
@@ -267,7 +417,7 @@
   font-size: 11.5px; line-height: 1.7; color: var(--fg-2);
 }
 .ags-alarm strong { color: var(--st-failed); font-size: 12.5px; }
-/* 銆岀┖鐨勩€嶉偅鍙ユ槸鍔犵矖鐨勮鍐呭己璋冿紝涓嶈璺熼琛岄偅涓暣娈垫爣棰樺悓瀛楀彿鈥斺€斾袱涓?strong 涓嶅姞鍖哄垎浼氫竴楂樹竴浣庛€?*/
+/* 「空的」那句是加粗的行内强调，不该跟首行那个整段标题同字号——两个 strong 不加区分会一高一低。 */
 .ags-alarm span strong { font-size: inherit; color: inherit; }
 .ags-alarm code { font-family: var(--font-mono); }
 
@@ -275,9 +425,11 @@
   border: 1px solid var(--bd-2); border-radius: var(--r-1); background: var(--bg-1);
   padding: 14px 15px; display: flex; flex-direction: column; gap: 9px;
 }
-/* 銆孉gent 娲诲姩銆嶉潰鏉挎槸 .ags 閲屽敮涓€鐨?Panel锛岃瀹冩暣琛岄€氭爮銆?   涓嶅啓杩欎竴鏉＄殑璇濆畠鍙崰涓€鏍硷紙minmax(340px, 1fr)锛夛紝浜嬩欢琛ㄥ拰璇︽儏鎸ゅ湪 340px 閲屾病娉曠湅銆?*/
+/* 「Agent 活动」面板是 .ags 里唯一的 Panel，让它整行通栏。
+   不写这一条的话它只占一格（minmax(340px, 1fr)），事件表和详情挤在 340px 里没法看。 */
 .ags > .panel { grid-column: 1 / -1; }
-/* 娲诲姩琛ㄨ鏁颁笂闄?40锛氫笉缁?panel-body 灏侀《鐨勮瘽锛岄潰鏉块殢浜嬩欢鏃犻檺闀块珮锛?   鏁撮〉琚線涓嬮《鈥斺€斿皝椤跺悗琛ㄥ湪鍗″唴婊氥€?*/
+/* 活动表行数上限 40：不给 panel-body 封顶的话，面板随事件无限长高，
+   整页被往下顶——封顶后表在卡内滚。 */
 .ags > .panel .panel-body { max-height: 320px; }
 .ags-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ags-head h2 { margin: 4px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
@@ -339,8 +491,9 @@
 .ags-toggle input { flex: 0 0 auto; margin: 0; }
 .ags-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---- 绉诲姩绔細Agent 闈㈡澘鍏ㄥ睆瑕嗙洊 ----
-   overlay 鏄?CSS 鍦ㄧ獎灞忎笅鐨勫憟鐜帮紝涓嶆槸 JS 鐘舵€侊紙11.3 瑙勫垯 2锛夆€斺€?   agentLayout 鍙湁 collapsed / split 涓ゆ€併€?*/
+/* ---- 移动端：Agent 面板全屏覆盖 ----
+   overlay 是 CSS 在窄屏下的呈现，不是 JS 状态（11.3 规则 2）——
+   agentLayout 只有 collapsed / split 两态。 */
 @media (max-width: 760px) {
   .chat-split-grid { grid-template-columns: 1fr; min-height: 0; }
   .chat-split-grid > .agp {
@@ -384,7 +537,7 @@
 .agent-activity-panel .panel-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
 .agent-activity-panel .panel-body::-webkit-scrollbar { width: 8px; }
 .agent-activity-panel .panel-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--bd-3); }
-/* ---- 瀵硅瘽 / Agent 鍙嫋鎷藉垎鏍?---- */
+/* ---- 对话 / Agent 可拖拽分栏 ---- */
 .chat-split-grid.resizable { gap: 0; align-items: stretch; min-height: 620px; }
 .chat-split-grid.resizable > .chat-page-grid,
 .chat-split-grid.resizable > .agp { min-width: 0; }
@@ -414,7 +567,7 @@
 body.chat-split-resizing { cursor: col-resize; user-select: none; }
 body.chat-split-resizing * { cursor: col-resize !important; }
 
-/* Agent 杈撳叆鍖猴細鍗充娇灏氭湭杩炴帴涔熷厑璁哥紪杈戣崏绋匡紝鍙檺鍒跺彂閫併€?*/
+/* Agent 输入区：即使尚未连接也允许编辑草稿，只限制发送。 */
 .agc { flex: 0 0 auto; position: relative; z-index: 2; }
 .agc textarea { pointer-events: auto; cursor: text; }
 .agc textarea:disabled { cursor: not-allowed; opacity: .65; }
@@ -425,8 +578,10 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   .chat-split-resizer { display: none; }
   .chat-split-grid.resizable > .agp { height: auto; max-height: none; }
 }
-/* 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-   Agent 绠＄悊椤碉紙鍙傝€冪晫闈㈤噸鏋勭増锛?   .ags2-* 鍙湪鏈湴 Agent 椤典娇鐢紱鏃х殑 .ags-* 淇濈暀缁欓殣钘忕殑閰嶅鍗°€?   鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ────────────────────────────────────────────────────────────
+   Agent 管理页（参考界面重构版）。
+   .ags2-* 只在本「本地 Agent」页使用；旧的 .ags-* 保留给隐藏的配对卡。
+   ──────────────────────────────────────────────────────────── */
 .ags2 {
   display: flex;
   flex-direction: column;
@@ -434,7 +589,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   width: 100%;
 }
 
-/* 鏍囬琛?*/
+/* 标题行 */
 .ags2-title {
   display: flex;
   align-items: flex-end;
@@ -473,7 +628,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   gap: 8px;
 }
 
-/* 缁熻 */
+/* 统计 */
 .ags2-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -504,7 +659,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-stat-value.ok { color: var(--accent-dim); }
 .ags2-stat-value.warn { color: var(--st-pending); }
 
-/* 涓绘爡鏍?*/
+/* 主栅格 */
 .ags2-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(290px, 1fr);
@@ -517,7 +672,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   gap: 16px;
 }
 
-/* 鍗＄墖 */
+/* 卡片 */
 .ags2-card {
   display: flex;
   flex-direction: column;
@@ -552,7 +707,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-muted.small { font-size: 11.5px; }
 .ags2-sep { height: 1px; background: var(--bd-1); margin: 2px 0; }
 
-/* Agent 鍒楄〃 */
+/* Agent 列表 */
 .ags2-list-card { padding: 0; overflow: hidden; }
 .ags2-list-card > .ags2-card-head {
   padding: 18px 20px 14px;
@@ -721,7 +876,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   border-color: var(--accent);
 }
 
-/* 杩炴帴琛ㄥ崟 */
+/* 连接表单 */
 .ags2-connect { gap: 14px; }
 .ags2-form {
   display: grid;
@@ -767,7 +922,7 @@ body.chat-split-resizing * { cursor: col-resize !important; }
 .ags2-note.err { color: var(--st-failed); }
 .ags2-note.warn { color: var(--st-pending); }
 
-/* 璇︽儏鎶藉眽 */
+/* 详情抽屉 */
 .ags2-shade {
   position: fixed;
   inset: 0;
@@ -837,119 +992,6 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   .ags2-agent-copy p { white-space: normal; }
 }
 
-/* ---- Normal conversation view for Agent chat ---- */
-.agent-exchange {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  align-items: flex-start;
-}
-.agent-exchange.user { justify-content: flex-end; }
-.agent-exchange-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  max-width: 88%;
-}
-.agent-exchange.user .agent-exchange-main { align-items: flex-end; }
-.agent-exchange-avatar {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  place-items: center;
-  border: 1px solid var(--bd-2);
-  border-radius: 9px;
-  background: var(--bg-2);
-  color: var(--accent-dim);
-  font: 700 11px/1 var(--font-display);
-}
-.agent-exchange-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 18px;
-  color: var(--fg-3);
-  font-size: 11px;
-}
-.agent-exchange-meta strong { color: var(--fg-2); font-size: 12px; font-weight: 650; }
-.agent-exchange-bubble {
-  max-width: 100%;
-  padding: 9px 11px;
-  border: 1px solid var(--bd-1);
-  border-radius: 13px 13px 13px 4px;
-  background: var(--bg-2);
-  color: var(--fg-1);
-  font-size: 13.5px;
-  line-height: 1.68;
-}
-.agent-exchange.user .agent-exchange-bubble {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--bd-1));
-  border-radius: 13px 13px 4px 13px;
-  background: var(--accent-soft);
-}
-.agent-exchange-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.agent-exchange-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  margin-top: 6px;
-}
-.agent-exchange-footer time { color: var(--fg-4); font-size: 10px; }
-.agent-exchange-footer .copy-text-button { min-height: 22px; padding: 1px 6px; font-size: 10px; }
-.agent-streaming-bubble { min-width: 88px; color: var(--fg-2); }
-.agent-typing-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: agent-chat-pulse .9s ease-in-out infinite alternate;
-}
-@keyframes agent-chat-pulse { to { opacity: .35; transform: scale(.72); } }
-.agent-execution-detail {
-  width: calc(100% - 34px);
-  margin-left: 34px;
-  padding: 7px 9px;
-  border: 1px solid var(--bd-1);
-  border-radius: var(--r-1);
-  background: var(--bg-2);
-  color: var(--fg-2);
-}
-.agent-execution-detail.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
-.agent-execution-detail summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.agent-execution-detail summary .mono { color: var(--fg-4); font-size: 9.5px; font-weight: 400; }
-.agent-execution-detail > .copy-text-button { margin-top: 7px; }
-.agent-execution-detail pre {
-  max-height: 180px;
-  margin: 7px 0 0;
-  overflow: auto;
-  color: var(--fg-3);
-  font: 11px/1.55 var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.agent-system-note {
-  padding: 8px 10px;
-  border: 1px solid var(--st-pending);
-  border-radius: var(--r-1);
-  background: var(--st-pending-bg);
-  color: var(--fg-2);
-  font-size: 12px;
-}
-.agent-system-note.bad { border-color: var(--st-failed); background: var(--st-failed-bg); }
-.agent-system-note strong { display: block; margin-bottom: 3px; font-size: 11.5px; }
-.agent-system-note p { margin: 0; line-height: 1.55; white-space: pre-wrap; }
-
 /* The input must stay readable in WebView2 while composing and after focus. */
 .agc textarea {
   color: var(--fg-1);
@@ -975,3 +1017,239 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   }
   .agent-memory-capture { max-height: 28vh; }
 }
+
+/* 第一档：成功完成的只读类调用——一行、不可交互、无 hover 反馈。 */
+.agts-progress .agts-row.agts-static {
+  cursor: default;
+  padding-left: 4px;
+}
+.agts-progress .agts-row.agts-static:hover { background: transparent; }
+.agts-progress .agts-text { color: var(--fg-3); }
+
+/* ---- 轮次容器 ----
+   对齐 VSCode 的 .interactive-item-container：一轮 = 一次用户输入 + 全部回答。
+   轮次之间用 hairline 分隔，不套卡片。 */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 0 13px;
+  border-bottom: 1px solid var(--bd-1);
+}
+.turn:first-of-type { padding-top: 4px; }
+.turn:last-of-type { border-bottom: 0; }
+.turn-body { display: flex; flex-direction: column; gap: 7px; }
+
+/* 用户消息：VSCode 是**细边框盒子 + 一个小标签**，不是整块填充。
+   填充色会让提问比回答还重，长会话里视线全被用户自己的话吸走。 */
+.turn-ask {
+  padding: 8px 11px 9px;
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+}
+.turn-ask-label {
+  margin-bottom: 3px;
+  color: var(--fg-4);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.turn-ask-text {
+  color: var(--fg-1);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.turn-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  /* visibility 而不是 display：保留布局，hover 时不会跳一下 */
+  visibility: hidden;
+}
+.turn:hover .turn-foot,
+.turn:focus-within .turn-foot { visibility: visible; }
+.turn-act {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg-4);
+  font: 11px/1.5 var(--font-ui);
+  cursor: pointer;
+  transition: color 100ms ease-in-out, background-color 100ms ease-in-out, border-color 100ms ease-in-out;
+}
+.turn-act:hover { color: var(--fg-2); background: var(--bg-2); border-color: var(--bd-2); }
+.turn-act:focus-visible { outline: 1px solid var(--bd-4); outline-offset: 1px; }
+
+/* 触屏没有 hover：回退为常显，否则「复制 / 重试」永远不可达。 */
+@media (hover: none) {
+  .turn-foot { visibility: visible; }
+}
+
+/* ---- 轮次底部：已使用的上下文（§7）----
+   折叠条而不是常驻 chip 墙：一轮可能读 20 个文件，常驻会把回答挤没。 */
+.turn-context {
+  margin-top: 2px;
+  font: 11px/1.6 var(--font-ui);
+}
+.turn-context > summary {
+  width: fit-content;
+  padding: 1px 4px 1px 0;
+  color: var(--fg-4);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.turn-context > summary::-webkit-details-marker { display: none; }
+.turn-context > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 5px;
+  border-left: 3.5px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  vertical-align: 1px;
+  transition: transform 100ms ease-in-out;
+}
+.turn-context[open] > summary::before { transform: rotate(90deg); }
+.turn-context > summary:hover { color: var(--fg-2); }
+.turn-context > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.turn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--bd-2);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  color: var(--fg-3);
+}
+.turn-chip-kind {
+  flex: none;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-3);
+  color: var(--fg-4);
+  font-size: 10px;
+}
+.turn-chip.is-write { border-color: color-mix(in srgb, var(--mint-6) 45%, var(--bd-2)); }
+.turn-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;      /* 长路径省略时保留文件名，丢掉前面的目录 */
+  text-align: left;
+}
+
+/* ---- Composer 里的排队区（Steering）---- */
+.agc-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.agc-queue > li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px dashed var(--bd-2);
+  border-radius: var(--r-1);
+  color: var(--fg-3);
+  font: 11px/1.5 var(--font-ui);
+}
+.agc-queue-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fg-4);
+}
+.agc-queue-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agc-queue-x {
+  flex: none;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.agc-queue-x:hover { color: var(--fg-1); }
+
+/* ---- 提炼记忆：收到折叠条里 ----
+   它是一块辅助功能，常驻展开会在消息区顶部压掉 100+ px，还把正文推下去。 */
+.agp-capture { border-bottom: 1px solid var(--bd-1); }
+.agp-capture > summary {
+  width: 100%;
+  padding: 6px 12px;
+  color: var(--fg-3);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.agp-capture > summary::-webkit-details-marker { display: none; }
+.agp-capture > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0; height: 0;
+  margin-right: 6px;
+  border-left: 3.5px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  vertical-align: 1px;
+  transition: transform 100ms ease-in-out;
+}
+.agp-capture[open] > summary::before { transform: rotate(90deg); }
+.agp-capture > summary:hover { color: var(--fg-1); }
+.agp-capture-n {
+  margin-left: 5px; padding: 0 5px;
+  border-radius: var(--r-pill); background: var(--bg-2);
+  color: var(--fg-3); font-size: 10px;
+}
+.agp-capture-body { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 7px; }
+.agp-capture-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  color: var(--fg-3); font-size: 11.5px;
+}
+.agp-capture-hint { margin: 0; color: var(--fg-4); font-size: 11.5px; }
+.agp-capture-item {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 6px 8px; border: 1px solid var(--bd-1); border-radius: var(--r-1);
+  background: var(--bg-2); color: var(--fg-2); font-size: 11.5px; line-height: 1.6;
+}
+.agp-capture-item > span { white-space: pre-wrap; min-width: 0; }
+.agp-capture-form { display: grid; gap: 7px; }
+.agp-capture-form input, .agp-capture-form textarea {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--bd-2); border-radius: var(--r-1);
+  background: var(--bg-1); color: var(--fg-1); font: 12px/1.55 var(--font-ui);
+}
+
+/* 轮次结束不再写字：状态栏已经有「已结束」，正文里再重复一句只是噪音。
+   留一个空占位保持底部留白稳定，避免最后一条消息贴着输入框。 */
+.agp-end { height: 4px; margin: 0; }
+
+.agp-capture-actions { display: flex; align-items: center; gap: 4px; flex: none; }

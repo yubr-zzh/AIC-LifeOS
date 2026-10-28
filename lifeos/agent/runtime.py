@@ -75,7 +75,8 @@ class LifeOSAgent:
         )
 
     async def run(self, user_input: str, session_id: str | None = None, memory_scope=None,
-                  model_profile_id: str | None = None, routing_policy: str = "auto"):
+                  model_profile_id: str | None = None, routing_policy: str = "auto",
+                  agent_session_id: str | None = None):
         bind = getattr(self.llm, "bind", None)
         context = bind(model_profile_id) if callable(bind) else nullcontext()
         with context:
@@ -84,6 +85,7 @@ class LifeOSAgent:
                 session_id=session_id,
                 memory_scope=memory_scope,
                 routing_policy=routing_policy,
+                agent_session_id=agent_session_id,
             )
 
     def agent_event(self, kind: str, session_id: str | None, detail: dict,
