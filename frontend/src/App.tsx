@@ -60,19 +60,15 @@ const navigation: { group: string; items: { id: SectionId; label: string; icon: 
     group: "反馈与记忆",
     items: [{ id: "feedback", label: "反馈", icon: "message", hint: "留下你的声音" }],
   },
-  {
-    group: "记录",
-    items: [{ id: "calendar", label: "工作历", icon: "calendar", hint: "回看每日记录" }],
-  },
 ];
 
 const sectionMeta = {
   calendar: { eyebrow: "记录 · 工作历", title: "回看你的日常轨迹", description: "汇总 LifeOS 已保存的每日与阶段记录。" },
   home: { eyebrow: "工作台 · 今日概览", title: "今天，先照顾最重要的事", description: "把计划变成行动，把行动留下痕迹。" },
-  "daily-plan": { eyebrow: "计划 · 每日", title: "每日规划", description: "今天要推进的事情。" },
-  "daily-review": { eyebrow: "复盘 · 每日", title: "每日复盘", description: "完成情况与今天的记录。" },
-  "phase-plan": { eyebrow: "计划 · 阶段", title: "阶段规划", description: "这一阶段要推进的方向。" },
-  "phase-review": { eyebrow: "复盘 · 阶段", title: "阶段复盘", description: "回看进展，决定下一步。" },
+  "daily-plan": { eyebrow: "", title: "", description: "" },
+  "daily-review": { eyebrow: "", title: "", description: "" },
+  "phase-plan": { eyebrow: "", title: "", description: "" },
+  "phase-review": { eyebrow: "", title: "", description: "" },
   chat: { eyebrow: "连接 · 对话", title: "和你的第二大脑聊聊", description: "LifeOS 会记住重要的上下文，陪你把想法变成下一步。" },
   agents: { eyebrow: "协作 · 本机 Agent", title: "让本机 Agent 帮你完成工作", description: "LifeOS 负责规划，Agent 负责执行，关键操作始终由你确认。" },
   feedback: { eyebrow: "系统 · 反馈", title: "让 LifeOS 越来越懂你", description: "告诉我们哪里顺手，哪里还可以更贴近你的工作方式。" },
@@ -203,7 +199,7 @@ export default function App() {
 
         <main id="main-content" className={`workspace-main ${active === "chat" ? "workspace-main-chat" : ""}`}>
           {/* agents 页自带标题块（参考界面），隐藏外层 page-intro，避免双标题。 */}
-          <div className={`page-intro ${active === "chat" || active === "agents" ? "page-intro-chat" : ""}`}>
+          <div className={`page-intro ${active === "chat" || active === "agents" ? "page-intro-chat" : ""} ${active === "home" ? "page-intro-home" : ""} ${active === "settings" ? "page-intro-settings" : ""}`}>
             <div>
               <div className="page-eyebrow">{meta.eyebrow}</div>
               <h1>{meta.title}</h1>
@@ -284,8 +280,6 @@ function HomePage({ onNavigate }: { onNavigate: (id: SectionId) => void }) {
     </section>
     <TodayOverviewCards onViewPlan={() => onNavigate("daily-plan")} />
     <section className="content-card rhythm-card"><div className="card-heading"><div><span className="card-kicker">生活节奏</span><h2>给自己留一点余地</h2></div><span className="soft-count">本周 · 4 / 7 天</span></div><p className="pulse-copy">持续前进不一定要很用力。今天完成重要的事，也记得给自己一点休息。</p><div className="week-dots"><span className="filled" /><span className="filled" /><span className="filled" /><span className="filled" /><span /><span /><span /></div><div className="rhythm-footer"><span>本周已经记录了 4 个值得记住的瞬间</span><button className="text-button" onClick={() => onNavigate("diary")}>写一篇日记 →</button></div></section>
-    <DailyReminderCard />
-    <section className="content-card recent-card"><div className="card-heading"><div><span className="card-kicker">最近记录</span><h2>工作台动态</h2></div><button className="text-button" onClick={() => onNavigate("feedback")}>查看全部</button></div><div className="recent-row"><span className="recent-icon">↗</span><div><strong>完成了一次对话</strong><small>刚刚 · 已写入事件队列</small></div><span className="recent-status">已记录</span></div><div className="recent-row"><span className="recent-icon">✦</span><div><strong>收到一个新的反馈</strong><small>昨天 · 关于复盘流程</small></div><span className="recent-status">待处理</span></div></section>
   </div>;
 }
 
@@ -575,7 +569,7 @@ function DiaryPage() {
   return <div className="diary-layout">
     <section className="content-card diary-editor">
       <div className="card-heading"><div><span className="card-kicker">{draft.id ? "编辑日记" : "今天 · 私人记录"}</span><h2>{draft.id ? "正在回看一篇旧日记" : "今天的日记"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div>
-      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={340} ariaLabel="日记编辑器" placeholder="今天有什么值得被写下来？支持 Markdown 标题、列表、引用和代码块。" />
+      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={340} ariaLabel="日记编辑器" placeholder="今天有什么值得被写下来？支持 Markdown 标题、列表、引用和代码块。" onAutoSave={() => { if (draft.loaded && !draft.saving && draft.content.trim()) void draft.save(); }} />
       <div className="diary-mood"><span>今天的心情</span>{moods.map((mood) => <button className={draft.mood === mood ? "selected" : ""} key={mood} onClick={() => draft.setMood(mood)}>{mood}</button>)}</div>
       <div className="editor-footer"><span>内容与心情会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存日记"} <span>→</span></button></div>
     </section>
@@ -589,7 +583,7 @@ function InsightPage() {
     <section className="content-card insight-editor">
       <div className="card-heading"><div><span className="card-kicker">心得 / 体验</span><h2>{draft.id ? "继续整理这份心得" : "记录一个正在发酵的想法"}</h2></div><span className="soft-count">{draft.id ? "已保存" : "新记录"}</span></div>
       <input className="insight-title" placeholder="先写一个标题…" value={draft.title} onChange={(event) => draft.setTitle(event.target.value)} />
-      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300} ariaLabel="心得体验编辑器" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" />
+      <MarkdownEditor value={draft.content} onChange={draft.setContent} minHeight={300} ariaLabel="心得体验编辑器" placeholder="一段阅读后的感受、一次旅途中的发现，或者一个你不想忘记的瞬间…" onAutoSave={() => { if (draft.loaded && !draft.saving && draft.content.trim()) void draft.save(); }} />
       <div className="editor-footer"><span>内容会保存到本地 SQLite</span><button className="green-button" onClick={() => void draft.save()} disabled={draft.saving}>{draft.saving ? "保存中…" : "保存心得"} <span>→</span></button></div>
     </section>
     <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew} kicker="历史心得" heading="知识花园" />

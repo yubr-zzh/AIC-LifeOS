@@ -1,8 +1,9 @@
+import { WorkCalendar } from "../components/WorkCalendar";
 import { useEffect, useState } from "react";
 import { ModelProviderSettings } from "./ModelProviderSettings";
 import type { AgentRoutingPolicy } from "../api/types";
 
-type Section = "models" | "appearance" | "agent";
+type Section = "models" | "appearance" | "agent" | "calendar";
 const ROUTING_POLICY_KEY = "lifeos-agent-routing-policy";
 
 function initialRoutingPolicy(): AgentRoutingPolicy {
@@ -41,7 +42,11 @@ export function SettingsPage({ dark, onDarkChange }: Props) {
           <span className="settings-nav-mark">◐</span>
           <span><strong>外观</strong><small>主题与显示偏好</small></span>
         </button>
-        <button className={section === "agent" ? "active" : ""} onClick={() => setSection("agent")}>
+        <button className={section === "calendar" ? "active" : ""} onClick={() => setSection("calendar")}>
+        <span className="settings-nav-mark">◷</span>
+        <span><strong>工作历</strong><small>年度活动热力图</small></span>
+      </button>
+      <button className={section === "agent" ? "active" : ""} onClick={() => setSection("agent")}>
           <span className="settings-nav-mark">AG</span>
           <span><strong>Agent 路由</strong><small>设置聊天请求的默认处理方式</small></span>
         </button>
@@ -49,7 +54,7 @@ export function SettingsPage({ dark, onDarkChange }: Props) {
       </aside>
 
       <section className="settings-content content-card">
-        {section === "models" ? <ModelProviderSettings /> : section === "appearance" ? (
+        {section === "calendar" ? <WorkCalendar onNavigate={() => undefined} /> : section === "models" ? <ModelProviderSettings /> : section === "appearance" ? (
           <div className="settings-section">
             <div className="settings-section-heading">
               <span className="card-kicker">APPEARANCE</span>

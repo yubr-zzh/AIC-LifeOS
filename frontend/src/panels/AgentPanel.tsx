@@ -17,6 +17,7 @@ import { CopyTextButton } from "../components/CopyTextButton";
 import { ToolGroup, ToolStep } from "./ToolStep";
 import { buildTurns, contextItems, type FlowItem, type Turn } from "./agentFlow";
 import { Markdown } from "../components/Markdown";
+import { IconCopy, IconRefresh } from "../components/Icons";
 import { groupLabel } from "./toolSummary";
 
 interface Props {
@@ -55,6 +56,8 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
   // 同时起两条 paichu，指令与工具调用交错。
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
   const steering = Boolean(active) && active!.state !== "idle" && active!.state !== "ended";
+  // 还在跑（含等待审批）：这时候不该给用户「复制/重试」的暗示
+  const running = Boolean(active) && !["idle", "ended", "error"].includes(active!.state);
   const idleReady = Boolean(active) && (active!.state === "idle" || active!.state === "ended");
   // 一次只发一条：发出去的瞬间状态还没翻成 thinking，若不拦住，
   // 第二条会在同一帧被连带发出，两条 paichu 就在 Bridge 里撞车了。
@@ -172,7 +175,8 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
                 ? streaming
                 : null
             }
-            canRetry={kai && active?.state !== "ended"}
+            running={running}
+            canRetry={kai && !running}
             onRetry={(text) => active && void api.act.send(active.sessionId, { text }).catch(() => undefined)}
             onLocateApproval={locateApproval}
           />
@@ -254,12 +258,14 @@ export function AgentPanel({ store, api, onCollapse, onCandidateCreated }: Props
 function TurnBlock({
   turn,
   streaming,
+  running,
   canRetry,
   onRetry,
   onLocateApproval,
 }: {
   turn: Turn;
   streaming: { kind: string; text: string } | null;
+  running: boolean;
   canRetry: boolean;
   onRetry: (text: string) => void;
   onLocateApproval: (requestId: string) => void;
@@ -338,16 +344,18 @@ function TurnBlock({
         </details>
       ) : null}
 
+      {!running ? (
       <div className="turn-foot">
-        <button type="button" className="turn-act" onClick={() => void copy()}>
-          {copied ? "已复制" : "复制"}
+        <button type="button" className="turn-act" onClick={() => void copy()} title={copied ? "已复制" : "复制"} aria-label="复制这一轮">
+          <IconCopy size={13} />
         </button>
         {canRetry && turn.user?.text ? (
-          <button type="button" className="turn-act" onClick={() => onRetry(turn.user!.text)}>
-            重试
+          <button type="button" className="turn-act" onClick={() => onRetry(turn.user!.text)} title="重试这一轮" aria-label="重试这一轮">
+            <IconRefresh size={13} />
           </button>
         ) : null}
       </div>
+      ) : null}
     </section>
   );
 }

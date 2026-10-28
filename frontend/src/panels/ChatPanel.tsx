@@ -104,6 +104,19 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
   const [historyCollapsed, setHistoryCollapsed] = useState(readHistoryCollapsed);
+  // 会话栏宽度：可拖拽，记住上次的位置
+  const [historyW, setHistoryW] = useState<number>(() => {
+    try { const v = Number(localStorage.getItem("lifeos.chat.historyWidth")); return v >= 180 && v <= 420 ? v : 236; } catch { return 236; }
+  });
+  const dragH = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const move = (e: MouseEvent) => { if (!dragH.current) return; const left = box.current?.getBoundingClientRect().left ?? 0; setHistoryW(Math.min(420, Math.max(180, Math.round(e.clientX - left)))); };
+    const up = () => { if (!dragH.current) return; dragH.current = false; document.body.style.cursor = ""; try { localStorage.setItem("lifeos.chat.historyWidth", String(historyW)); } catch { /* best-effort */ } };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  }, [historyW]);
   const [activeId, setActiveId] = useState(() => newConversationId());
   const [historyReady, setHistoryReady] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -289,8 +302,9 @@ export function ChatPanel({ store, agent, api }: Props) {
   };
 
   return (
-    <div className={`chat-workspace ${historyCollapsed ? "history-collapsed" : ""}`}>
+    <div ref={box} className={`chat-workspace ${historyCollapsed ? "history-collapsed" : ""}`} style={{ ["--chat-history-w" as string]: `${historyW}px` } as React.CSSProperties}>
       {!historyCollapsed ? <aside id="chat-history-panel" className="chat-history" aria-label="对话历史">
+        <div className="chat-history-grip" role="separator" aria-orientation="vertical" aria-label="拖动调整对话历史宽度" onMouseDown={() => { dragH.current = true; document.body.style.cursor = "col-resize"; }} />
         <div className="chat-history-top">
           <button className="chat-new" onClick={startNew} disabled={state.loading.chat}>
             <span aria-hidden="true">＋</span> 新建对话

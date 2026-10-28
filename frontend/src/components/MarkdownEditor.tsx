@@ -9,6 +9,8 @@ interface Props {
   ariaLabel?: string;
   className?: string;
   minHeight?: number;
+  /** 勾选任务后自动保存（不传就只改内容，等用户手动保存）。 */
+  onAutoSave?: () => void;
 }
 
 function inlineNodes(text: string): React.ReactNode[] {
@@ -32,24 +34,36 @@ function inlineNodes(text: string): React.ReactNode[] {
   });
 }
 
-function MarkdownPreview({ value }: { value: string }) {
+function MarkdownPreview({ value, onToggleTask }: { value: string; onToggleTask?: (line: number) => void }) {
   const blocks = useMemo(() => {
     const lines = value.split("\n");
     const result: React.ReactNode[] = [];
-    let list: { type: "ul" | "ol"; items: string[] } | null = null;
+    let list: { type: "ul" | "ol"; items: { text: string; line: number }[] } | null = null;
     let code: string[] | null = null;
 
     const flushList = () => {
       if (!list) return;
       const items = list.items.map((item, index) => {
-        const task = /^\[([ xX])\]\s+/.exec(item);
-        return <li key={index} className={task ? "markdown-task" : undefined}>{task ? <><input type="checkbox" checked={task[1].toLowerCase() === "x"} readOnly />{inlineNodes(item.slice(task[0].length))}</> : inlineNodes(item)}</li>;
+        const task = /^\[([ xX])\]\s+/.exec(item.text);
+        if (!task) return <li key={index}>{inlineNodes(item.text)}</li>;
+        return (
+          <li key={index} className="markdown-task">
+            <input
+              type="checkbox"
+              checked={task[1].toLowerCase() === "x"}
+              onChange={() => onToggleTask?.(item.line)}
+              aria-label={item.text.slice(task[0].length)}
+            />
+            {inlineNodes(item.text.slice(task[0].length))}
+          </li>
+        );
       });
       result.push(list.type === "ul" ? <ul key={`list-${result.length}`}>{items}</ul> : <ol key={`list-${result.length}`}>{items}</ol>);
       list = null;
     };
 
-    for (const line of lines) {
+    for (let lineNo = 0; lineNo < lines.length; lineNo++) {
+      const line = lines[lineNo];
       if (line.trim().startsWith("```")) {
         flushList();
         if (code) {
@@ -72,12 +86,12 @@ function MarkdownPreview({ value }: { value: string }) {
       }
       if (/^\s*[-*]\s+/.test(line)) {
         if (list?.type !== "ul") { flushList(); list = { type: "ul", items: [] }; }
-        list.items.push(line.replace(/^\s*[-*]\s+/, ""));
+        list.items.push({ text: line.replace(/^\s*[-*]\s+/, ""), line: lineNo });
         continue;
       }
       if (/^\s*\d+\.\s+/.test(line)) {
         if (list?.type !== "ol") { flushList(); list = { type: "ol", items: [] }; }
-        list.items.push(line.replace(/^\s*\d+\.\s+/, ""));
+        list.items.push({ text: line.replace(/^\s*\d+\.\s+/, ""), line: lineNo });
         continue;
       }
       if (/^>\s?/.test(line)) {
@@ -98,7 +112,7 @@ function MarkdownPreview({ value }: { value: string }) {
   return <div className="markdown-preview">{blocks}</div>;
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, className, minHeight = 280 }: Props) {
+export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, className, minHeight = 280, onAutoSave }: Props) {
   const area = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
@@ -134,6 +148,27 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
     });
   };
 
+  /** 预览态勾选任务：直接改源文本里的 [ ] / [x]，再触发一次自动保存。 */
+  const toggleTask = (lineNo: number) => {
+    const lines = value.split("\n");
+    const raw = lines[lineNo] ?? "";
+    if (!/\\[[ xX]\\]/.test(raw)) return;
+    const next = raw.includes("[ ]")
+      ? raw.replace("[ ]", "[x]")
+      : raw.replace(/\\[[xX]\\]/, "[ ]");
+    onChange(lines.map((l, i) => (i === lineNo ? next : l)).join("\n"));
+    onAutoSave?.();
+  };
+
+  // 编辑态也把任务列出来，勾选不用切到预览
+  const taskLines = useMemo(() => {
+    const out: { line: number; done: boolean; text: string }[] = [];
+    value.split("\n").forEach((raw, i) => {
+      const m = /^\s*[-*]\s+\[([ xX])\]\s+(.*)$/.exec(raw);
+      if (m) out.push({ line: i, done: m[1].toLowerCase() === "x", text: m[2] });
+    });
+    return out;
+  }, [value]);
   const applySlash = (command: string) => {
     const element = area.current;
     if (!element) return;
@@ -165,7 +200,10 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
     }
     if (event.key === "Enter" && slashQuery !== null) {
       event.preventDefault();
-      applySlash(slashQuery || "task");
+      const pick = ["task", "bullet", "number", "heading", "quote"].find((c) => c.startsWith(slashQuery));
+      // 没有匹配命令就不插入，避免 /xyz 回车凭空冒出 "- [ ] "
+      if (pick) applySlash(pick);
+      else setSlashQuery(null);
       return;
     }
     if (event.key === "Enter") {
@@ -214,7 +252,17 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
           {preview ? "编辑" : "预览"}
         </button>
       </div>
-      {preview ? <MarkdownPreview value={value} /> : (
+      {!preview && taskLines.length > 0 ? (
+        <div className="markdown-tasks" role="group" aria-label="任务清单">
+          {taskLines.map((task) => (
+            <label key={task.line} className={task.done ? "done" : ""}>
+              <input type="checkbox" checked={task.done} onChange={() => toggleTask(task.line)} />
+              <span>{task.text}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+      {preview ? <MarkdownPreview value={value} onToggleTask={toggleTask} /> : (
         <textarea ref={area} className="markdown-input" value={value} onChange={(event) => {
           const next = event.target.value;
           onChange(next);
@@ -236,7 +284,7 @@ export function MarkdownEditor({ value, onChange, placeholder, ariaLabel, classN
       {!preview && slashQuery !== null ? (
         <div className="markdown-slash-menu" role="listbox" aria-label="格式命令">
           {[['task', '任务清单', '待办事项'], ['bullet', '无序列表', '- item'], ['number', '有序列表', '1. item'], ['heading', '标题', '## 标题'], ['quote', '引用', '> 引用']]
-            .filter(([, label]) => !slashQuery || label.includes(slashQuery))
+            .filter(([command, label]) => !slashQuery || command.startsWith(slashQuery) || label.includes(slashQuery))
             .map(([command, label, hint]) => <button type="button" key={command} onMouseDown={(event) => event.preventDefault()} onClick={() => applySlash(command)}><strong>{label}</strong><span>{hint}</span></button>)}
         </div>
       ) : null}
