@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/version-2.2.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
-  <img src="https://img.shields.io/badge/tests-1093%20cases-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1100%2B%20cases-brightgreen?style=flat-square" alt="Tests">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </div>
 
@@ -52,11 +52,11 @@ LifeOS软件版 想把助手从浏览器的标签页里搬出来，安顿在你�
 
 **派活。** Agent 页以卡片列出本机 Agent 的状态、版本和连接清单。选一个并指定文件夹，它在里面读文件、改代码、跑命令，每个动作先给你过目。详情抽屉显示 Bridge 健康状态，可随时重新检测。
 
-**对话。** Agent 的回复以消息气泡呈现，只显示正文——思考过程、工具调用和中间结果留在后台，不上屏。正文流式输出；单条过长会自动分成几条消息，内容一字不少。需要你选择或授权时，选择框和权限请求框照常弹出，答完 Agent 继续跑。此前的聊天与 Agent 执行结果会沉淀为记忆，主模型能读到 Agent 的完整回复。消息一键复制，会话可重命名，单条消息最多附 3 个文件，每个不超过 200 KB。
+**对话。** 每一轮收在一个区块里：先是你的问题，然后是回答。回答按 Markdown 渲染，公式正常显示。工具调用收成一行。只读类调用完成后变成一行纯文字。命令与文件写入留一行，点开可看输入和结果。失败和待审批始终展开，处理完才收起。思考过程单独成行。每轮底部有一条折叠带，列出这一轮读过的文件和搜索模式。鼠标移到一轮上，可以复制或重试。正文流式输出；单条过长会分成几条消息，内容一字不少。Agent 干活时按回车，消息先排队，本轮结束再发出。需要你选择或授权时，选择框和权限请求框照常弹出，答完 Agent 继续跑。此前的聊天与 Agent 执行结果会沉淀为记忆，主模型能读到 Agent 的完整回复。消息一键复制，会话可重命名，单条消息最多附 3 个文件，每个不超过 200 KB。
 
 **当日。** 今日工作台逐项打勾，20 组提醒每天准时到，Agent 的结果和待办汇进右上角 Inbox。侧栏可收起，对话区可拖拽调宽。
 
-**经年。** 每日与阶段计划用 Markdown 写，复盘自动承接计划条目；年度工作历以贡献图风格收拢全年规划、复盘、日记与心得，一眼扫完。
+**经年。** 每日与阶段计划用 Markdown 写。编辑器支持斜杠命令：任务清单、无序列表、有序列表、标题、引用。复盘自动承接计划条目。年度工作历以贡献图风格收拢全年规划、复盘、日记与心得，一眼扫完。
 
 ### 几点提示
 
@@ -147,11 +147,11 @@ cd frontend && npm run dev
 ## 测试
 
 ```powershell
-# 后端，约 960 个用例
+# 后端，约 930 个用例
 .venv\Scripts\python -m pytest tests -q
 .venv\Scripts\python -m compileall lifeos
 
-# 前端，约 130 个用例，另附类型检查
+# 前端，约 190 个用例，另附类型检查
 cd frontend
 npm test
 npm run typecheck
@@ -175,6 +175,7 @@ npm run typecheck
 
 - 运行时数据：安装版写 `%USERPROFILE%\lifeOS`，源码运行写当前目录 `./lifeOS/`。首次启动从 AppData 旧目录复制迁移，旧目录保留为备份。
 - 主服务默认 8765，被占时向上探测到 8790。测试残留的 bridge 进程可能占住 8766 到 8770，结束 `python -m lifeos.bridge.run` 进程即可释放。
+- 免安装版在 `resources\node\` 内捆绑 `claude.exe`。安装包不含它，安装版改为沿 `PATH` 探测本机的 Claude Code CLI。
 
 ## 参与贡献
 

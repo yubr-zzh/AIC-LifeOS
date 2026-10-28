@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/version-2.2.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20pywebview-green?style=flat-square" alt="Stack">
-  <img src="https://img.shields.io/badge/tests-1093%20cases-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1100%2B%20cases-brightgreen?style=flat-square" alt="Tests">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </div>
 
@@ -54,11 +54,11 @@ The horizon is plain: let the machine come to know you over the days. Chats sett
 
 **Assign work.** The Agent page lists every local agent as a card, with status, version, and a connect checklist. Pick one and point it at a folder. It reads files, edits code, and runs commands there, and shows you each action first. A detail drawer shows Bridge health, and you can re-detect agents at any time.
 
-**Talk.** Agent replies appear as message bubbles that show the answer text only — reasoning, tool calls, and intermediate results stay in the background. Text streams in; an over-long reply is split into several messages with nothing lost. Question and permission boxes still pop up when the agent needs a choice or an approval, and it continues once you answer. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
+**Talk.** Every exchange stays in one turn block: your question, then the answer. Replies render Markdown and math. Tool calls fold to one line. Read-only calls shrink to plain text once they finish. Commands and file writes keep a line you can click open for input and output. Failures and pending approvals stay open until you handle them. The agent's reasoning shows on its own line. A folded strip under each turn lists the files and search patterns that turn touched. Hover a turn to copy or retry it. Text streams in. An over-long reply splits into several messages, with nothing lost. Press Enter while the agent works, and the message queues until the turn ends. Question and permission boxes still pop up when the agent needs a choice or an approval. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
 
 **Today.** Check off today's plan item by item. 20 reminders arrive on schedule, and agent results and to-dos land in the inbox. Collapse the sidebars; drag to widen the chat pane.
 
-**Over the year.** Write daily and phase plans in markdown; reviews inherit plan items. The year view gathers your plans, reviews, diary, and notes into one contribution-style graph.
+**Over the year.** Write daily and phase plans in Markdown. The editor takes slash commands for task lists, bullets, numbered lists, headings, and quotes. Reviews inherit plan items. The year view gathers your plans, reviews, diary, and notes into one contribution-style graph.
 
 ### Tips
 
@@ -149,11 +149,11 @@ cd frontend && npm run dev
 ## Tests
 
 ```powershell
-# backend, about 960 cases
+# backend, about 930 cases
 .venv\Scripts\python -m pytest tests -q
 .venv\Scripts\python -m compileall lifeos
 
-# frontend, about 130 cases, plus typecheck
+# frontend, about 190 cases, plus typecheck
 cd frontend
 npm test
 npm run typecheck
@@ -177,6 +177,7 @@ Three backend files (`tests/test_codex_lc_ji_cheng.py`, `test_liu_xing_lc_ji_che
 
 - Runtime data goes to `%USERPROFILE%\lifeOS` for installs and `./lifeOS/` for source runs. The first start copies legacy AppData data and keeps the old folder as a backup.
 - The main service listens on 8765 and probes upward to 8790 when busy. Test leftovers can hold ports 8766 to 8770; end the `python -m lifeos.bridge.run` process to free them.
+- The portable build ships a bundled `claude.exe` under `resources\node\`. The installer leaves it out, so an installed app probes `PATH` for your own Claude Code CLI.
 
 ## Contributing
 
