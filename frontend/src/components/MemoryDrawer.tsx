@@ -26,6 +26,8 @@ interface MemoryItem {
   text: string;
   source: string;
   scopeKind: string;
+  projectId: string;
+  scopeLabel: string;
   createdAt: string;
   usedCount: number;
   status: string;
@@ -41,7 +43,9 @@ const CATEGORY_LABEL: Record<string, string> = {
 const CATEGORY_ORDER = ["user", "project", "feedback", "reference"];
 
 function pickText(entry: MemoryEntry): string {
-  const c = (entry.content ?? {}) as Record<string, unknown>;
+  const raw: unknown = entry.content;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   for (const key of ["text", "value", "content", "summary", "statement", "claim"]) {
     const v = c[key];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -51,33 +55,39 @@ function pickText(entry: MemoryEntry): string {
 }
 
 function toItems(store: MemoryStore | null | undefined): MemoryItem[] {
-  if (!store) return [];
   const out: MemoryItem[] = [];
-  for (const category of CATEGORY_ORDER) {
-    const list = (store as unknown as Record<string, MemoryEntry[]>)[category];
-    if (!Array.isArray(list)) continue;
-    for (const entry of list) {
-      if (!entry || typeof entry.id !== "string") continue;
-      out.push({
-        id: entry.id,
-        category,
-        text: pickText(entry),
-        source: entry.source ?? "—",
-        scopeKind: entry.scope?.kind ?? "unassigned",
-        createdAt: entry.occurred_at ?? (entry.content as Record<string, unknown>)?.created_at as string ?? "",
-        usedCount: Number((entry as unknown as { used_count?: number }).used_count ?? 0) || 0,
-        status: entry.status ?? "active",
-      });
+  try {
+    if (!store || typeof store !== "object") return out;
+    for (const category of CATEGORY_ORDER) {
+      const list = (store as unknown as Record<string, MemoryEntry[]>)[category];
+      if (!Array.isArray(list)) continue;
+      for (const entry of list) {
+        try {
+          if (!entry || typeof entry.id !== "string") continue;
+          const content = (entry.content ?? {}) as Record<string, unknown>;
+          out.push({
+            id: entry.id,
+            category,
+            text: pickText(entry),
+            source: typeof entry.source === "string" ? entry.source : "—",
+            scopeKind: typeof entry.scope?.kind === "string" ? entry.scope.kind : "unassigned",
+            projectId: typeof entry.scope?.project_id === "string" ? entry.scope.project_id : "",
+            scopeLabel: typeof entry.scope?.scenario_type === "string" ? entry.scope.scenario_type : "",
+            createdAt: typeof entry.occurred_at === "string" ? entry.occurred_at : typeof content.created_at === "string" ? content.created_at : "",
+            usedCount: Number((entry as unknown as { used_count?: number }).used_count ?? 0) || 0,
+            status: typeof entry.status === "string" ? entry.status : "active",
+          });
+        } catch {
+          // 单条数据形状不对就跳过这一条，不让它拖垮整个抽屉
+        }
+      }
     }
+  } catch {
+    return out;
   }
   return out;
 }
 
-function sourceLabel(source: string): string {
-  if (source === "direct") return "你写的";
-  if (source === "candidate" || source === "derived") return "AI 提炼";
-  return source || "—";
-}
 
 export function MemoryDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [items, setItems] = useState<MemoryItem[]>([]);
@@ -226,7 +236,12 @@ export function MemoryDrawer({ open, onClose }: { open: boolean; onClose: () => 
                   <>
                     <p className="mem-item-text">{it.text || "（无正文）"}</p>
                     <div className="mem-item-meta">
-                      <span className="mem-item-src">{sourceLabel(it.source)}</span>
+                      {it.scopeKind === "project" && it.projectId ? (
+                        <span className="mem-item-scope mono" title="来源项目">{it.projectId}</span>
+                      ) : null}
+                      {it.scopeKind === "scenario" && it.scopeLabel ? (
+                        <span className="mem-item-scope mono" title="来源场景">{it.scopeLabel}</span>
+                      ) : null}
                       {it.createdAt ? <span className="mono">{String(it.createdAt).slice(0, 10)}</span> : null}
                       <span className="mem-item-used">引用 {it.usedCount} 次</span>
                     </div>
