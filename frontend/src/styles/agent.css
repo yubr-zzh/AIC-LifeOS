@@ -1238,7 +1238,21 @@ body.chat-split-resizing * { cursor: col-resize !important; }
   border-radius: var(--r-pill); background: var(--bg-2);
   color: var(--fg-3); font-size: 10px;
 }
-.agp-capture-body { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 7px; }
+/* 提炼记忆面板展开后内容可能超过面板高度；给它自己的滚动条，
+   否则外层面板不滚，下面的候选和提交按钮会被裁掉。 */
+.agp-capture { min-height: 0; flex: 0 1 auto; }
+.agp-capture-body {
+  padding: 0 6px 10px 12px; display: flex; flex-direction: column; gap: 7px;
+  max-height: min(42vh, 340px); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--bd-3) transparent;
+}
+.agp-capture-body::-webkit-scrollbar { width: 8px; }
+.agp-capture-body::-webkit-scrollbar-track { background: transparent; }
+.agp-capture-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent; border-radius: 999px;
+  background: var(--bd-3); background-clip: padding-box;
+}
+.agp-capture-body::-webkit-scrollbar-thumb:hover { background: var(--bd-4); background-clip: padding-box; }
 .agp-capture-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   color: var(--fg-3); font-size: 11.5px;

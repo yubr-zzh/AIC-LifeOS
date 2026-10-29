@@ -1667,9 +1667,9 @@ button.activity-day { cursor: pointer; }
 .entry-history-item { display: grid; gap: 3px; width: 100%; padding: 11px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #5d5b50; text-align: left; cursor: pointer; }
 .entry-history-item:hover { background: #f7f6f0; }
 .entry-history-item.active { border-color: #d8d3c4; background: #faf9f4; }
-.entry-history-item strong { overflow: hidden; color: #3e3d37; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.entry-history-item strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; color: #3e3d37; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
 .entry-history-item small { overflow: hidden; color: #9a978a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.entry-history-date { color: #788c5d; font-size: 10px; }
+.entry-history-date { color: #788c5d; font-size: 10px; white-space: nowrap; }
 .entry-history-empty { margin: 24px 0; color: #9a978a; font-size: 11px; }
 .theme-night .entry-history-card { background: #242220; border-color: #44403a; }
 .theme-night .entry-history-heading h3 { color: #ece9df; }

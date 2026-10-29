@@ -396,37 +396,31 @@ function StatusBar({ session, store }: { session: AgentSession | null; store: Ag
   const st = session?.state ?? null;
   const sid = session?.sessionId ?? null;
 
-  // 本次对话计时（整批口径）：第一批指令开始跑（进入运行态）起算，整批结束
-  // （ended / error）或被中断才冻结；多条指令之间经过的瞬间 idle 按暂停处理，
-  // 恢复后接着走；等审批、等回答也算对话进行中，照常计时。
-  // 旧口径从 session.createdAt 起算——会话建好没发指令也在走，且结束后不停。
+  // 本次对话计时：对话开始（Agent 进入运行态）起算；Agent 暂停（空闲、
+  // 等你批准、等你回答）就冻结，恢复执行后接着累计；整批结束（ended / error）
+  // 冻结，下一轮指令归零重计。
   const [, setXin] = useState(0);
-  const ji = useRef({ sid: null as string | null, qi: 0, leiJi: 0, ticking: false, tingAt: 0, prev: null as string | null });
+  const ji = useRef({ sid: null as string | null, qi: 0, leiJi: 0, ticking: false, prev: null as string | null });
   const m = ji.current;
-  const pao = st === "thinking" || st === "working" || st === "attention" || st === "waiting_input" || st === "backoff";
+  const pao = st === "thinking" || st === "working" || st === "backoff";
 
   if (sid !== m.sid) {
     // 换会话：计时清零重来。
-    m.sid = sid; m.qi = 0; m.leiJi = 0; m.ticking = false; m.tingAt = 0; m.prev = null;
+    m.sid = sid; m.qi = 0; m.leiJi = 0; m.ticking = false; m.prev = null;
   }
   if (st !== m.prev) {
     const xianzai = Date.now();
     if (pao) {
       if (!m.ticking) {
-        // 结束/出错之后、或停下来超过 3 秒之后再跑，算新一轮，归零重计；
-        // 批内指令之间的 idle 只有几毫秒，不算新一轮。
-        const xinYiLun = m.prev === null || m.prev === "ended" || m.prev === "error"
-          || (m.prev === "idle" && m.tingAt > 0 && xianzai - m.tingAt > 3000);
-        if (xinYiLun) m.leiJi = 0;
+        // 上一轮已结束/出错，再跑就是新对话，归零重计；
+        // 同一轮里的暂停（等你批准、等你回答）恢复后继续累加。
+        if (m.prev === "ended" || m.prev === "error") m.leiJi = 0;
         m.qi = xianzai;
         m.ticking = true;
       }
-    } else {
-      if (m.ticking) {
-        m.leiJi += xianzai - m.qi;
-        m.ticking = false;
-      }
-      m.tingAt = xianzai;
+    } else if (m.ticking) {
+      m.leiJi += xianzai - m.qi;
+      m.ticking = false;
     }
     m.prev = st;
   }

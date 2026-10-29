@@ -9,15 +9,27 @@ function claimOf(candidate: MemoryCandidate): string {
   return typeof claim === "string" ? claim : JSON.stringify(candidate.content, null, 2);
 }
 
-function firstLine(text: string): string {
-  return text.split("\n").find((line) => line.trim())?.replace(/^[#>*\-\d.\s]+/, "").slice(0, 36) || "未命名记忆";
-}
-
 const STATUS_LABEL: Record<string, string> = {
   candidate: "待审核",
   committed: "已并入",
   rejected: "已放弃",
 };
+
+/** 候选池每行左侧只留一个字：并入过就是“已”，其余都是“未”。 */
+function statusShort(status: string): string {
+  return status === "committed" ? "已" : "未";
+}
+
+/** 候选所属项目名；没有项目范围时退回范围类型，避免出现空标题。 */
+function projectName(candidate: MemoryCandidate): string {
+  const scope = candidate.scope;
+  if (scope?.kind === "project" && scope.project_id) return scope.project_id;
+  const fromContent = candidate.content.project_id;
+  if (typeof fromContent === "string" && fromContent.trim()) return fromContent.trim();
+  if (scope?.kind === "scenario") return scope.scenario_type ?? "场景";
+  if (scope?.kind === "global") return "全局";
+  return "未标注项目";
+}
 
 export function MemoryReviewPage({ store }: { store: Store }) {
   const candidates = store.state.memory.candidates;
@@ -85,7 +97,7 @@ export function MemoryReviewPage({ store }: { store: Store }) {
 
     <aside className="content-card entry-history-card">
       <div className="entry-history-heading">
-        <div><span className="card-kicker">候选池 · SQLite</span><h3>所有记忆候选</h3></div>
+        <div><span className="card-kicker">候选池</span><h3>所有记忆候选</h3></div>
         <span className="soft-count">{candidates.length} 条</span>
       </div>
       {candidates.length === 0 ? <p className="entry-history-empty">还没有记忆候选。</p> : (
@@ -95,8 +107,8 @@ export function MemoryReviewPage({ store }: { store: Store }) {
             return <button key={candidate.id} type="button"
               className={`entry-history-item ${candidate.id === active?.id ? "active" : ""}`}
               onClick={() => setActiveId(candidate.id)}>
-              <span className="entry-history-date">{STATUS_LABEL[candidate.status] ?? candidate.status}</span>
-              <strong>{firstLine(text)}</strong>
+              <span className="entry-history-date">{statusShort(candidate.status)}</span>
+              <strong>{projectName(candidate)}</strong>
               <small>{text.replace(/\s+/g, " ").slice(0, 64) || "暂无正文"}</small>
             </button>;
           })}

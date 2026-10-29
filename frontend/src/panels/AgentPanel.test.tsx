@@ -140,9 +140,9 @@ describe("AgentPanel 的结束态与工作指示", () => {
 });
 
 /**
- * 对话计时器（整批口径）：第一批指令开始跑起算，整批结束（ended/error/中断）
- * 冻结；等审批、等回答算对话进行中，照常走。旧口径从 session.createdAt 起算、
- * 结束后也不停，这两个行为都在这里钉死防止回退。
+ * 对话计时器：对话开始（Agent 进入运行态）起算；等待批准、等待回答算暂停，
+ * 恢复执行后接着累计；整批结束冻结。旧口径把等待时间也算进去、且从
+ * session.createdAt 起算，这两个行为都在这里钉死防止回退。
  */
 describe("AgentPanel 的对话计时器", () => {
   afterEach(() => {
@@ -182,23 +182,27 @@ describe("AgentPanel 的对话计时器", () => {
     expect(screen.queryByText(/已用|用时/)).toBeNull();
   });
 
-  it("对话开始计时，等审批接着走，结束后冻结不动", () => {
+  it("对话开始计时，等待你决定时暂停，结束后冻结不动", () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);
     const { rerender } = render(hua(session({ state: "idle" })));
     rerender(hua(session({ state: "working" })));
     act(() => { vi.advanceTimersByTime(5_000); });
     expect(screen.getByText("已用 5s")).toBeTruthy();
-    // 等你决定也是对话进行中，继续走。
+    // 等你决定是暂停：时间停住，不会把发呆时间算进对话。
     rerender(hua(session({ state: "attention" })));
     act(() => { vi.advanceTimersByTime(3_000); });
-    expect(screen.getByText("已用 8s")).toBeTruthy();
+    expect(screen.getByText("已用 5s")).toBeTruthy();
+    // 你决定后恢复执行：接着累计。
+    rerender(hua(session({ state: "working" })));
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(screen.getByText("已用 7s")).toBeTruthy();
     // 整批结束：冻结在最后一格，时间再久也不动。
     rerender(hua(session({ state: "ended" })));
-    expect(screen.getByText("用时 8s")).toBeTruthy();
+    expect(screen.getByText("用时 7s")).toBeTruthy();
     act(() => { vi.advanceTimersByTime(60_000); });
-    expect(screen.queryByText("已用 68s")).toBeNull();
-    expect(screen.getByText("用时 8s")).toBeTruthy();
+    expect(screen.queryByText("已用 67s")).toBeNull();
+    expect(screen.getByText("用时 7s")).toBeTruthy();
   });
 
   it("结束后再发新指令，计时归零重计", () => {

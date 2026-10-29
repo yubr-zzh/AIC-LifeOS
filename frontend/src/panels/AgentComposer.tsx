@@ -13,7 +13,6 @@ interface Props {
   /** 正在跑的上行动作名。null 表示空闲。 */
   busy?: string | null;
   canInterrupt?: boolean;
-  placeholder?: string;
   /** Agent 正在执行：此时 Enter 进队列而不是直接发送。 */
   steering?: boolean;
   /** 已排队、等当前回合结束再发的消息。 */
@@ -29,7 +28,6 @@ export function AgentComposer({
   canSend = true,
   busy,
   canInterrupt,
-  placeholder,
   steering,
   queued,
   onSend,
@@ -98,12 +96,6 @@ export function AgentComposer({
           rows={2}
           aria-label="给 Agent 发送消息"
           value={text}
-          placeholder={
-            disabled
-              ? "当前无法输入"
-              : placeholder ??
-                (steering ? "Agent 正在执行；Enter 排队，等这一轮结束后发送" : "给 Agent 发消息，Enter 发送")
-          }
           onChange={(e) => { setSendError(""); setText(e.target.value); }}
           onKeyDown={onKey}
           disabled={disabled}

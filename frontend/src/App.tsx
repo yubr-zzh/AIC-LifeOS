@@ -418,7 +418,7 @@ function PlanningPage({ phase, store }: { phase: boolean; store: ReturnType<type
     </section>
     <div className="entry-side-rail">
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
-        kicker="历史规划 · SQLite" heading={phase ? "阶段规划记录" : "每日规划记录"}
+        kicker="历史规划" heading={phase ? "阶段规划记录" : "每日规划记录"}
         newLabel={phase ? "＋ 新建阶段规划" : "＋ 新建每日规划"} />
     </div>
   </div>;
@@ -527,7 +527,7 @@ function ReviewPage({ phase, store }: { phase: boolean; store: ReturnType<typeof
     </section>
     <div className="entry-side-rail">
       <EntryHistory entries={draft.entries} activeId={draft.id} onSelect={draft.openEntry} onNew={draft.startNew}
-        kicker="历史复盘 · SQLite" heading={phase ? "阶段性复盘记录" : "每日复盘记录"}
+        kicker="历史复盘" heading={phase ? "阶段复盘记录" : "每日复盘记录"}
         newLabel={phase ? "＋ 新建阶段复盘" : "＋ 新建每日复盘"} />
     </div>
   </div>;

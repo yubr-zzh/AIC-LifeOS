@@ -3,11 +3,11 @@ import type { StructuredEntry } from "../api/types";
 function dateLabel(value: string): string {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.valueOf())) return value;
-  return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "short" }).format(date);
+  return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric" }).format(date);
 }
 
 function titleOf(entry: StructuredEntry): string {
-  return entry.title.trim() || entry.content.split("\n").find((line) => line.trim())?.replace(/^[#>*\-\d.\s]+/, "").slice(0, 36) || "未命名记录";
+  return entry.title.trim() || entry.content.split("\n").find((line) => line.trim())?.replace(/^[#>*\-\d.\s]+/, "") || "未命名记录";
 }
 
 export function EntryHistory({
@@ -39,7 +39,6 @@ export function EntryHistory({
           onClick={() => onSelect(entry)}>
           <span className="entry-history-date">{dateLabel(entry.entry_date)}</span>
           <strong>{titleOf(entry)}</strong>
-          <small>{entry.content.replace(/\s+/g, " ").slice(0, 64) || "暂无正文"}</small>
         </button>)}
       </div>
     )}
