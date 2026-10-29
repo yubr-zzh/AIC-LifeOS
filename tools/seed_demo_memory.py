@@ -36,28 +36,29 @@ USER = [
     "涉及删除的操作先确认",
 ]
 
+# (正文, 所属项目 id)——演示「记忆按项目隔离」，所以不能全挂在同一个项目上
 PROJECT = [
-    "LifeOS 的测试用 pytest -q tests/",
-    "LifeOS 的前端在 frontend/，构建用 vite",
-    "LifeOS 的桌面端打包走 tools/build_exe.ps1",
-    "LifeOS 的数据存在本机 lifeOS 目录",
-    "LifeOS 的桥接进程是 lifeos/bridge",
-    "LifeOS 的 Agent 用 claude-code 适配器",
-    "LifeOS 的记忆分 user/project/feedback/reference 四类",
-    "LifeOS 的发布包是 dist/LifeOS",
-    "LifeOS 的 dev server 走 vite",
-    "LifeOS 的 UI 体系见 docs/agent-sidebar-p0a-corrected.md",
-    "LifeOS 的登录态存在 Windows DPAPI 里",
-    "LifeOS 的工作历是年度热力图",
+    ("LifeOS 的测试用 pytest -q tests/", "lifeos"),
+    ("LifeOS 的前端在 frontend/，构建用 vite", "lifeos"),
+    ("LifeOS 的桌面端打包走 tools/build_exe.ps1", "lifeos"),
+    ("LifeOS 的记忆分 user/project/feedback/reference 四类", "lifeos"),
+    ("深度学习代码用 PyTorch，数据放 data/，不用 TF", "深度学习代码"),
+    ("深度学习代码的训练脚本入口是 train.py，配置走 yaml", "深度学习代码"),
+    ("深度学习代码里模型定义放 models/，别和训练循环混一起", "深度学习代码"),
+    ("深度学习代码的实验记录写进 runs/ 目录，不要提交大 checkpoint", "深度学习代码"),
+    ("个人网站用 Astro 静态生成，部署在 GitHub Pages", "个人网站"),
+    ("个人网站的配色跟 LifeOS 一致，用薄荷绿", "个人网站"),
+    ("论文复现优先读作者的官方代码，其次看社区实现", "论文复现"),
+    ("论文复现的实验对比表放 results/，统一格式", "论文复现"),
 ]
 
 FEEDBACK = [
-    "上次计划页留白太多，编辑器应该占满",
-    "审批框的倒计时要能一眼看到",
-    "工具调用的展开默认折叠就好",
-    "不要在正文里重复显示 LifeOS 署名",
-    "输入框默认小一点，120px 够了",
-    "复制按钮改成 hover 出现",
+    ("上次计划页留白太多，编辑器应该占满", None),
+    ("审批框的倒计时要能一眼看到", None),
+    ("工具调用的展开默认折叠就好", None),
+    ("不要在正文里重复显示 LifeOS 署名", None),
+    ("深度学习代码的训练日志要打印每轮的 loss 和耗时", "深度学习代码"),
+    ("深度学习代码里别把超参硬编码在 train.py 里", "深度学习代码"),
 ]
 
 REFERENCE = [
@@ -95,10 +96,11 @@ def build() -> dict:
     out = []
     for i, t in enumerate(USER, 1):
         out.append(entry(i, "user", t, SCOPE_GLOBAL, (i * 7) % 13, 30 - i))
-    for i, t in enumerate(PROJECT, 1):
-        out.append(entry(i, "project", t, scope_project("lifeos"), (i * 5) % 9, 20 - i))
-    for i, t in enumerate(FEEDBACK, 1):
-        out.append(entry(i, "feedback", t, SCOPE_GLOBAL, i % 4, 14 - i))
+    for i, (t, pid) in enumerate(PROJECT, 1):
+        out.append(entry(i, "project", t, scope_project(pid), (i * 5) % 9, 20 - i))
+    for i, (t, pid) in enumerate(FEEDBACK, 1):
+        scope = scope_project(pid) if pid else SCOPE_GLOBAL
+        out.append(entry(i, "feedback", t, scope, i % 4, 14 - i))
     for i, t in enumerate(REFERENCE, 1):
         out.append(entry(i, "reference", t, SCOPE_GLOBAL, (i * 3) % 6, 40 - i * 2))
     return out
