@@ -4,8 +4,8 @@
 
 <div align="center">
   <h1>LifeOS</h1>
-  <p><b>A local-first personal agent OS that runs on your Windows machine.</b></p>
-  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><b>本地优先的个人智能体操作系统，运行在你的 Windows 电脑上。</b></p>
+  <p><a href="README.md">English</a> · 简体中文</p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
   <img src="https://img.shields.io/badge/version-2.2.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
@@ -16,173 +16,171 @@
 
 ---
 
-**LifeOS** pairs a front-stage chat agent with a background global agent. The two share a reliable event bus, a two-phase memory store with governance and temporal versioning, a reflection engine, and a skill evolution loop. Version 2.2.3 ships as a Windows desktop app: a pywebview (WebView2) shell, an embedded Python backend, and a local agent bridge. Double-click the exe and it runs. All data stays on your machine.
+**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入与治理（含时间版本）、反思引擎和技能进化闭环。v2.2.3 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
 
-## The problem it solves
+## 它解决什么问题
 
-Cloud assistants hold your notes, your schedule, and your chat history on someone else's server. LifeOS keeps all of it in a local SQLite store under `%USERPROFILE%\lifeOS`. The planner runs inside the app. The agents run on your machine, in folders you marked as trusted. You approve every file write and every command before it happens.
+云端助手把你的笔记、日程和聊天记录放在别人的服务器上。LifeOS 把这些全部存进本机 `%USERPROFILE%\lifeOS` 的 SQLite 库。规划在应用内完成。Agent 在你标记为信任的目录里执行。每次文件写入和每条命令都先经过你的批准。
 
-## How it works
+## 工作原理
 
 ```text
-LifeOS.exe (pywebview desktop shell, single instance)
-  └─ lifeos.api.server (main service, port 8765 with auto-probe)
-       ├─ static hosting of frontend/dist + SPA fallback (same origin, no CORS)
-       ├─ login gate: local accounts + PBKDF2 + HttpOnly session cookie + CSRF
-       └─ bridge subprocess (lifeos.bridge.run)
-            └─ agent adapters (claude_code and more, via claude-agent-sdk)
+LifeOS.exe（pywebview 桌面壳，单实例）
+  └─ lifeos.api.server（主服务，8765 起自动探测端口）
+       ├─ 静态托管 frontend/dist + SPA fallback（打包态同源，无 CORS）
+       ├─ 登录闸：本地账户 + PBKDF2 + HttpOnly 会话 Cookie + CSRF
+       └─ bridge 子进程（lifeos.bridge.run）
+            └─ Agent 适配器（claude_code 等，经 claude-agent-sdk 调本机 CLI）
 
-Core data flow:
-user input → chat agent (memory recall → LLM/tools) → reply
-           → reliable event bus → global agent → reflection
-           → memory candidates → security review → persist
+核心数据流：
+用户输入 → Chat Agent（记忆检索 → LLM/工具）→ 响应
+        → 可靠事件总线 → Global Agent → 反思
+        → 记忆候选 → 安全审查 → 持久化
 ```
 
-## User guide
+## 使用手册
 
-### Vision
+LifeOS软件版 想把助手从浏览器的标签页里搬出来，安顿在你自己的电脑上。
 
-LifeOS Software Edition wants to move the assistant out of a browser tab and settle it on your own computer.
+案头一盏灯，照见的全是你自己的东西。笔记、日程、代码、对话，都收在 `%USERPROFILE%\lifeOS` 的本地库里，不经过别人的服务器；Agent 每写一个文件、每跑一条命令，都先送到你眼前——你点头，它才动手。
 
-A lamp on your desk, lighting only what is yours. Notes, schedules, code, and conversations sit in a local store under `%USERPROFILE%\lifeOS`, on no one else's server. Before an agent writes a file or runs a command, it shows you first — you nod, it moves.
+远景说起来也平常：让这台机器随日子慢慢懂你。对话沉淀为记忆，记忆喂养反思，反思长出技能；今日的事今日勾，阶段有计划可依、事后有复盘可查，年末一张图收拢全局。灯下积起来的，都是你自己的。
 
-The horizon is plain: let the machine come to know you over the days. Chats settle into memory, memory feeds reflection, reflection grows skills. Today's items get checked today, phases carry plans and reviews, and one graph gathers the year. What piles up under the lamp is yours.
+### 日常使用
 
-### Daily use
+**进门。** 双击运行，首次启动创建本地账户。勾选记住密码，可 30 天免登录，凭据经系统级加密存放。
 
-**Walk in.** Double-click to run, then create a local account at first launch. Tick remember-me for 30 days of password-free login, with credentials stored under system-level encryption.
+**派活。** Agent 页以卡片列出本机 Agent 的状态、版本和连接清单。选一个并指定文件夹，它在里面读文件、改代码、跑命令，每个动作先给你过目。详情抽屉显示 Bridge 健康状态，可随时重新检测。
 
-**Assign work.** The Agent page lists every local agent as a card, with status, version, and a connect checklist. Pick one and point it at a folder. It reads files, edits code, and runs commands there, and shows you each action first. A detail drawer shows Bridge health, and you can re-detect agents at any time.
+**对话。** 每一轮收在一个区块里：先是你的问题，然后是回答。回答按 Markdown 渲染，公式正常显示。工具调用收成一行。只读类调用完成后变成一行纯文字。命令与文件写入留一行，点开可看输入和结果。失败和待审批始终展开，处理完才收起。思考过程单独成行。每轮底部有一条折叠带，列出这一轮读过的文件和搜索模式。鼠标移到一轮上，可以复制或重试。正文流式输出；单条过长会分成几条消息，内容一字不少。Agent 干活时按回车，消息先排队，本轮结束再发出。需要你选择或授权时，选择框和权限请求框照常弹出，答完 Agent 继续跑。此前的聊天与 Agent 执行结果会沉淀为记忆，主模型能读到 Agent 的完整回复。消息一键复制，会话可重命名，单条消息最多附 3 个文件，每个不超过 200 KB。
 
-**Talk.** Every exchange stays in one turn block: your question, then the answer. Replies render Markdown and math. Tool calls fold to one line. Read-only calls shrink to plain text once they finish. Commands and file writes keep a line you can click open for input and output. Failures and pending approvals stay open until you handle them. The agent's reasoning shows on its own line. A folded strip under each turn lists the files and search patterns that turn touched. Hover a turn to copy or retry it. Text streams in. An over-long reply splits into several messages, with nothing lost. Press Enter while the agent works, and the message queues until the turn ends. Question and permission boxes still pop up when the agent needs a choice or an approval. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
+**当日。** 今日工作台逐项打勾，20 组提醒每天准时到，Agent 的结果和待办汇进右上角 Inbox。侧栏可收起，对话区可拖拽调宽。
 
-**Today.** Check off today's plan item by item. 20 reminders arrive on schedule, and agent results and to-dos land in the inbox. Collapse the sidebars; drag to widen the chat pane.
+**经年。** 每日与阶段计划用 Markdown 写。编辑器支持斜杠命令：任务清单、无序列表、有序列表、标题、引用。复盘自动承接计划条目。年度工作历以贡献图风格收拢全年规划、复盘、日记与心得，一眼扫完。
 
-**Over the year.** Write daily and phase plans in Markdown. The editor takes slash commands for task lists, bullets, numbered lists, headings, and quotes. Reviews inherit plan items. The year view gathers your plans, reviews, diary, and notes into one contribution-style graph.
+### 几点提示
 
-### Tips
+- 关闭窗口即收工，所有后台进程一并退出，不留驻守。
+- Agent 未连接时也能先写好草稿，不必干等。
+- 卸载会先询问，确认之后才动你的数据。
+- 账户、记忆、日志都在 `%USERPROFILE%\lifeOS`，备份认准这一个文件夹。
 
-- Closing the window stops every background process. Nothing lingers.
-- Draft your message even when no agent is connected.
-- Uninstall asks first; your data goes only after you confirm.
-- Accounts, memories, and logs live in `%USERPROFILE%\lifeOS`. Back up that one folder and you have it all.
+## 安装
 
-## Install
+安装步骤：
 
-Installation steps:
+1. 运行 `LifeOS-Setup-2.2.3.exe`。
+2. 按向导操作。保留默认选项。
+3. 从开始菜单或桌面快捷方式启动 LifeOS。
+4. 首次启动时创建本地账户。
 
-1. Run `LifeOS-Setup-2.2.3.exe`.
-2. Follow the wizard. Keep the default options.
-3. Start LifeOS from the Start menu or the desktop shortcut.
-4. Create your local account at first launch.
+数据规则：
 
-Data rules:
+- 用户数据存放在 `%USERPROFILE%\lifeOS`。
+- 首次启动从 AppData 旧目录复制数据。原目录保留为备份。
+- 卸载先询问你。确认后才删除数据。
 
-- User data lives in `%USERPROFILE%\lifeOS`.
-- First launch copies legacy data from the old AppData folder. The original stays as a backup.
-- Uninstall asks you first. It deletes data only after you confirm.
+免安装用法：直接运行 `dist\LifeOS\LifeOS.exe`，无需安装器。
 
-Portable use: run `dist\LifeOS\LifeOS.exe` directly, with no installer.
-
-## Repository layout
+## 目录结构
 
 ```text
 lifeos/
-  desktop/          # desktop shell entry: single instance, ports, shutdown order
-  api/              # main service: static hosting, login gate, tunnel gateway, devices, users
-  bridge/           # local agent process: adapters, arbitration, redaction, recovery
-  agent/            # chat agent, global agent, planning, execution
-  memory/           # two-phase memory write: recall, candidates, lifecycle, governance, graph and temporal views
-  skills/           # skill registry, candidate detection, effect evaluation
-  reflection/       # background reflection engine
-  event/            # local reliable event queue
-  security/         # permission review
-  llm/              # unified LLM interface
-  mcp/              # MCP server registry and adapters
-frontend/           # React + TypeScript + Vite console (npm run build feeds dist)
-tools/              # build_exe.ps1, lifeos.spec, lifeos-setup.iss, verify_*.py
-tests/              # full backend test suite
-datasets/           # memory governance fixtures and LongMemEval-S templates
-docs/               # architecture and API documents
+  desktop/          # 桌面壳入口：单实例、端口、关停时序
+  api/              # 主服务：静态托管、登录闸、隧道网关、设备、用户
+  bridge/           # 本地 Agent 进程：适配器、仲裁、脱敏、恢复
+  agent/            # Chat Agent、Global Agent、规划、执行
+  memory/           # 两阶段记忆写入：检索、候选、生命周期、治理、图谱与时间版本
+  skills/           # 技能注册表、候选检测、效果评估
+  reflection/       # 后台反思引擎
+  event/            # 本地可靠事件队列
+  security/         # 权限审查
+  llm/              # 统一 LLM 接口
+  mcp/              # MCP Server 注册表与适配
+frontend/           # React + TypeScript + Vite 控制台（npm run build 产 dist）
+tools/              # build_exe.ps1、lifeos.spec、lifeos-setup.iss、verify_*.py
+tests/              # 后端全量测试
+datasets/           # 记忆治理评测样本与 LongMemEval-S 模板
+docs/               # 架构与 API 文档
 ```
 
-## Build from source
+## 从源码构建
 
-You need Windows 10 or 11 plus:
+需要 Windows 10 或 11，外加：
 
-- Python 3.11 or newer (tested on 3.13)
-- Node.js, for the frontend build
-- Inno Setup 6, only if you want the installer
+- Python 3.11 或更高（开发机实测 3.13）
+- Node.js，构建前端
+- Inno Setup 6，仅出安装器时需要
 
 ```powershell
-# 1) backend virtualenv
+# 1) 后端虚拟环境
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 
-# 2) frontend dependencies
+# 2) 前端依赖
 cd frontend
 npm ci
 cd ..
 
-# 3) one-shot build: npm run build → PyInstaller
+# 3) 一键打包：npm run build → PyInstaller
 powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 
-# 4) installer, optional
+# 4) 编译安装器，可选
 ISCC.exe tools\lifeos-setup.iss
 ```
 
-The build produces `dist\LifeOS\LifeOS.exe` (onedir) and `dist\LifeOS-Setup-2.2.3.exe`.
+产物：`dist\LifeOS\LifeOS.exe`（onedir）和 `dist\LifeOS-Setup-2.2.3.exe`（安装器）。
 
-## Development
+## 开发调试
 
 ```powershell
-# backend (LIFEOS_HOME sets the data root, default ./lifeOS/)
+# 后端（LIFEOS_HOME 指定数据根，默认 ./lifeOS/）
 .venv\Scripts\python -m lifeos.api.server
 
-# frontend dev server on 5173, vite proxies /api to the backend
+# 前端热更（5173，vite 代理 /api 到后端）
 cd frontend && npm run dev
 
-# desktop-link smoke test: /api normalization, direct proxy, bridge/start
+# 桌面链路冒烟：/api 归一 + 直连代理 + bridge/start
 .venv\Scripts\python tools\verify_desktop_link.py
 ```
 
-## Tests
+## 测试
 
 ```powershell
-# backend, about 930 cases
+# 后端，约 930 个用例
 .venv\Scripts\python -m pytest tests -q
 .venv\Scripts\python -m compileall lifeos
 
-# frontend, about 190 cases, plus typecheck
+# 前端，约 190 个用例，另附类型检查
 cd frontend
 npm test
 npm run typecheck
 ```
 
-Three backend files (`tests/test_codex_lc_ji_cheng.py`, `test_liu_xing_lc_ji_cheng.py`, `test_pi_lc_ji_cheng.py`) call real external endpoints. Exclude them with `--ignore` when you work offline or in CI.
+三个后端文件（`tests/test_codex_lc_ji_cheng.py`、`test_liu_xing_lc_ji_cheng.py`、`test_pi_lc_ji_cheng.py`）会访问真实外网端点。离线或 CI 环境请加 `--ignore` 排除。
 
-## Documentation
+## 文档索引
 
-- [docs/api-contract.md](docs/api-contract.md), frontend and backend API alignment
-- [docs/agent-memory-integration.md](docs/agent-memory-integration.md), how agent results enter memory
-- [docs/memory-module-handoff.md](docs/memory-module-handoff.md), memory module handoff
-- [docs/memory-design-principles.md](docs/memory-design-principles.md), memory design principles
-- [docs/memory-provider-boundaries.md](docs/memory-provider-boundaries.md), memory provider boundaries
-- [docs/lifeos-workflow-and-memory-architecture.md](docs/lifeos-workflow-and-memory-architecture.md), workflow and memory architecture
-- [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md), team module integration plan
-- [docs/frontend-rewrite-issues.md](docs/frontend-rewrite-issues.md), frontend rewrite issue log
-- [docs/tencentdb-approved-atomic-create-proposal.md](docs/tencentdb-approved-atomic-create-proposal.md), TencentDB atomic create proposal
+- [docs/api-contract.md](docs/api-contract.md)，前后端 API 对齐
+- [docs/agent-memory-integration.md](docs/agent-memory-integration.md)，Agent 执行结果进入记忆的流程
+- [docs/memory-module-handoff.md](docs/memory-module-handoff.md)，记忆模块交接
+- [docs/memory-design-principles.md](docs/memory-design-principles.md)，记忆设计原则
+- [docs/memory-provider-boundaries.md](docs/memory-provider-boundaries.md)，记忆 Provider 边界
+- [docs/lifeos-workflow-and-memory-architecture.md](docs/lifeos-workflow-and-memory-architecture.md)，工作流与记忆架构
+- [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md)，团队模块集成方案
+- [docs/frontend-rewrite-issues.md](docs/frontend-rewrite-issues.md)，前端重构问题记录
+- [docs/tencentdb-approved-atomic-create-proposal.md](docs/tencentdb-approved-atomic-create-proposal.md)，TencentDB 原子创建方案
 
-## Runtime notes
+## 运行注意
 
-- Runtime data goes to `%USERPROFILE%\lifeOS` for installs and `./lifeOS/` for source runs. The first start copies legacy AppData data and keeps the old folder as a backup.
-- The main service listens on 8765 and probes upward to 8790 when busy. Test leftovers can hold ports 8766 to 8770; end the `python -m lifeos.bridge.run` process to free them.
-- The portable build ships a bundled `claude.exe` under `resources\node\`. The installer leaves it out, so an installed app probes `PATH` for your own Claude Code CLI.
+- 运行时数据：安装版写 `%USERPROFILE%\lifeOS`，源码运行写当前目录 `./lifeOS/`。首次启动从 AppData 旧目录复制迁移，旧目录保留为备份。
+- 主服务默认 8765，被占时向上探测到 8790。测试残留的 bridge 进程可能占住 8766 到 8770，结束 `python -m lifeos.bridge.run` 进程即可释放。
+- 免安装版在 `resources\node\` 内捆绑 `claude.exe`。安装包不含它，安装版改为沿 `PATH` 探测本机的 Claude Code CLI。
 
-## Contributing
+## 参与贡献
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). It covers the dev loop, the test commands, and the commit message convention.
+见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。内容包括开发流程、测试命令和提交信息规范。
 
-## License
+## 许可证
 
-MIT. See [LICENSE](LICENSE).
+MIT，见 [LICENSE](LICENSE)。
