@@ -4,9 +4,39 @@ import type { Store } from "../state/store";
 import { commitMemoryCandidate } from "../api/client";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 
+const RATING_LABEL: Record<string, string> = {
+  just_right: "刚刚好",
+  helpful: "有帮助",
+  too_wordy: "太啰嗦",
+  unclear: "不清楚",
+  wrong: "不对",
+  other: "其他",
+};
+
+/**
+ * 候选正文。
+ *
+ * 反馈类候选没有 `claim` 字段，只有评分和附言——原来这种情况直接把整个
+ * content 打成 JSON 当正文显示，界面上就是一坨原始数据。这里改成人话。
+ */
 function claimOf(candidate: MemoryCandidate): string {
   const claim = candidate.content.claim;
-  return typeof claim === "string" ? claim : JSON.stringify(candidate.content, null, 2);
+  if (typeof claim === "string" && claim.trim()) return claim;
+  const rating = candidate.content.rating;
+  const note = candidate.content.note;
+  if (typeof rating === "string" || typeof note === "string") {
+    const label = typeof rating === "string" ? (RATING_LABEL[rating] ?? rating) : "未评分";
+    const parts = [`评分：${label}`];
+    if (typeof note === "string" && note.trim()) parts.push(note.trim());
+    return parts.join("\n\n");
+  }
+  return JSON.stringify(candidate.content, null, 2);
+}
+
+/** 列表里用的一行摘要，永远不出现 JSON。 */
+function summaryOf(candidate: MemoryCandidate): string {
+  const text = summaryOf(candidate);
+  return text.replace(/\s+/g, " ").trim();
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -103,7 +133,7 @@ export function MemoryReviewPage({ store }: { store: Store }) {
       {candidates.length === 0 ? <p className="entry-history-empty">还没有记忆候选。</p> : (
         <div className="entry-history-list">
           {candidates.map((candidate) => {
-            const text = claimOf(candidate);
+            const text = summaryOf(candidate);
             return <button key={candidate.id} type="button"
               className={`entry-history-item ${candidate.id === active?.id ? "active" : ""}`}
               onClick={() => setActiveId(candidate.id)}>
