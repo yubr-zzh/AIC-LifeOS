@@ -3,6 +3,7 @@ import type { MemoryCandidate } from "../api/types";
 import type { Store } from "../state/store";
 import { commitMemoryCandidate } from "../api/client";
 import { MarkdownEditor } from "../components/MarkdownEditor";
+import { MemoryLibrary } from "../components/MemoryDrawer";
 
 const RATING_LABEL: Record<string, string> = {
   just_right: "刚刚好",
@@ -62,7 +63,8 @@ function projectName(candidate: MemoryCandidate): string {
 }
 
 export function MemoryReviewPage({ store }: { store: Store }) {
-  const candidates = store.state.memory.candidates;
+  // state.memory 在后端还没返回时是 undefined，直接取 .candidates 会整页崩
+  const candidates = store.state.memory?.candidates ?? [];
   const backend = store.state.ui.dataMode === "backend";
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -102,7 +104,10 @@ export function MemoryReviewPage({ store }: { store: Store }) {
 
   return <div className="feedback-layout">
     <section className="content-card feedback-main">
-      <span className="card-kicker">记忆候选</span>
+      <MemoryLibrary />
+      <details className="memory-pending">
+        <summary>待审记忆候选</summary>
+        <div className="memory-pending-body">
       <h2>{active ? "这条结论值得长期记住吗？" : "还没有待审核的记忆候选"}</h2>
       {active ? <>
         <p className="memory-meta">
@@ -123,6 +128,8 @@ export function MemoryReviewPage({ store }: { store: Store }) {
         {active.status !== "candidate" ? <p className="memory-note">这条候选的状态是{STATUS_LABEL[active.status] ?? active.status}，不能再并入。</p> : null}
         {notice ? <p className={`save-feedback ${notice.tone}`} role="status">{notice.text}</p> : null}
       </> : <p className="memory-note">先在右侧选一条候选；也可以去日记、复盘里提炼一条新的。</p>}
+        </div>
+      </details>
     </section>
 
     <aside className="content-card entry-history-card">

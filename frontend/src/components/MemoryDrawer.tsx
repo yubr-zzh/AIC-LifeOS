@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getMemory,
   correctMemory,
@@ -20,7 +21,7 @@ import type { MemoryEntry, MemoryStore } from "../api/types";
  * 防御性取值——宁可显示摘要，也不要因为一个字段名对不上而整页空白。
  */
 
-interface MemoryItem {
+export interface MemoryItem {
   id: string;
   category: string;
   text: string;
@@ -42,7 +43,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const CATEGORY_ORDER = ["user", "project", "feedback", "reference"];
 
-function pickText(entry: MemoryEntry): string {
+export function pickText(entry: MemoryEntry): string {
   const raw: unknown = entry.content;
   if (typeof raw === "string" && raw.trim()) return raw.trim();
   const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -54,7 +55,7 @@ function pickText(entry: MemoryEntry): string {
   return typeof first === "string" ? first.trim() : "";
 }
 
-function toItems(store: MemoryStore | null | undefined): MemoryItem[] {
+export function toItems(store: MemoryStore | null | undefined): MemoryItem[] {
   const out: MemoryItem[] = [];
   try {
     if (!store || typeof store !== "object") return out;
@@ -269,5 +270,110 @@ export function MemoryDrawer({ open, onClose }: { open: boolean; onClose: () => 
         </footer>
       </aside>
     </div>
+  );
+}
+
+/**
+ * 记忆库：页面上的主内容。
+ *
+ * 参照 ChatGPT 的 Memory Summary Page、Claude 的「逐条可编辑记忆」、
+ * EverMind 的 Memory Bank——共同点是：记忆本身就是主角，不是候选审核的附属品。
+ */
+export function MemoryLibrary() {
+  const [items, setItems] = useState<MemoryItem[]>([]);
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<string>("all");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const raw = await getMemory();
+      const store = (raw as unknown as { data?: MemoryStore })?.data ?? (raw as unknown as MemoryStore);
+      setItems(toItems(store));
+    } catch {
+      setItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const it of items) m[it.category] = (m[it.category] ?? 0) + 1;
+    return m;
+  }, [items]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      if (tab !== "all" && it.category !== tab) return false;
+      if (!q) return true;
+      return it.text.toLowerCase().includes(q) || it.projectId.toLowerCase().includes(q);
+    });
+  }, [items, query, tab]);
+
+  const total = items.length;
+  const used = items.reduce((s, it) => s + it.usedCount, 0);
+
+  const remove = async (item: MemoryItem) => {
+    if (!window.confirm("删除这条记忆？之后它不会再被用到。")) return;
+    setBusy(true);
+    try {
+      await retractMemory(item.id);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mem-library">
+      <header className="mem-library-head">
+        <h2>记忆库</h2>
+        <div className="mem-library-stats">
+          <span><strong>{total}</strong> 条</span>
+          <span><strong>{used}</strong> 次引用</span>
+        </div>
+      </header>
+
+      <input className="mem-drawer-search" value={query} onChange={(e) => setQuery(e.target.value)}
+        placeholder="搜索记忆内容或项目…" aria-label="搜索记忆" />
+
+      <nav className="mem-drawer-tabs" aria-label="记忆分类">
+        <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>全部 <i>{total}</i></button>
+        {CATEGORY_ORDER.filter((c) => counts[c]).map((c) => (
+          <button key={c} className={tab === c ? "active" : ""} onClick={() => setTab(c)}>
+            {CATEGORY_LABEL[c]} <i>{counts[c]}</i>
+          </button>
+        ))}
+      </nav>
+
+      <div className="mem-library-list">
+        {shown.length === 0 ? (
+          <p className="mem-drawer-empty">没有匹配的记忆。</p>
+        ) : (
+          shown.map((it) => (
+            <article key={it.id} className="mem-item">
+              <p className="mem-item-text">{it.text || "（无正文）"}</p>
+              <div className="mem-item-meta">
+                {it.scopeKind === "project" && it.projectId ? (
+                  <span className="mem-item-scope mono" title="来源项目">{it.projectId}</span>
+                ) : null}
+                {it.scopeKind === "scenario" && it.scopeLabel ? (
+                  <span className="mem-item-scope mono" title="来源场景">{it.scopeLabel}</span>
+                ) : null}
+                {it.createdAt ? <span className="mono">{String(it.createdAt).slice(0, 10)}</span> : null}
+                <span className="mem-item-used">引用 {it.usedCount} 次</span>
+              </div>
+              <div className="mem-item-actions">
+                <button className="danger" onClick={() => void remove(it)} disabled={busy}>删除</button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
