@@ -17,27 +17,28 @@ const RATING_LABEL: Record<string, string> = {
 /**
  * 候选正文。
  *
- * 反馈类候选没有 `claim` 字段，只有评分和附言——原来这种情况直接把整个
- * content 打成 JSON 当正文显示，界面上就是一坨原始数据。这里改成人话。
+ * 反馈类候选没有 claim 字段，只有评分和附言——原来这种情况直接把整个
+ * content 打成 JSON 当正文显示，界面上就是一坨原始数据。
+ * content 可能是 null（新候选还没填），这里一并兜住。
  */
 function claimOf(candidate: MemoryCandidate): string {
-  const claim = candidate.content.claim;
+  const content = (candidate.content ?? {}) as Record<string, unknown>;
+  const claim = content.claim;
   if (typeof claim === "string" && claim.trim()) return claim;
-  const rating = candidate.content.rating;
-  const note = candidate.content.note;
+  const rating = content.rating;
+  const note = content.note;
   if (typeof rating === "string" || typeof note === "string") {
     const label = typeof rating === "string" ? (RATING_LABEL[rating] ?? rating) : "未评分";
     const parts = [`评分：${label}`];
     if (typeof note === "string" && note.trim()) parts.push(note.trim());
     return parts.join("\n\n");
   }
-  return JSON.stringify(candidate.content, null, 2);
+  return JSON.stringify(content, null, 2);
 }
 
 /** 列表里用的一行摘要，永远不出现 JSON。 */
 function summaryOf(candidate: MemoryCandidate): string {
-  const text = summaryOf(candidate);
-  return text.replace(/\s+/g, " ").trim();
+  return claimOf(candidate).replace(/\s+/g, " ").trim();
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -55,7 +56,7 @@ function statusShort(status: string): string {
 function projectName(candidate: MemoryCandidate): string {
   const scope = candidate.scope;
   if (scope?.kind === "project" && scope.project_id) return scope.project_id;
-  const fromContent = candidate.content.project_id;
+  const fromContent = (candidate.content ?? {}).project_id;
   if (typeof fromContent === "string" && fromContent.trim()) return fromContent.trim();
   if (scope?.kind === "scenario") return scope.scenario_type ?? "场景";
   if (scope?.kind === "global") return "全局";
@@ -92,7 +93,7 @@ export function MemoryReviewPage({ store }: { store: Store }) {
     setBusy(true);
     setNotice(null);
     try {
-      await commitMemoryCandidate(active.id, { ...active.content, claim });
+      await commitMemoryCandidate(active.id, { ...(active.content ?? {}), claim });
       await store.refreshAll();
       setNotice({ tone: "success", text: "已并入长期记忆，画像会跟着重建。" });
     } catch (error) {
