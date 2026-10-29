@@ -1,9 +1,0 @@
-[
-  {
-    "username": "admin",
-    "pw_salt": "ebea6180b51ee89e0913f7bb53249347",
-    "pw_hash": "3104f1a988fe3c3df602f5b819688827bb1fc3b92e3e617e3bdd0a174592e4d6",
-    "created_at": 1791992901,
-    "role": "admin"
-  }
-]

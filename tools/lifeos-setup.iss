@@ -13,7 +13,7 @@ AppId={{8A6C2F10-4E2B-4A9B-9C3D-LIFEOS0000001}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=LifeOS
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
@@ -22,7 +22,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 安装包（Setup.exe）自身及其在“添加删除程序”里的图标
 SetupIconFile=assets\lifeos.ico
@@ -38,12 +38,12 @@ Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescripti
 [Files]
 ; resources\node\ 里是约 245 MB 的捆绑 claude.exe，只给免安装版用。
 ; 安装包不含它，运行时由 resolve_claude_runtime() 沿 PATH 探测。
-Source: "..\dist\LifeOS\*"; DestDir: "{app}"; Excludes: "resources\node\*,resources\node,lifeOS\*"; Flags: recursesubdirs createallsubdirs replacesameversion
+Source: "..\dist\LifeOS\*"; DestDir: "{app}"; Excludes: "resources\node\*,resources\node,lifeOS,lifeOS\*"; Flags: recursesubdirs createallsubdirs replacesameversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"; Tasks: desktopicon
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{%USERPROFILE}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
