@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "port": 8766,
+  "token": "e24640531321011a7c3f6d5fadfe17357cf8efc85a81784aa103ac2b7c6ddebf",
+  "pid": 59436,
+  "pids": [],
+  "owner": "lifeos-bridge",
+  "startedAt": "2026-10-29T13:31:04Z",
+  "sdkVersion": null,
+  "cliVersion": "2.1.126",
+  "instanceId": "i-36973e5f",
+  "streamEpoch": 10,
+  "cleanExit": false,
+  "orphans": []
+}

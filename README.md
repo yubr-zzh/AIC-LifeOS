@@ -5,7 +5,7 @@
 <div align="center">
   <h1>LifeOS</h1>
   <p><b>本地优先的个人智能体操作系统，运行在你的 Windows 电脑上。</b></p>
-  <p><a href="README.md">English</a> · 简体中文</p>
+  <p>简体中文 · <a href="README.en.md">English</a></p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
   <img src="https://img.shields.io/badge/version-2.2.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">
@@ -16,7 +16,24 @@
 
 ---
 
-**LifeOS** 由前台 Chat Agent 和后台 Global Agent 协作组成。两者共用可靠事件总线、两阶段记忆写入与治理（含时间版本）、反思引擎和技能进化闭环。v2.2.3 以 Windows 桌面应用交付：pywebview（WebView2）壳、内嵌 Python 后端、本地 Agent bridge。双击 exe 即可运行。数据全部留在你的电脑上。
+**LifeOS** 是一个跑在你自己 Windows 电脑上的个人智能体：聊天里随手记一句想法，它会变成今天的规划；晚上回来一起复盘，写成能长期记住的经验。所有数据只存在本机。
+
+![LifeOS 今日概览](tools/assets/lifeos-home.png)
+
+### 30 秒跑起来
+
+```bash
+# 1) 拉代码并装依赖
+git clone https://github.com/yubr-zzh/AIC-LifeOS.git && cd AIC-LifeOS
+
+# 2) 前端构建（产出 frontend/dist）
+cd frontend && npm install && npm run build && cd ..
+
+# 3) 打包 Windows 桌面端（产出 dist\LifeOS\LifeOS.exe）
+python -m PyInstaller --noconfirm --clean tools/lifeos.spec
+```
+
+也可以直接用发布包：运行 `dist\LifeOS-Setup-2.2.3.exe` 安装，或解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
 
 ## 它解决什么问题
 

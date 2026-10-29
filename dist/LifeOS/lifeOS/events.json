@@ -1,0 +1,438 @@
+[
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-7eb8f3d3",
+      "port": 8766,
+      "cliVersion": "2.1.283",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "125b9810-a8a8-4e99-8ff1-be7612fd142e",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-14T15:48:48.187555+00:00",
+    "updated_at": "2026-10-14T15:48:48.187565+00:00",
+    "error": null
+  },
+  {
+    "type": "session.created",
+    "payload": {
+      "sessionId": "s-b235b9d4",
+      "agentId": "claude-code",
+      "cwd": "d:\\users\\zzh\\desktop\\算法精英赛\\沙箱",
+      "permissionMode": "plan"
+    },
+    "trace_id": null,
+    "id": "e9014645-de39-442f-a805-1c1810c27a09",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-14T15:56:05.251269+00:00",
+    "updated_at": "2026-10-14T15:56:05.251281+00:00",
+    "error": null
+  },
+  {
+    "type": "conversation.completed",
+    "payload": {
+      "session_id": "s-b235b9d4",
+      "user_input": "hello",
+      "memory": {
+        "user": [],
+        "project": [],
+        "feedback": [],
+        "reference": []
+      },
+      "memory_scope": {
+        "kind": "global",
+        "scenario_type": null,
+        "project_id": null,
+        "user_id": "local"
+      },
+      "planning": {
+        "goal": "hello",
+        "complexity": 1,
+        "need_tools": false,
+        "agent_enabled": false,
+        "decision": "self_plan",
+        "reason": "信息不足以确认需要执行型 Agent，先给出自规划建议。",
+        "confidence": 0.55,
+        "steps": [
+          {
+            "title": "明确想要的结果",
+            "detail": "写清目标和完成标准。",
+            "time": "今天"
+          },
+          {
+            "title": "梳理已知与待确认",
+            "detail": "把事实和问题分开。",
+            "time": "今天"
+          },
+          {
+            "title": "选定一个可开始的下一步",
+            "detail": "先推进最小、最明确的一步。",
+            "time": "接下来"
+          }
+        ],
+        "provider": null,
+        "model": null,
+        "routing_policy": "auto",
+        "route_source": "fallback",
+        "route_signals": [
+          "fallback:insufficient-signal"
+        ],
+        "requires_side_effects": false,
+        "plan_requested": false
+      },
+      "result": {
+        "response": "LifeOS mock response: hello",
+        "tool_calls": [],
+        "tool_results": [],
+        "provider": "mock",
+        "model": "lifeos-mock"
+      }
+    },
+    "trace_id": "09d63ccf-b03b-4a11-baad-83303a369861",
+    "id": "a86c4e02-8156-44ac-9680-fa0efac82c07",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-14T16:00:07.503730+00:00",
+    "updated_at": "2026-10-14T16:00:07.503732+00:00",
+    "error": null
+  },
+  {
+    "type": "feedback.submitted",
+    "payload": {
+      "rating": "just_right",
+      "note": "",
+      "trace_id": "09d63ccf-b03b-4a11-baad-83303a369861"
+    },
+    "trace_id": "09d63ccf-b03b-4a11-baad-83303a369861",
+    "id": "cea7204b-5a33-4624-b0ba-6ed3602c2ae0",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-14T16:00:11.121406+00:00",
+    "updated_at": "2026-10-14T16:00:11.121416+00:00",
+    "error": null
+  },
+  {
+    "type": "feedback.submitted",
+    "payload": {
+      "rating": "helpful",
+      "note": "",
+      "trace_id": "09d63ccf-b03b-4a11-baad-83303a369861"
+    },
+    "trace_id": "09d63ccf-b03b-4a11-baad-83303a369861",
+    "id": "282e0a55-5c32-4da4-9854-694002c6ed97",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-14T16:00:13.978545+00:00",
+    "updated_at": "2026-10-14T16:00:13.978555+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "1163c6bf-92d1-4af8-9f4c-1e8f22b3e3e7",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-16T06:29:48.549123+00:00",
+    "updated_at": "2026-10-16T06:29:48.549269+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-3b82f81f",
+      "port": 8766,
+      "cliVersion": "2.1.283",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "1614c580-bfe1-4300-8aa4-947423aed3cc",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-16T06:29:48.875807+00:00",
+    "updated_at": "2026-10-16T06:29:48.875825+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-1b72e30a",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "f6b97115-408c-46af-b742-07f5a4414236",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:46:36.254893+00:00",
+    "updated_at": "2026-10-29T09:46:36.254893+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "262ee657-fdb1-4317-b403-2592b6b4f624",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:46:36.424968+00:00",
+    "updated_at": "2026-10-29T09:46:36.424968+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-90736ca2",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "6fb25622-6422-4584-b1cd-5cb3a544fe40",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:48:26.711838+00:00",
+    "updated_at": "2026-10-29T09:48:26.711838+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "d1d51a82-db6a-4827-ba29-7a7b6b077f55",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:48:26.840777+00:00",
+    "updated_at": "2026-10-29T09:48:26.840777+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-c1585f6d",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "94fed0fc-f909-4e47-b899-88d4192c08e2",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:56:27.702930+00:00",
+    "updated_at": "2026-10-29T09:56:27.702930+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "03857147-c818-4ba0-84ba-af614c22a4d9",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T09:56:28.334178+00:00",
+    "updated_at": "2026-10-29T09:56:28.334178+00:00",
+    "error": null
+  },
+  {
+    "type": "session.closed",
+    "payload": {
+      "sessionId": "s-b235b9d4",
+      "reason": "closed",
+      "turnCount": 3,
+      "batchDone": 2
+    },
+    "trace_id": null,
+    "id": "ced515c8-c32c-4c2c-81fb-34762cb9a3e4",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T10:26:27.013079+00:00",
+    "updated_at": "2026-10-29T10:26:27.013079+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-c8d8a36c",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "ff16d3fb-7a68-4692-bbe7-81a82445e130",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:17:00.244786+00:00",
+    "updated_at": "2026-10-29T11:17:00.244786+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "b39786fd-8e29-4eee-ba9e-afd03b911107",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:17:00.568264+00:00",
+    "updated_at": "2026-10-29T11:17:00.568264+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-dbf625c3",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "ff50cc1b-6d2e-4537-a79a-51f234e19540",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:20:51.002147+00:00",
+    "updated_at": "2026-10-29T11:20:51.002147+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "46e54ca9-c81d-4321-ad24-8a7a4389f86f",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:20:51.478977+00:00",
+    "updated_at": "2026-10-29T11:20:51.478977+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-b2950146",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "1f932ad2-fb70-4ce0-b8af-274b04211d4f",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:33:41.377120+00:00",
+    "updated_at": "2026-10-29T11:33:41.377120+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "590fe62c-ea22-4df7-84fb-a24befe3c5cb",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:33:41.784398+00:00",
+    "updated_at": "2026-10-29T11:33:41.784398+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-d4058062",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "d59871f8-ee5e-4f42-b763-0ed4de7e66ab",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:44:14.651530+00:00",
+    "updated_at": "2026-10-29T11:44:14.651530+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "30b5cdba-d2f1-4d32-a330-1b01b28e85bc",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T11:44:14.926887+00:00",
+    "updated_at": "2026-10-29T11:44:14.926887+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-b7ac5bf3",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "ee46c38e-2845-4dec-bb9d-b791ed617ff7",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T13:23:20.759928+00:00",
+    "updated_at": "2026-10-29T13:23:20.759928+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "62090a84-4e8b-4a44-b363-ca006d12efda",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T13:23:21.316537+00:00",
+    "updated_at": "2026-10-29T13:23:21.316537+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-36973e5f",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "b283f90f-dcda-4330-a99f-b5592db7bb9e",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T13:31:04.851870+00:00",
+    "updated_at": "2026-10-29T13:31:04.851870+00:00",
+    "error": null
+  },
+  {
+    "type": "bridge.restarted",
+    "payload": {
+      "reason": "watchdog"
+    },
+    "trace_id": null,
+    "id": "eca251a4-febd-427f-9212-f1c8413d2ab4",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T13:31:04.974441+00:00",
+    "updated_at": "2026-10-29T13:31:04.974441+00:00",
+    "error": null
+  }
+]

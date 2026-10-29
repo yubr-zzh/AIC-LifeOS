@@ -5,7 +5,7 @@
 <div align="center">
   <h1>LifeOS</h1>
   <p><b>A local-first personal agent OS that runs on your Windows machine.</b></p>
-  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <p>English · <a href="README.md">简体中文</a></p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
   <img src="https://img.shields.io/badge/version-2.2.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey?style=flat-square" alt="Platform">

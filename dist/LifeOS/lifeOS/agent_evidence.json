@@ -1,0 +1,26 @@
+[
+  {
+    "id": "215c32c09cdc4db0a9a6ad51624e6dd1",
+    "owner_id": "local",
+    "session_id": "s-b235b9d4",
+    "agent_id": "claude-code",
+    "summary": "本地 Agent 执行了一条指令但失败了：",
+    "occurred_at": "2026-10-14T15:56:34.066659+00:00"
+  },
+  {
+    "id": "5c1e18c1d2b84730af2d05a484fc86e4",
+    "owner_id": "local",
+    "session_id": "s-b235b9d4",
+    "agent_id": "claude-code",
+    "summary": "本地 Agent 执行了一条指令但失败了：Failed to authenticate. API Error: 403 {\"error\":\"预扣费额度失败, 用户剩余额度: 0.015527, 需要预扣费额度: 0.015024\"}",
+    "occurred_at": "2026-10-14T15:57:10.244476+00:00"
+  },
+  {
+    "id": "999db72997044defa4c4f4cc2c2ffba9",
+    "owner_id": "local",
+    "session_id": "s-b235b9d4",
+    "agent_id": "claude-code",
+    "summary": "本地 Agent 执行了一条指令但失败了：Failed to authenticate. API Error: 403 {\"error\":\"余额不足\"}",
+    "occurred_at": "2026-10-14T15:57:13.611486+00:00"
+  }
+]

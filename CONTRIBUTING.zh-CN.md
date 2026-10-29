@@ -65,7 +65,7 @@ chore(release): 发布 2.0.8，优化对话交互与数据目录
 
 ## 文档双语
 
-`README.md` 和 `CONTRIBUTING.md` 是英文版。`README.zh-CN.md` 和 `CONTRIBUTING.zh-CN.md` 是简体中文版。改了一边，同一个提交里更新另一边。
+`README.md` 和 `CONTRIBUTING.md` 是英文版。`README.md` 和 `CONTRIBUTING.zh-CN.md` 是简体中文版。改了一边，同一个提交里更新另一边。
 
 ## 发布流程
 

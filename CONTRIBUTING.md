@@ -65,7 +65,7 @@ Common types: `fix`, `feat`, `docs`, `chore`, `refactor`, `test`. One commit car
 
 ## Documentation is bilingual
 
-`README.md` and `CONTRIBUTING.md` are English. `README.zh-CN.md` and `CONTRIBUTING.zh-CN.md` are Simplified Chinese. When you change one, update its twin in the same commit.
+`README.md` and `CONTRIBUTING.md` are English. `README.md` and `CONTRIBUTING.zh-CN.md` are Simplified Chinese. When you change one, update its twin in the same commit.
 
 ## Release process
 
