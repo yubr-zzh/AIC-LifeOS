@@ -4,7 +4,7 @@
 ; 数据目录 %USERPROFILE%\lifeOS 含用户记忆数据，卸载时询问、默认保留。
 
 #define MyAppName "LifeOS"
-#define MyAppVersion "2.2.3"
+#define MyAppVersion "2.2.4"
 #define MyAppExeName "LifeOS.exe"
 #define MyAppDataName "lifeOS"
 
