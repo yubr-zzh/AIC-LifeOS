@@ -16,7 +16,28 @@
 
 ---
 
-**LifeOS** pairs a front-stage chat agent with a background global agent. The two share a reliable event bus, a two-phase memory store with governance and temporal versioning, a reflection engine, and a skill evolution loop. Version 2.2.3 ships as a Windows desktop app: a pywebview (WebView2) shell, an embedded Python backend, and a local agent bridge. Double-click the exe and it runs. All data stays on your machine.
+**LifeOS** is a personal agent operating system that lives on your machine. It turns AI assistants from one-off question answering into long-term partners that remember, act, and build a picture of how you work.
+
+**The problem**: Multi-session AI tools make you re-explain the background every time, and a route you already worked out in one session has to be rediscovered in the next. General assistants also struggle to tell "what we concluded now" from "what we concluded last quarter". And most AI assistants never build a long-term picture of you: ask them again a while later what you have been working on or what you did before, and they simply do not know.
+
+**The approach**: LifeOS connects a front-stage chat agent with a background reflection agent over a reliable local event bus. Memory is kept in four layers - raw evidence, project continuity, atomic memories and a global profile - scoped per project instead of pooled into one bucket. Writing to memory goes through "candidate, then a human approves it", and every memory can be corrected, retracted or expired. Planning and review happen inside the app.
+
+![LifeOS today](tools/assets/lifeos-home.png)
+
+### Running it in 30 seconds
+
+```bash
+# 1) get the code and install dependencies
+git clone https://github.com/yubr-zzh/AIC-LifeOS.git && cd AIC-LifeOS
+
+# 2) build the frontend (produces frontend/dist)
+cd frontend && npm install && npm run build && cd ..
+
+# 3) package the Windows desktop app (produces dist\LifeOS\LifeOS.exe)
+python -m PyInstaller --noconfirm --clean tools/lifeos.spec
+```
+
+Or just grab the release: run `dist\LifeOS-Setup-2.2.3.exe`, or unzip `dist/LifeOS` and double-click `LifeOS.exe`.
 
 ## The problem it solves
 
