@@ -60,6 +60,26 @@ class MemoryManager:
             if entry.get("status", "active") == "active"
         }
 
+    async def mark_used(self, memory_ids) -> int:
+        """记下「这条记忆被真正送进模型」的次数。
+
+        计数发生在记忆进入本轮上下文的那一刻，而不是检索排序出来的候选里：
+        检索会召回一批候选，只有被选中送进 prompt 的才算一次引用。
+        老数据没有这个字段，按 0 起算。
+        """
+        ids = {i for i in (memory_ids or []) if i}
+        if not ids:
+            return 0
+        store = self._read()
+        n = 0
+        for category in ("user", "project", "feedback", "reference"):
+            for entry in store.get(category, []):
+                if entry.get("id") in ids:
+                    entry["used_count"] = int(entry.get("used_count", 0) or 0) + 1
+                    n += 1
+        if n:
+            self._write(store)
+        return n
     def memory_records(self):
         store = self._read()
         return [

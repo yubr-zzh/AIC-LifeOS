@@ -66,6 +66,16 @@ class ChatRuntime:
             except Exception as exc:
                 self.trace.event(trace_id, "memory.external_unavailable",
                                  {"provider": "tencentdb", "error": type(exc).__name__})
+        # 被送进本轮上下文的记忆记一次引用。计数失败不能影响回答本身。
+        try:
+            await self.memory.mark_used([
+                item.get("id")
+                for entries in chunks.values()
+                for item in entries
+                if item.get("id")
+            ])
+        except Exception:
+            pass
         self.trace.event(trace_id, "memory.retrieved",
                          {"chunks": chunks, "scope": resolved_scope})
 

@@ -8,6 +8,7 @@ import { CopyId } from "../components/CopyId";
 import { CopyTextButton } from "../components/CopyTextButton";
 import { DelegationCard } from "./DelegationCard";
 import { Markdown } from "../components/Markdown";
+import { MemoryDrawer } from "../components/MemoryDrawer";
 import type { AgentActions } from "../hooks/useAgentStream";
 import type { AgentStore } from "../state/agentStore";
 
@@ -104,6 +105,7 @@ export function ChatPanel({ store, agent, api }: Props) {
   const [routingPolicy, setRoutingPolicy] = useState<AgentRoutingPolicy>(readRoutingPolicy);
   const [history, setHistory] = useState<LocalConversation[]>(readHistory);
   const [historyCollapsed, setHistoryCollapsed] = useState(readHistoryCollapsed);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   // 会话栏宽度：可拖拽，记住上次的位置
   const [historyW, setHistoryW] = useState<number>(() => {
     try { const v = Number(localStorage.getItem("lifeos.chat.historyWidth")); return v >= 180 && v <= 420 ? v : 236; } catch { return 236; }
@@ -348,7 +350,10 @@ export function ChatPanel({ store, agent, api }: Props) {
             </div>
           </div>
           <div className="chat-toolbar-right">
-            <button type="button" className="chat-delete-current" title="删除当前对话" aria-label="删除当前对话" onClick={discardCurrent} disabled={state.loading.chat}>删除</button>
+            <button type="button" className="chat-memory-button" onClick={() => setMemoryOpen(true)}
+              title="查看 LifeOS 记住的东西" aria-label="打开记忆抽屉">
+              记忆
+            </button>            <button type="button" className="chat-delete-current" title="删除当前对话" aria-label="删除当前对话" onClick={discardCurrent} disabled={state.loading.chat}>删除</button>
             <div className="chat-context-wrap">
             <button className={`chat-context ${scopeKind !== "global" ? "selected" : ""}`}
               onClick={() => setContextOpen((open) => !open)} aria-expanded={contextOpen}>
@@ -415,6 +420,7 @@ export function ChatPanel({ store, agent, api }: Props) {
             onChange={(event) => void addFiles(event.target.files)} />
         </div>
       </section>
+      <MemoryDrawer open={memoryOpen} onClose={() => setMemoryOpen(false)} />
     </div>
   );
 }
