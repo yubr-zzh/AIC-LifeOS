@@ -434,5 +434,21 @@
     "created_at": "2026-10-29T13:31:04.974441+00:00",
     "updated_at": "2026-10-29T13:31:04.974441+00:00",
     "error": null
+  },
+  {
+    "type": "bridge.connected",
+    "payload": {
+      "instanceId": "i-a1cc1445",
+      "port": 8766,
+      "cliVersion": "2.1.126",
+      "sdkVersion": null
+    },
+    "trace_id": null,
+    "id": "28b7ba41-da4c-44db-acd2-9dc415f5d7cf",
+    "status": "pending",
+    "attempts": 0,
+    "created_at": "2026-10-29T14:03:45.815237+00:00",
+    "updated_at": "2026-10-29T14:03:45.815237+00:00",
+    "error": null
   }
 ]

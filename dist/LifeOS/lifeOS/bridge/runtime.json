@@ -1,15 +1,15 @@
 {
   "schemaVersion": 2,
   "port": 8766,
-  "token": "e24640531321011a7c3f6d5fadfe17357cf8efc85a81784aa103ac2b7c6ddebf",
-  "pid": 59436,
+  "token": "7d787b2926be843567b7d85446ef43df357cfbb27e4747f6ccfbf9e2fc127027",
+  "pid": 83880,
   "pids": [],
   "owner": "lifeos-bridge",
-  "startedAt": "2026-10-29T13:31:04Z",
+  "startedAt": "2026-10-29T14:03:45Z",
   "sdkVersion": null,
   "cliVersion": "2.1.126",
-  "instanceId": "i-36973e5f",
-  "streamEpoch": 10,
+  "instanceId": "i-a1cc1445",
+  "streamEpoch": 11,
   "cleanExit": false,
   "orphans": []
 }
