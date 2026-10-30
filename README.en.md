@@ -24,7 +24,11 @@
 
 ![LifeOS today](tools/assets/lifeos-home.png)
 
-### Running it in 30 seconds
+### Install
+
+First choice: download `LifeOS-Setup-2.2.4.exe` from the release and install it.
+
+Second choice: build it yourself.
 
 ```bash
 # 1) get the code and install dependencies
@@ -37,11 +41,7 @@ cd frontend && npm install && npm run build && cd ..
 python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
 
-Or just grab the release: run `dist\LifeOS-Setup-2.2.4.exe`, or unzip `dist/LifeOS` and double-click `LifeOS.exe`.
-
-## The problem it solves
-
-Cloud assistants hold your notes, your schedule, and your chat history on someone else's server. LifeOS keeps all of it in a local SQLite store under `%USERPROFILE%\lifeOS`. The planner runs inside the app. The agents run on your machine, in folders you marked as trusted. You approve every file write and every command before it happens.
+Just testing, no install: unzip `dist/LifeOS` and double-click `LifeOS.exe`.
 
 ## How it works
 
@@ -62,8 +62,6 @@ user input → chat agent (memory recall → LLM/tools) → reply
 ## User guide
 
 ### Vision
-
-LifeOS Software Edition wants to move the assistant out of a browser tab and settle it on your own computer.
 
 A lamp on your desk, lighting only what is yours. Notes, schedules, code, and conversations sit in a local store under `%USERPROFILE%\lifeOS`, on no one else's server. Before an agent writes a file or runs a command, it shows you first — you nod, it moves.
 

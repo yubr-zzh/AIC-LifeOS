@@ -24,7 +24,11 @@
 
 ![LifeOS 今日概览](tools/assets/lifeos-home.png)
 
-### 30 秒跑起来
+### 安装
+
+首选：到 release 下载 `LifeOS-Setup-2.2.4.exe` 安装。
+
+次选：手动构建。
 
 ```bash
 # 1) 拉代码并装依赖
@@ -37,11 +41,7 @@ cd frontend && npm install && npm run build && cd ..
 python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
 
-也可以直接用发布包：运行 `dist\LifeOS-Setup-2.2.4.exe` 安装，或解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
-
-## 它解决什么问题
-
-云端助手把你的笔记、日程和聊天记录放在别人的服务器上。LifeOS 把这些全部存进本机 `%USERPROFILE%\lifeOS` 的 SQLite 库。规划在应用内完成。Agent 在你标记为信任的目录里执行。每次文件写入和每条命令都先经过你的批准。
+只测试、不想安装软件：解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
 
 ## 工作原理
 
@@ -60,8 +60,6 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 ```
 
 ## 使用手册
-
-LifeOS软件版 想把助手从浏览器的标签页里搬出来，安顿在你自己的电脑上。
 
 案头一盏灯，照见的全是你自己的东西。笔记、日程、代码、对话，都收在 `%USERPROFILE%\lifeOS` 的本地库里，不经过别人的服务器；Agent 每写一个文件、每跑一条命令，都先送到你眼前——你点头，它才动手。
 
