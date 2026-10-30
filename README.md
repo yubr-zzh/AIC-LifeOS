@@ -24,9 +24,16 @@
 
 ![LifeOS 今日概览](tools/assets/lifeos-home.png)
 
-### 安装
+## 安装
 
 首选：到 release 下载 `LifeOS-Setup-2.2.4.exe` 安装。
+
+安装步骤：
+
+1. 运行 `LifeOS-Setup-2.2.4.exe`。
+2. 按向导操作。保留默认选项。
+3. 从开始菜单或桌面快捷方式启动 LifeOS。
+4. 首次启动时创建本地账户。
 
 次选：手动构建。
 
@@ -42,6 +49,12 @@ python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
 
 只测试、不想安装软件：解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
+
+数据规则：
+
+- 用户数据存放在 `%USERPROFILE%\lifeOS`。
+- 首次启动从 AppData 旧目录复制数据。原目录保留为备份。
+- 卸载先询问你。确认后才删除数据。
 
 ## 工作原理
 
@@ -83,23 +96,6 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 - Agent 未连接时也能先写好草稿，不必干等。
 - 卸载会先询问，确认之后才动你的数据。
 - 账户、记忆、日志都在 `%USERPROFILE%\lifeOS`，备份认准这一个文件夹。
-
-## 安装
-
-安装步骤：
-
-1. 运行 `LifeOS-Setup-2.2.4.exe`。
-2. 按向导操作。保留默认选项。
-3. 从开始菜单或桌面快捷方式启动 LifeOS。
-4. 首次启动时创建本地账户。
-
-数据规则：
-
-- 用户数据存放在 `%USERPROFILE%\lifeOS`。
-- 首次启动从 AppData 旧目录复制数据。原目录保留为备份。
-- 卸载先询问你。确认后才删除数据。
-
-免安装用法：直接运行 `dist\LifeOS\LifeOS.exe`，无需安装器。
 
 ## 目录结构
 

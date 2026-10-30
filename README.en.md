@@ -24,9 +24,16 @@
 
 ![LifeOS today](tools/assets/lifeos-home.png)
 
-### Install
+## Install
 
 First choice: download `LifeOS-Setup-2.2.4.exe` from the release and install it.
+
+Installation steps:
+
+1. Run `LifeOS-Setup-2.2.4.exe`.
+2. Follow the wizard. Keep the default options.
+3. Start LifeOS from the Start menu or the desktop shortcut.
+4. Create your local account at first launch.
 
 Second choice: build it yourself.
 
@@ -42,6 +49,12 @@ python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
 
 Just testing, no install: unzip `dist/LifeOS` and double-click `LifeOS.exe`.
+
+Data rules:
+
+- User data lives in `%USERPROFILE%\lifeOS`.
+- First launch copies legacy data from the old AppData folder. The original stays as a backup.
+- Uninstall asks you first. It deletes data only after you confirm.
 
 ## How it works
 
@@ -85,23 +98,6 @@ The horizon is plain: let the machine come to know you over the days. Chats sett
 - Draft your message even when no agent is connected.
 - Uninstall asks first; your data goes only after you confirm.
 - Accounts, memories, and logs live in `%USERPROFILE%\lifeOS`. Back up that one folder and you have it all.
-
-## Install
-
-Installation steps:
-
-1. Run `LifeOS-Setup-2.2.4.exe`.
-2. Follow the wizard. Keep the default options.
-3. Start LifeOS from the Start menu or the desktop shortcut.
-4. Create your local account at first launch.
-
-Data rules:
-
-- User data lives in `%USERPROFILE%\lifeOS`.
-- First launch copies legacy data from the old AppData folder. The original stays as a backup.
-- Uninstall asks you first. It deletes data only after you confirm.
-
-Portable use: run `dist\LifeOS\LifeOS.exe` directly, with no installer.
 
 ## Repository layout
 
