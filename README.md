@@ -4,7 +4,7 @@
 
 <div align="center">
   <h1>LifeOS</h1>
-  <p><b>本地优先的个人智能体操作系统，运行在你的 Windows 电脑上。</b></p>
+  <p><b>“记得住、能动手、真懂你”的个人智能操作系统</b></p>
   <p>简体中文 · <a href="README.en.md">English</a></p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
   <img src="https://img.shields.io/badge/version-2.2.4-blue?style=flat-square" alt="Version">
@@ -16,26 +16,26 @@
 
 ---
 
-**LifeOS** 是一个装在本地的个人智能体操作系统，让 AI 助手从"一次性问答"变成"记得住、能动手、沉淀用户画像"的长期搭档。
+**LifeOS** 是一个装在本地的个人智能操作系统，让 AI 助手从“一次性问答”变成“记得住、能动手、沉淀用户画像以更懂用户”的长期搭档，兼具记忆、执行与复盘功能。
 
-**问题**：多会话 AI 工具每次都要重新交代背景，当前 session 已经走通的路线下次还得再摸索；而通用助手一般也分不清"现在的结论"和"过时的旧结论"；当前的 AI 助手，多数也无法沉淀长期用户画像，隔一段时间，再问它"你在做什么""之前做过什么"，它其实并不了解。
+**问题**：多会话 AI 工具每次都要重新交代背景，当前 session 已经走通的路线下次还得再摸索。通用助手一般分不清"现在的结论"和"过时的旧结论"；而当前的 AI 助手，多数也无法沉淀长期用户画像。隔一段时间，再问它"你在做什么""之前做过什么"，它其实并不了解。
 
-**方案**：LifeOS 用可靠的本地事件总线连接前台对话 Agent 与后台反思 Agent；记忆分四层——原始证据、项目连续性、原子记忆、全局画像，按项目隔离而不是混成一锅；记忆写入走"候选 → 人工审核生效"的路线，支持纠正、撤回与失效；规划与复盘在应用内完成
+**方案**：LifeOS 用可靠的本地事件总线连接前台对话 Agent 与后台反思 Agent；记忆分四层——原始证据、项目连续性、原子记忆、全局画像，按项目隔离而不是混成一锅；记忆写入走"候选 → 人工审核生效"的路线，支持纠正、撤回与失效；规划与复盘在应用内完成。
 
 ![LifeOS 今日概览](tools/assets/lifeos-home.png)
 
 ## 安装
 
-首选：到 release 下载 `LifeOS-Setup-2.2.4.exe` 安装。
+- 首选：到 release 下载 `LifeOS-Setup-2.2.4.exe`。
 
-安装步骤：
+    安装步骤：
+  1. 运行 `LifeOS-Setup-2.2.4.exe`。
+  2. 按向导操作。保留默认选项。
+  3. 从开始菜单或桌面快捷方式启动 LifeOS。
+  4. 首次启动时创建本地账户。
 
-1. 运行 `LifeOS-Setup-2.2.4.exe`。
-2. 按向导操作。保留默认选项。
-3. 从开始菜单或桌面快捷方式启动 LifeOS。
-4. 首次启动时创建本地账户。
-
-次选：手动构建。
+----
+- 手动构建：
 
 ```bash
 # 1) 拉代码并装依赖
@@ -47,14 +47,13 @@ cd frontend && npm install && npm run build && cd ..
 # 3) 打包 Windows 桌面端（产出 dist\LifeOS\LifeOS.exe）
 python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
+----
+- 只测试、不想安装软件：解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
+----
+- 数据存储：
+  用户数据存放在 `%USERPROFILE%\lifeOS`。
+  首次启动从 AppData 旧目录复制数据。原目录保留为备份。
 
-只测试、不想安装软件：解压 `dist\LifeOS` 后双击 `LifeOS.exe`。
-
-数据规则：
-
-- 用户数据存放在 `%USERPROFILE%\lifeOS`。
-- 首次启动从 AppData 旧目录复制数据。原目录保留为备份。
-- 卸载先询问你。确认后才删除数据。
 
 ## 工作原理
 
@@ -72,11 +71,13 @@ LifeOS.exe（pywebview 桌面壳，单实例）
         → 记忆候选 → 安全审查 → 持久化
 ```
 
-## 使用手册
+## lifeOS特点
 
-案头一盏灯，照见的全是你自己的东西。笔记、日程、代码、对话，都收在 `%USERPROFILE%\lifeOS` 的本地库里，不经过别人的服务器；Agent 每写一个文件、每跑一条命令，都先送到你眼前——你点头，它才动手。
+**三思而后行：**Agent 每写一个文件、每跑一条命令，都先送到你眼前——你点头，它才动手。
 
-远景说起来也平常：让这台机器随日子慢慢懂你。对话沉淀为记忆，记忆喂养反思，反思长出技能；今日的事今日勾，阶段有计划可依、事后有复盘可查，年末一张图收拢全局。灯下积起来的，都是你自己的。
+**日久见汝心：**让这台机器随日子慢慢懂你。对话沉淀为记忆，记忆喂养反思，反思长出技能；今日的事今日勾，阶段有计划可依、事后有复盘可查，年末一张图收拢全局。
+
+**深藏数与据：**笔记、日程、代码、对话，都收在 `%USERPROFILE%\lifeOS` 的本地库里，不经过别人的服务器。
 
 ### 日常使用
 
@@ -94,10 +95,10 @@ LifeOS.exe（pywebview 桌面壳，单实例）
 
 - 关闭窗口即收工，所有后台进程一并退出，不留驻守。
 - Agent 未连接时也能先写好草稿，不必干等。
-- 卸载会先询问，确认之后才动你的数据。
-- 账户、记忆、日志都在 `%USERPROFILE%\lifeOS`，备份认准这一个文件夹。
+- 卸载会先询问，你确认之后才该数据。
+- 账户、记忆、日志都在 `%USERPROFILE%\lifeOS`，备份认准该文件夹。
 
-## 目录结构
+## 源码结构
 
 ```text
 lifeos/
@@ -119,7 +120,7 @@ datasets/           # 记忆治理评测样本与 LongMemEval-S 模板
 docs/               # 架构与 API 文档
 ```
 
-## 从源码构建
+## 开发、贡献时从源码构建
 
 需要 Windows 10 或 11，外加：
 
@@ -185,12 +186,6 @@ npm run typecheck
 - [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md)，团队模块集成方案
 - [docs/frontend-rewrite-issues.md](docs/frontend-rewrite-issues.md)，前端重构问题记录
 - [docs/tencentdb-approved-atomic-create-proposal.md](docs/tencentdb-approved-atomic-create-proposal.md)，TencentDB 原子创建方案
-
-## 运行注意
-
-- 运行时数据：安装版写 `%USERPROFILE%\lifeOS`，源码运行写当前目录 `./lifeOS/`。首次启动从 AppData 旧目录复制迁移，旧目录保留为备份。
-- 主服务默认 8765，被占时向上探测到 8790。测试残留的 bridge 进程可能占住 8766 到 8770，结束 `python -m lifeos.bridge.run` 进程即可释放。
-- 免安装版在 `resources\node\` 内捆绑 `claude.exe`。安装包不含它，安装版改为沿 `PATH` 探测本机的 Claude Code CLI。
 
 ## 参与贡献
 

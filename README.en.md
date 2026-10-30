@@ -4,7 +4,7 @@
 
 <div align="center">
   <h1>LifeOS</h1>
-  <p><b>A local-first personal agent OS that runs on your Windows machine.</b></p>
+  <p><b>A personal agent OS that remembers, acts, and truly knows you.</b></p>
   <p>English · <a href="README.md">简体中文</a></p>
   <a href="https://github.com/yubr-zzh/AIC-LifeOS/stargazers"><img src="https://img.shields.io/github/stars/yubr-zzh/AIC-LifeOS?style=flat-square" alt="Stars"></a>
   <img src="https://img.shields.io/badge/version-2.2.4-blue?style=flat-square" alt="Version">
@@ -16,26 +16,26 @@
 
 ---
 
-**LifeOS** is a personal agent operating system that lives on your machine. It turns AI assistants from one-off question answering into long-term partners that remember, act, and build a picture of how you work.
+**LifeOS** is a personal agent operating system that lives on your machine. It turns AI assistants from one-off question answering into long-term partners that remember, act, and build a profile of you so they know you better. It covers memory, execution, and review.
 
-**The problem**: Multi-session AI tools make you re-explain the background every time, and a route you already worked out in one session has to be rediscovered in the next. General assistants also struggle to tell "what we concluded now" from "what we concluded last quarter". And most AI assistants never build a long-term picture of you: ask them again a while later what you have been working on or what you did before, and they simply do not know.
+**The problem**: Multi-session AI tools make you re-explain the background every time, and a route you already worked out in the current session has to be rediscovered next time. General assistants usually cannot tell "the conclusion we hold now" from "a stale conclusion"; and most current AI assistants cannot build a long-term profile of you. Ask again after a while what you are doing or what you did before, and they do not really know.
 
-**The approach**: LifeOS connects a front-stage chat agent with a background reflection agent over a reliable local event bus. Memory is kept in four layers - raw evidence, project continuity, atomic memories and a global profile - scoped per project instead of pooled into one bucket. Writing to memory goes through "candidate, then a human approves it", and every memory can be corrected, retracted or expired. Planning and review happen inside the app.
+**The approach**: LifeOS connects a front-stage chat agent with a background reflection agent over a reliable local event bus. Memory is kept in four layers: raw evidence, project continuity, atomic memories, and a global profile. Memory is scoped per project instead of pooled into one bucket. Writing to memory goes through "candidate, then a human approves it", and every memory can be corrected, retracted, or expired. Planning and review happen inside the app.
 
 ![LifeOS today](tools/assets/lifeos-home.png)
 
 ## Install
 
-First choice: download `LifeOS-Setup-2.2.4.exe` from the release and install it.
+- First choice: download `LifeOS-Setup-2.2.4.exe` from the release.
 
-Installation steps:
+    Installation steps:
+  1. Run `LifeOS-Setup-2.2.4.exe`.
+  2. Follow the wizard. Keep the default options.
+  3. Start LifeOS from the Start menu or the desktop shortcut.
+  4. Create your local account at first launch.
 
-1. Run `LifeOS-Setup-2.2.4.exe`.
-2. Follow the wizard. Keep the default options.
-3. Start LifeOS from the Start menu or the desktop shortcut.
-4. Create your local account at first launch.
-
-Second choice: build it yourself.
+----
+- Build it yourself:
 
 ```bash
 # 1) get the code and install dependencies
@@ -47,14 +47,13 @@ cd frontend && npm install && npm run build && cd ..
 # 3) package the Windows desktop app (produces dist\LifeOS\LifeOS.exe)
 python -m PyInstaller --noconfirm --clean tools/lifeos.spec
 ```
+----
+- Just testing, no install: unzip `dist\LifeOS` and double-click `LifeOS.exe`.
+----
+- Data storage:
+  User data lives in `%USERPROFILE%\lifeOS`.
+  First launch copies legacy data from the old AppData folder. The original folder stays as a backup.
 
-Just testing, no install: unzip `dist/LifeOS` and double-click `LifeOS.exe`.
-
-Data rules:
-
-- User data lives in `%USERPROFILE%\lifeOS`.
-- First launch copies legacy data from the old AppData folder. The original stays as a backup.
-- Uninstall asks you first. It deletes data only after you confirm.
 
 ## How it works
 
@@ -72,13 +71,13 @@ user input → chat agent (memory recall → LLM/tools) → reply
            → memory candidates → security review → persist
 ```
 
-## User guide
+## What makes LifeOS different
 
-### Vision
+**Think before it acts:** Before the agent writes a file or runs a command, it puts the action in front of you. You nod, and only then does it move.
 
-A lamp on your desk, lighting only what is yours. Notes, schedules, code, and conversations sit in a local store under `%USERPROFILE%\lifeOS`, on no one else's server. Before an agent writes a file or runs a command, it shows you first — you nod, it moves.
+**Time teaches it your heart:** Let the machine come to know you over the days. Chats settle into memory, memory feeds reflection, and reflection grows skills. Today's items get checked today, phases carry plans and reviews, and one graph gathers the whole year at a glance.
 
-The horizon is plain: let the machine come to know you over the days. Chats settle into memory, memory feeds reflection, reflection grows skills. Today's items get checked today, phases carry plans and reviews, and one graph gathers the year. What piles up under the lamp is yours.
+**Keep your data close:** Notes, schedules, code, and conversations all stay in the local store under `%USERPROFILE%\lifeOS`, on no one else's server.
 
 ### Daily use
 
@@ -86,11 +85,11 @@ The horizon is plain: let the machine come to know you over the days. Chats sett
 
 **Assign work.** The Agent page lists every local agent as a card, with status, version, and a connect checklist. Pick one and point it at a folder. It reads files, edits code, and runs commands there, and shows you each action first. A detail drawer shows Bridge health, and you can re-detect agents at any time.
 
-**Talk.** Every exchange stays in one turn block: your question, then the answer. Replies render Markdown and math. Tool calls fold to one line. Read-only calls shrink to plain text once they finish. Commands and file writes keep a line you can click open for input and output. Failures and pending approvals stay open until you handle them. The agent's reasoning shows on its own line. A folded strip under each turn lists the files and search patterns that turn touched. Hover a turn to copy or retry it. Text streams in. An over-long reply splits into several messages, with nothing lost. Press Enter while the agent works, and the message queues until the turn ends. Question and permission boxes still pop up when the agent needs a choice or an approval. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
+**Talk.** Every exchange stays in one turn block: your question, then the answer. Replies render Markdown and math. Tool calls fold to one line. Read-only calls shrink to plain text once they finish. Commands and file writes keep a line you can click open for input and output. Failures and pending approvals stay open until you handle them. The agent's reasoning shows on its own line. A folded strip under each turn lists the files and search patterns that turn touched. Hover a turn to copy or retry it. Text streams in. An over-long reply splits into several messages, with nothing lost. Press Enter while the agent works, and the message queues until the turn ends. Question and permission boxes still pop up when the agent needs a choice or an approval, and the agent keeps running once you answer. Earlier chats and agent results settle into memory, and the main model reads each agent reply in full. Copy any message, rename sessions, and attach up to 3 files per message, 200 KB each.
 
-**Today.** Check off today's plan item by item. 20 reminders arrive on schedule, and agent results and to-dos land in the inbox. Collapse the sidebars; drag to widen the chat pane.
+**Today.** Check off today's plan item by item. 20 reminder groups arrive on schedule, and agent results and to-dos land in the Inbox at the top right. Collapse the sidebar; drag to widen the chat pane.
 
-**Over the year.** Write daily and phase plans in Markdown. The editor takes slash commands for task lists, bullets, numbered lists, headings, and quotes. Reviews inherit plan items. The year view gathers your plans, reviews, diary, and notes into one contribution-style graph.
+**Over the year.** Write daily and phase plans in Markdown. The editor takes slash commands for task lists, bullets, numbered lists, headings, and quotes. Reviews inherit plan items. The year work calendar gathers plans, reviews, diary, and notes into one contribution-style graph at a glance.
 
 ### Tips
 
@@ -121,7 +120,7 @@ datasets/           # memory governance fixtures and LongMemEval-S templates
 docs/               # architecture and API documents
 ```
 
-## Build from source
+## Build from source when developing or contributing
 
 You need Windows 10 or 11 plus:
 
@@ -187,12 +186,6 @@ Three backend files (`tests/test_codex_lc_ji_cheng.py`, `test_liu_xing_lc_ji_che
 - [docs/team-module-integration-plan.md](docs/team-module-integration-plan.md), team module integration plan
 - [docs/frontend-rewrite-issues.md](docs/frontend-rewrite-issues.md), frontend rewrite issue log
 - [docs/tencentdb-approved-atomic-create-proposal.md](docs/tencentdb-approved-atomic-create-proposal.md), TencentDB atomic create proposal
-
-## Runtime notes
-
-- Runtime data goes to `%USERPROFILE%\lifeOS` for installs and `./lifeOS/` for source runs. The first start copies legacy AppData data and keeps the old folder as a backup.
-- The main service listens on 8765 and probes upward to 8790 when busy. Test leftovers can hold ports 8766 to 8770; end the `python -m lifeos.bridge.run` process to free them.
-- The portable build ships a bundled `claude.exe` under `resources\node\`. The installer leaves it out, so an installed app probes `PATH` for your own Claude Code CLI.
 
 ## Contributing
 
